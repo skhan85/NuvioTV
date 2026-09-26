@@ -1,0 +1,219 @@
+name: tvOS Fork Release
+
+# Builds an unsigned NuvioTV (Apple TV) IPA from youngchris29-art/NuvioMobile's
+# tvos-shared-extraction branch with the patches in /tvos-patches applied, and publishes it
+# as a GitHub release (picked up by the Raspberry Pi release watcher). Daily, it builds only
+# if that branch or this repo changed since the last release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even if a release for this source/fork commit already exists
+        type: boolean
+        default: false
+  schedule:
+    - cron: "10 10 * * *" # daily, ~6:10 AM Toronto
+  push:
+    paths:
+      - "tvos-patches/**"
+      - ".github/workflows/tvos-fork-release.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tvos-fork-release
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPO: youngchris29-art/NuvioMobile
+  SOURCE_BRANCH: tvos-shared-extraction
+
+jobs:
+  prepare:
+    name: Check source and decide
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      source_sha: ${{ steps.decide.outputs.source_sha }}
+      tag: ${{ steps.decide.outputs.tag }}
+      version: ${{ steps.decide.outputs.version }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out tvOS source (version file only)
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ env.SOURCE_BRANCH }}
+          path: src
+          sparse-checkout: iosApp/Configuration
+
+      - name: Decide whether to build
+        id: decide
+        run: |
+          version="$(sed -n 's/^MARKETING_VERSION=//p' src/iosApp/Configuration/Version.xcconfig | tr -d '[:space:]')"
+          source_sha="$(git -C src rev-parse HEAD)"
+          tag="tvos-v${version}-fork.$(git -C src rev-parse --short=7 HEAD).${GITHUB_SHA::7}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "source_sha=${source_sha}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          if gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
+             && [[ "${{ inputs.force }}" != "true" ]]; then
+            echo "Release ${tag} already exists; nothing to do."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Will build ${tag}."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build unsigned tvOS IPA
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      # The Xcode Kotlin phase defaults these to Mac-desktop sizes when unset; keep them runner-sized.
+      GRADLE_OPTS: -Xmx4g -Dfile.encoding=UTF-8 -XX:MaxMetaspaceSize=1g
+      KOTLIN_DAEMON_JVMARGS: -Xmx3g
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Check out this repo (scaffolding + patches)
+        uses: actions/checkout@v6
+        with:
+          path: fork
+
+      - name: Check out tvOS source
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          path: src
+
+      # Only MPVKit: the source carries other gitlinks with no .gitmodules URL.
+      - name: Init MPVKit submodule
+        working-directory: src
+        run: git submodule update --init MPVKit
+
+      - name: Apply fork patches
+        working-directory: src
+        run: |
+          shopt -s nullglob
+          for patch in ../fork/tvos-patches/*.patch; do
+            if git apply --check "${patch}" 2>/dev/null; then
+              git apply "${patch}"
+              echo "Applied $(basename "${patch}")"
+            elif git apply -R --check "${patch}" 2>/dev/null; then
+              echo "::notice::$(basename "${patch}") is already in the source; skipping it."
+            else
+              echo "::error::$(basename "${patch}") no longer applies to the tvOS source. It needs updating."
+              exit 1
+            fi
+          done
+
+      - name: Write runtime config
+        env:
+          # Official Nuvio server, as shipped in the public NuvioTV builds.
+          NUVIO_SUPABASE_URL: ${{ secrets.NUVIO_SUPABASE_URL || 'https://api.nuvio.tv' }}
+          NUVIO_SUPABASE_ANON_KEY: ${{ secrets.NUVIO_SUPABASE_ANON_KEY || 'sb_publishable_1Clq8rlTVACkdcZuqr6_AD__xUUC_EN' }}
+          # Public feature endpoints (skip-intro, IMDb episode ratings).
+          INTRODB_API_URL: ${{ secrets.INTRODB_API_URL || 'https://api.introdb.app' }}
+          IMDB_RATINGS_API_BASE_URL: ${{ secrets.IMDB_RATINGS_API_BASE_URL || 'https://seriesgraph.com/' }}
+          IMDB_TAPFRAME_API_BASE_URL: ${{ secrets.IMDB_TAPFRAME_API_BASE_URL || 'https://imdb.tapframe.space/' }}
+          # Optional tracker/debrid app IDs from repository secrets.
+          SIMKL_CLIENT_ID: ${{ secrets.SIMKL_CLIENT_ID }}
+          TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
+          TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+          PREMIUMIZE_CLIENT_ID: ${{ secrets.PREMIUMIZE_CLIENT_ID }}
+        run: |
+          : > src/local.properties
+          for key in NUVIO_SUPABASE_URL NUVIO_SUPABASE_ANON_KEY INTRODB_API_URL \
+                     IMDB_RATINGS_API_BASE_URL IMDB_TAPFRAME_API_BASE_URL \
+                     SIMKL_CLIENT_ID TRAKT_CLIENT_ID TRAKT_CLIENT_SECRET PREMIUMIZE_CLIENT_ID; do
+            value="${!key}"
+            if [[ -n "${value}" ]]; then
+              printf '%s=%s\n' "${key}" "${value}" >> src/local.properties
+              echo "Set ${key}"
+            else
+              echo "Skipped ${key} (no secret)"
+            fi
+          done
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache Gradle and Kotlin Native
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            ~/.konan
+          key: tvos-gradle-konan-${{ runner.os }}-${{ hashFiles('src/gradle/libs.versions.toml', 'src/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: tvos-gradle-konan-${{ runner.os }}-
+
+      # :shared's tvOS build needs a patched quickjs-kt published to mavenLocal.
+      - name: Cache quickjs-kt tvOS build
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2/repository/io/github/dokar3
+          key: quickjs-tvos-${{ hashFiles('fork/scaffolding/quickjs-kt-tvos.patch', 'fork/scaffolding/build-quickjs-tvos.sh') }}
+
+      - name: Publish quickjs-kt 1.0.5-tvos to mavenLocal
+        run: |
+          if [ -d "$HOME/.m2/repository/io/github/dokar3/quickjs-kt/1.0.5-tvos" ]; then
+            echo "quickjs-kt 1.0.5-tvos already in mavenLocal (cache hit)"
+            exit 0
+          fi
+          bash fork/scaffolding/build-quickjs-tvos.sh "$HOME/quickjs-kt-tvos"
+
+      # Same Gradle task the Xcode phase runs, isolated so a Kotlin error is easy to find.
+      - name: Link shared Kotlin framework (tvOS device, Release)
+        working-directory: src
+        run: ./gradlew :shared:linkReleaseFrameworkTvosArm64 --no-daemon --stacktrace
+
+      - name: Build NuvioTV (Release, unsigned, tvOS device)
+        working-directory: src
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme NuvioTV \
+            -configuration Release \
+            -destination "generic/platform=tvOS" \
+            -derivedDataPath build/tvos-ipa \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            NUVIO_BETA_TAG="${TAG}"
+
+      - name: Package IPA
+        working-directory: src/build/tvos-ipa/Build/Products/Release-appletvos
+        run: |
+          [[ -d NuvioTV.app ]] || { echo "::error::NuvioTV.app was not produced."; ls -la; exit 1; }
+          rm -rf Payload
+          mkdir Payload
+          cp -R NuvioTV.app Payload/
+          # Free-Apple-ID re-signers (Sideloadly/atvloadly) break the Top Shelf extension's
+          # signature, so it is removed, as in the official NuvioTV builds.
+          rm -rf Payload/NuvioTV.app/PlugIns
+          zip -qry "${GITHUB_WORKSPACE}/NuvioTV-${VERSION}-fork.ipa" Payload
+          ls -la "${GITHUB_WORKSPACE}/NuvioTV-${VERSION}-fork.ipa"
+
+      - name: Publish release
+        run: |
+          notes="NuvioTV built from ${SOURCE_REPO}@${{ needs.prepare.outputs.source_sha }} (${SOURCE_BRANCH}) with fork patches:"
+          for patch in fork/tvos-patches/*.patch; do notes+=$'\n'"- $(basename "${patch}")"; done
+          gh release create "${TAG}" "NuvioTV-${VERSION}-fork.ipa" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${{ github.event.repository.default_branch }}" \
+            --title "NuvioTV ${VERSION} (fork)" \
+            --notes "${notes}" \
+            || gh release upload "${TAG}" "NuvioTV-${VERSION}-fork.ipa" --clobber --repo "${GITHUB_REPOSITORY}"
