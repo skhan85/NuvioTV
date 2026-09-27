@@ -2,8 +2,9 @@ name: tvOS Fork Release
 
 # Builds an unsigned NuvioTV (Apple TV) IPA from youngchris29-art/NuvioMobile's
 # tvos-shared-extraction branch with the patches in /tvos-patches applied, and publishes it
-# as a GitHub release (picked up by the Raspberry Pi release watcher). Daily, it builds only
-# if that branch or this repo changed since the last release.
+# as a GitHub release (picked up by the Raspberry Pi release watcher). Checks hourly, so a new
+# push to that branch is rebuilt within about an hour. A change to /tvos-patches or this file
+# also triggers a rebuild.
 
 on:
   workflow_dispatch:
@@ -13,7 +14,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "10 10 * * *" # daily, ~6:10 AM Toronto
+    - cron: "53 * * * *" # hourly
   push:
     paths:
       - "tvos-patches/**"
@@ -42,6 +43,23 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Check out this repo
+        uses: actions/checkout@v6
+
+      # GitHub pauses scheduled workflows in repos with no commits for 60 days. This fork
+      # otherwise never changes, so push an empty commit every ~45 days (it touches no watched
+      # path, so it does not trigger a build).
+      - name: Keep scheduled checks alive
+        if: github.event_name == 'schedule'
+        run: |
+          last="$(git log -1 --format=%ct)"
+          if (( $(date +%s) - last > 45 * 86400 )); then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "keepalive: keep scheduled release checks enabled"
+            git push
+          fi
+
       - name: Check out tvOS source (version file only)
         uses: actions/checkout@v6
         with:
@@ -55,7 +73,10 @@ jobs:
         run: |
           version="$(sed -n 's/^MARKETING_VERSION=//p' src/iosApp/Configuration/Version.xcconfig | tr -d '[:space:]')"
           source_sha="$(git -C src rev-parse HEAD)"
-          tag="tvos-v${version}-fork.$(git -C src rev-parse --short=7 HEAD).${GITHUB_SHA::7}"
+          # Fingerprint of what this fork adds, so a patch or build change rebuilds but an
+          # unrelated commit (like the keepalive) does not.
+          fork_hash="$(cat tvos-patches/*.patch .github/workflows/tvos-fork-release.yml | sha256sum | cut -c1-7)"
+          tag="tvos-v${version}-fork.$(git -C src rev-parse --short=7 HEAD).${fork_hash}"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "source_sha=${source_sha}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
@@ -213,7 +234,7 @@ jobs:
           for patch in fork/tvos-patches/*.patch; do notes+=$'\n'"- $(basename "${patch}")"; done
           gh release create "${TAG}" "NuvioTV-${VERSION}-fork.ipa" \
             --repo "${GITHUB_REPOSITORY}" \
-            --target "${{ github.event.repository.default_branch }}" \
+            --target "${{ github.ref_name }}" \
             --title "NuvioTV ${VERSION} (fork)" \
             --notes "${notes}" \
             || gh release upload "${TAG}" "NuvioTV-${VERSION}-fork.ipa" --clobber --repo "${GITHUB_REPOSITORY}"
