@@ -1,0 +1,110 @@
+diff --git a/iosApp/NuvioTV/ContentView.swift b/iosApp/NuvioTV/ContentView.swift
+index 0ba3057..bd684ac 100644
+--- a/iosApp/NuvioTV/ContentView.swift
++++ b/iosApp/NuvioTV/ContentView.swift
+@@ -218,6 +218,21 @@ struct ContentView: View {
+             }
+         }
+         .onChange(of: scenePhase) { _, newPhase in
++            // Infuse left with the TV/Home button instead of Back sends no callback: estimate the
++            // position from the time NuvioTV was away. Wait a moment on return so a real Back
++            // callback (onOpenURL) lands first and wins.
++            switch newPhase {
++            case .active:
++                InfuseHandoff.onForeground()
++                Task { @MainActor in
++                    try? await Task.sleep(nanoseconds: 3_000_000_000)
++                    InfuseHandoff.recordEstimateIfNeeded()
++                }
++            case .inactive, .background:
++                InfuseHandoff.onBackground()
++            @unknown default:
++                break
++            }
+             // Foreground/background sync lifecycle (mirrors mobile's AppVisibility collector in
+             // MainAppContent). SyncManager self-guards: no-op unless signed in with a real account.
+             // Divergence from mobile: iOS maps willResignActive → Background; on tvOS we only stop
+diff --git a/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift b/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
+index 5412d01..a3bc8ef 100644
+--- a/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
++++ b/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
+@@ -131,6 +131,14 @@ final class PlaybackProgressRecorder {
+ struct InfuseHandoff {
+     let context: PlaybackContext
+     let durationSec: Double?
++    /// Where playback started in Infuse, in seconds (the resume position handed over).
++    var startSec: Double = 0
++    // Fallback for leaving Infuse with the TV/Home button instead of Back: Infuse then never
++    // calls back, and NuvioTV is suspended while Infuse plays, so the only signal left is how
++    // long NuvioTV was away. See recordEstimateIfNeeded().
++    var launchedAt = Date()
++    var awaySec: Double = 0
++    var awaySince: Date? = Date()
+ 
+     static var pending: InfuseHandoff?
+ 
+@@ -156,6 +164,50 @@ struct InfuseHandoff {
+         return true
+     }
+ 
++    /// NuvioTV left the foreground while a handoff is still waiting for Infuse's callback.
++    static func onBackground() {
++        guard var handoff = pending, handoff.awaySince == nil else { return }
++        handoff.awaySince = Date()
++        pending = handoff
++    }
++
++    /// NuvioTV is back in the foreground. The time away is added to the estimate, except for a
++    /// stretch longer than the rest of the title plus 30 minutes (e.g. Infuse left with Home and
++    /// NuvioTV only reopened the next day), which says nothing about how much was watched.
++    static func onForeground() {
++        guard var handoff = pending, let since = handoff.awaySince else { return }
++        let stretch = max(0, Date().timeIntervalSince(since))
++        if let duration = handoff.durationSec,
++           stretch > duration - handoff.startSec - handoff.awaySec + 30 * 60 {
++            // Ignore the stretch.
++        } else {
++            handoff.awaySec += stretch
++        }
++        handoff.awaySince = nil
++        pending = handoff
++    }
++
++    /// Records an estimated position when Infuse was left without its callback. Deliberately
++    /// conservative: set back a little (so resuming rewinds rather than skips) and capped at 79%,
++    /// below the 90% watched threshold and the 80% at which trackers count a play, so an estimate
++    /// never marks a title watched. Pauses in Infuse cannot be seen and count as watching. The
++    /// handoff stays pending, so a later Back from Infuse still records the exact position.
++    static func recordEstimateIfNeeded() {
++        guard let handoff = pending, let duration = handoff.durationSec, duration > 0 else { return }
++        guard Date().timeIntervalSince(handoff.launchedAt) < 6 * 60 * 60 else { return }
++        guard handoff.awaySec >= 120 else { return }
++        let margin = max(60, handoff.awaySec / 20)
++        let estimate = min(handoff.startSec + handoff.awaySec - margin, duration * 0.79)
++        guard estimate > handoff.startSec, estimate > 1 else { return }
++        PlaybackProgressRecorder(context: handoff.context).record(
++            positionSec: estimate,
++            durationSec: duration,
++            isPaused: true,
++            speed: 1,
++            flush: true
++        )
++    }
++
+     /// Minutes from addon runtime strings such as "45 min", "1h 30m" or "2h".
+     static func runtimeMinutes(_ value: String?) -> Int? {
+         guard let text = value?.lowercased(), !text.isEmpty else { return nil }
+diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+index 8638463..ab139fb 100644
+--- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
++++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+@@ -690,7 +690,8 @@ struct StreamPickerView: View {
+         if playerId == "infuse", let handoffUrl = URL(string: urlString) {
+             InfuseHandoff.pending = InfuseHandoff(
+                 context: context(url: handoffUrl, stream: stream),
+-                durationSec: infuseHandoffDurationSec(storedDurationMs: progress?.durationMs)
++                durationSec: infuseHandoffDurationSec(storedDurationMs: progress?.durationMs),
++                startSec: Double(resumeMs) / 1000.0
+             )
+         }
+         let result = ExternalPlayerPlatform.shared.open(request: request, playerId: playerId)
