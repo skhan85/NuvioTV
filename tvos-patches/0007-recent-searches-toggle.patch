@@ -1,0 +1,189 @@
+diff --git a/iosApp/NuvioTV/Screens/Settings/ContentSourcesSettingsPane.swift b/iosApp/NuvioTV/Screens/Settings/ContentSourcesSettingsPane.swift
+index 1b95023..744a478 100644
+--- a/iosApp/NuvioTV/Screens/Settings/ContentSourcesSettingsPane.swift
++++ b/iosApp/NuvioTV/Screens/Settings/ContentSourcesSettingsPane.swift
+@@ -7,6 +7,8 @@ import SharedCore
+ struct ContentSourcesSettingsPane: View {
+     @ObservedObject var model: SettingsViewModel
+     @ObservedObject var plugins: PluginsViewModel
++    /// Upstream 7c1c6578 (#1934): per-profile Recent Searches on/off, read once from the shared repo.
++    @State private var recentSearchesEnabled = SearchHistoryRepository.shared.isEnabled()
+ 
+     var body: some View {
+         Group {
+@@ -170,6 +172,20 @@ struct ContentSourcesSettingsPane: View {
+             )
+         )
+ 
++        SettingsToggleRow(
++            title: String(localized: "Recent Searches"),
++            subtitle: recentSearchesEnabled
++                ? String(localized: "Search remembers what you look up on this profile")
++                : String(localized: "Nothing is saved, and past searches stay hidden"),
++            isOn: Binding(
++                get: { recentSearchesEnabled },
++                set: { newValue in
++                    recentSearchesEnabled = newValue
++                    SearchHistoryRepository.shared.setEnabled(enabled: newValue)
++                }
++            )
++        )
++
+         Text("Choose which catalogs Search looks through. Fewer sources means faster, more focused results. Applies to this Apple TV only.")
+             .font(Theme.Font.caption)
+             .foregroundStyle(Theme.Palette.textSecondary)
+diff --git a/shared/src/androidMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.android.kt b/shared/src/androidMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.android.kt
+index f351c4b..8327d2f 100644
+--- a/shared/src/androidMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.android.kt
++++ b/shared/src/androidMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.android.kt
+@@ -7,6 +7,7 @@ import com.nuvio.app.core.storage.ProfileScopedKey
+ actual object SearchHistoryStorage {
+     private const val preferencesName = "nuvio_search_history"
+     private const val payloadKey = "search_history_payload"
++    private const val enabledKey = "recent_searches_enabled"
+ 
+     private var preferences: SharedPreferences? = null
+ 
+@@ -23,4 +24,17 @@ actual object SearchHistoryStorage {
+             ?.putString(ProfileScopedKey.of(payloadKey), payload)
+             ?.apply()
+     }
++
++    actual fun loadEnabled(): Boolean? {
++        val prefs = preferences ?: return null
++        val key = ProfileScopedKey.of(enabledKey)
++        return if (prefs.contains(key)) prefs.getBoolean(key, true) else null
++    }
++
++    actual fun saveEnabled(enabled: Boolean) {
++        preferences
++            ?.edit()
++            ?.putBoolean(ProfileScopedKey.of(enabledKey), enabled)
++            ?.apply()
++    }
+ }
+diff --git a/shared/src/appleMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.apple.kt b/shared/src/appleMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.apple.kt
+index bec4301..419cf03 100644
+--- a/shared/src/appleMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.apple.kt
++++ b/shared/src/appleMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.apple.kt
+@@ -5,6 +5,7 @@ import platform.Foundation.NSUserDefaults
+ 
+ actual object SearchHistoryStorage {
+     private const val payloadKey = "search_history_payload"
++    private const val enabledKey = "recent_searches_enabled"
+ 
+     actual fun loadPayload(): String? =
+         NSUserDefaults.standardUserDefaults.stringForKey(ProfileScopedKey.of(payloadKey))
+@@ -12,4 +13,14 @@ actual object SearchHistoryStorage {
+     actual fun savePayload(payload: String) {
+         NSUserDefaults.standardUserDefaults.setObject(payload, forKey = ProfileScopedKey.of(payloadKey))
+     }
++
++    actual fun loadEnabled(): Boolean? {
++        val defaults = NSUserDefaults.standardUserDefaults
++        val key = ProfileScopedKey.of(enabledKey)
++        return if (defaults.objectForKey(key) != null) defaults.boolForKey(key) else null
++    }
++
++    actual fun saveEnabled(enabled: Boolean) {
++        NSUserDefaults.standardUserDefaults.setBool(enabled, forKey = ProfileScopedKey.of(enabledKey))
++    }
+ }
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/search/SearchHistoryRepository.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/search/SearchHistoryRepository.kt
+index 4d4ab7b..f6b842b 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/search/SearchHistoryRepository.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/search/SearchHistoryRepository.kt
+@@ -18,6 +18,11 @@ object SearchHistoryRepository {
+     private val _uiState = MutableStateFlow<List<String>>(emptyList())
+     val uiState: StateFlow<List<String>> = _uiState.asStateFlow()
+ 
++    // Upstream 7c1c6578 (#1934): per-profile on/off for recent searches. Off hides the list and
++    // stops recording; the saved list is kept so turning it back on restores it.
++    private val _enabled = MutableStateFlow(true)
++    val enabled: StateFlow<Boolean> = _enabled.asStateFlow()
++
+     private var hasLoaded = false
+     private var recentSearches: List<String> = emptyList()
+ 
+@@ -30,8 +35,23 @@ object SearchHistoryRepository {
+         loadFromDisk()
+     }
+ 
++    fun setEnabled(enabled: Boolean) {
++        ensureLoaded()
++        if (_enabled.value == enabled) return
++        _enabled.value = enabled
++        SearchHistoryStorage.saveEnabled(enabled)
++        publish()
++    }
++
++    /** Snapshot for Swift, which cannot read a `StateFlow.value` directly. */
++    fun isEnabled(): Boolean {
++        ensureLoaded()
++        return _enabled.value
++    }
++
+     fun recordSearch(query: String) {
+         ensureLoaded()
++        if (!_enabled.value) return
+         val normalizedQuery = query.trim()
+         if (normalizedQuery.length < 2) return
+ 
+@@ -59,6 +79,7 @@ object SearchHistoryRepository {
+ 
+     private fun loadFromDisk() {
+         hasLoaded = true
++        _enabled.value = SearchHistoryStorage.loadEnabled() ?: true
+         val payload = SearchHistoryStorage.loadPayload().orEmpty().trim()
+         recentSearches = if (payload.isEmpty()) {
+             emptyList()
+@@ -75,7 +96,7 @@ object SearchHistoryRepository {
+     }
+ 
+     private fun publish() {
+-        _uiState.value = recentSearches
++        _uiState.value = if (_enabled.value) recentSearches else emptyList()
+     }
+ 
+     private fun persist() {
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.kt
+index 7b3406b..12db09e 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.kt
+@@ -3,4 +3,6 @@ package com.nuvio.app.features.search
+ expect object SearchHistoryStorage {
+     fun loadPayload(): String?
+     fun savePayload(payload: String)
++    fun loadEnabled(): Boolean?
++    fun saveEnabled(enabled: Boolean)
+ }
+diff --git a/shared/src/jvmMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.jvm.kt b/shared/src/jvmMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.jvm.kt
+index f9222d8..5e9e57f 100644
+--- a/shared/src/jvmMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.jvm.kt
++++ b/shared/src/jvmMain/kotlin/com/nuvio/app/features/search/SearchHistoryStorage.jvm.kt
+@@ -12,6 +12,7 @@ import com.nuvio.app.core.storage.ProfileScopedKey
+ actual object SearchHistoryStorage {
+     private const val preferencesName = "nuvio_search_history"
+     private const val payloadKey = "search_history_payload"
++    private const val enabledKey = "recent_searches_enabled"
+ 
+     private val preferences: JvmSharedPreferences? = jvmSharedPreferences(preferencesName)
+ 
+@@ -24,4 +25,17 @@ actual object SearchHistoryStorage {
+             ?.putString(ProfileScopedKey.of(payloadKey), payload)
+             ?.apply()
+     }
++
++    actual fun loadEnabled(): Boolean? {
++        val prefs = preferences ?: return null
++        val key = ProfileScopedKey.of(enabledKey)
++        return if (prefs.contains(key)) prefs.getBoolean(key, true) else null
++    }
++
++    actual fun saveEnabled(enabled: Boolean) {
++        preferences
++            ?.edit()
++            ?.putBoolean(ProfileScopedKey.of(enabledKey), enabled)
++            ?.apply()
++    }
+ }
