@@ -1,0 +1,29 @@
+diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+index 8638463..8bfcddb 100644
+--- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
++++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+@@ -688,10 +688,23 @@ struct StreamPickerView: View {
+             skipSegmentsJson: nil
+         )
+         if playerId == "infuse", let handoffUrl = URL(string: urlString) {
+-            InfuseHandoff.pending = InfuseHandoff(
++            let handoff = InfuseHandoff(
+                 context: context(url: handoffUrl, stream: stream),
+                 durationSec: infuseHandoffDurationSec(storedDurationMs: progress?.durationMs)
+             )
++            InfuseHandoff.pending = handoff
++            // Trakt bridge (home Pi): stamp this title on the active profile in Nuvio Sync before
++            // Infuse starts, so the bridge saves Infuse's positions to the profile that pressed
++            // Play (e.g. Kids) rather than the default one. The resume point is unchanged.
++            if let duration = handoff.durationSec, duration > 0 {
++                PlaybackProgressRecorder(context: handoff.context).record(
++                    positionSec: max(Double(resumeMs) / 1000.0, 2),
++                    durationSec: duration,
++                    isPaused: true,
++                    speed: 1,
++                    flush: true
++                )
++            }
+         }
+         let result = ExternalPlayerPlatform.shared.open(request: request, playerId: playerId)
+         // SharedCore lowercases the whole Kotlin enum entry name (see KMP bridging notes).
