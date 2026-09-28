@@ -25,10 +25,10 @@ index 0ba3057..bd684ac 100644
              // MainAppContent). SyncManager self-guards: no-op unless signed in with a real account.
              // Divergence from mobile: iOS maps willResignActive → Background; on tvOS we only stop
 diff --git a/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift b/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
-index 5412d01..a3bc8ef 100644
+index 5412d01..5dab047 100644
 --- a/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
 +++ b/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
-@@ -131,6 +131,14 @@ final class PlaybackProgressRecorder {
+@@ -131,6 +131,18 @@ final class PlaybackProgressRecorder {
  struct InfuseHandoff {
      let context: PlaybackContext
      let durationSec: Double?
@@ -40,17 +40,28 @@ index 5412d01..a3bc8ef 100644
 +    var launchedAt = Date()
 +    var awaySec: Double = 0
 +    var awaySince: Date? = Date()
++    // Set on return to NuvioTV; if the user then keeps using NuvioTV for a while instead of going
++    // back to Infuse, estimating is closed for this handoff so later app switches add nothing.
++    var foregroundSince: Date?
++    var estimationClosed = false
  
      static var pending: InfuseHandoff?
  
-@@ -156,6 +164,50 @@ struct InfuseHandoff {
+@@ -156,6 +168,59 @@ struct InfuseHandoff {
          return true
      }
  
 +    /// NuvioTV left the foreground while a handoff is still waiting for Infuse's callback.
 +    static func onBackground() {
-+        guard var handoff = pending, handoff.awaySince == nil else { return }
++        guard var handoff = pending, !handoff.estimationClosed, handoff.awaySince == nil else { return }
++        if let back = handoff.foregroundSince, Date().timeIntervalSince(back) > 60 {
++            handoff.estimationClosed = true
++            handoff.foregroundSince = nil
++            pending = handoff
++            return
++        }
 +        handoff.awaySince = Date()
++        handoff.foregroundSince = nil
 +        pending = handoff
 +    }
 +
@@ -58,7 +69,7 @@ index 5412d01..a3bc8ef 100644
 +    /// stretch longer than the rest of the title plus 30 minutes (e.g. Infuse left with Home and
 +    /// NuvioTV only reopened the next day), which says nothing about how much was watched.
 +    static func onForeground() {
-+        guard var handoff = pending, let since = handoff.awaySince else { return }
++        guard var handoff = pending, !handoff.estimationClosed, let since = handoff.awaySince else { return }
 +        let stretch = max(0, Date().timeIntervalSince(since))
 +        if let duration = handoff.durationSec,
 +           stretch > duration - handoff.startSec - handoff.awaySec + 30 * 60 {
@@ -67,6 +78,7 @@ index 5412d01..a3bc8ef 100644
 +            handoff.awaySec += stretch
 +        }
 +        handoff.awaySince = nil
++        handoff.foregroundSince = Date()
 +        pending = handoff
 +    }
 +
@@ -76,7 +88,8 @@ index 5412d01..a3bc8ef 100644
 +    /// never marks a title watched. Pauses in Infuse cannot be seen and count as watching. The
 +    /// handoff stays pending, so a later Back from Infuse still records the exact position.
 +    static func recordEstimateIfNeeded() {
-+        guard let handoff = pending, let duration = handoff.durationSec, duration > 0 else { return }
++        guard let handoff = pending, !handoff.estimationClosed,
++              let duration = handoff.durationSec, duration > 0 else { return }
 +        guard Date().timeIntervalSince(handoff.launchedAt) < 6 * 60 * 60 else { return }
 +        guard handoff.awaySec >= 120 else { return }
 +        let margin = max(60, handoff.awaySec / 20)
