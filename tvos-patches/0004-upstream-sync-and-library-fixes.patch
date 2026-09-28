@@ -1,0 +1,250 @@
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsParser.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsParser.kt
+index 5b69556..594c190 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsParser.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/details/MetaDetailsParser.kt
+@@ -9,6 +9,7 @@ import com.nuvio.app.core.i18n.resourceString
+ import kotlinx.serialization.json.Json
+ import kotlinx.serialization.json.JsonArray
+ import kotlinx.serialization.json.JsonElement
++import kotlinx.serialization.json.JsonNull
+ import kotlinx.serialization.json.JsonObject
+ import kotlinx.serialization.json.JsonPrimitive
+ import kotlinx.serialization.json.booleanOrNull
+@@ -270,6 +271,9 @@ object MetaDetailsParser {
+         val posterSeasons = when {
+             seasons.size == posters.size -> seasons
+             positiveSeasons.size == posters.size -> positiveSeasons
++            positiveSeasons.isNotEmpty() &&
++                posters.size == positiveSeasons.size + 1 &&
++                posters.firstOrNull() == JsonNull -> listOf(SPECIALS_SEASON_NUMBER) + positiveSeasons
+             else -> List(posters.size) { index -> index + 1 }
+         }
+         return posters.mapIndexedNotNull { index, element ->
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryLocalState.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryLocalState.kt
+index d6e9a49..7e26422 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryLocalState.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryLocalState.kt
+@@ -212,7 +212,6 @@ internal class LibraryLocalState {
+             localItemsByKey = itemsById,
+             pendingUpsertKeysByKey = pendingUpsertKeysByKey,
+             pendingDeleteKeysByKey = pendingDeleteKeysByKey,
+-            preserveLegacyLocalWhenServerEmpty = !pullSnapshot.deltaInitialized,
+         )
+         if (itemsById != reconciliation.itemsByKey) {
+             contentRevision += 1L
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryRepository.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryRepository.kt
+index 562cea7..69bbc0f 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryRepository.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibraryRepository.kt
+@@ -189,7 +189,6 @@ object LibraryRepository {
+             log.d { "Skipping library pull for inactive profile $profileId" }
+             return
+         }
+-        var serializedOperationToken: LibraryProfileToken? = null
+ 
+         activeLibraryProvider()?.let { provider ->
+             refreshLibraryProvider(
+@@ -204,7 +203,6 @@ object LibraryRepository {
+ 
+         nuvioSyncMutex.withLock {
+             val serializedToken = activeOperationToken(profileId) ?: return@withLock
+-            serializedOperationToken = serializedToken
+             val pullSnapshot = localState.markPullStarted(serializedToken) ?: return@withLock
+ 
+             try {
+@@ -235,11 +233,6 @@ object LibraryRepository {
+                 log.e(error) { "Failed to pull library from server" }
+             }
+         }
+-        val completedToken = serializedOperationToken ?: operationToken
+-        val pendingSnapshot = localState.snapshot()
+-        if (pendingSnapshot.token == completedToken && isActiveOperation(completedToken)) {
+-            pushToServer(pendingSnapshot, delayMs = 0L)
+-        }
+     }
+ 
+     private suspend fun pullLibraryDelta(
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibrarySyncReconciler.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibrarySyncReconciler.kt
+index 83641e5..b54102f 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibrarySyncReconciler.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/library/LibrarySyncReconciler.kt
+@@ -2,7 +2,6 @@ package com.nuvio.app.features.library
+ 
+ import com.nuvio.app.features.library.sync.LibraryDeltaEvent
+ import com.nuvio.app.features.library.sync.LibrarySyncKey
+-import com.nuvio.app.features.library.sync.toLibrarySyncKey
+ 
+ internal data class LibrarySnapshotReconciliation(
+     val itemsByKey: MutableMap<String, LibraryItem>,
+@@ -22,40 +21,22 @@ internal fun reconcileLibrarySnapshot(
+     localItemsByKey: Map<String, LibraryItem>,
+     pendingUpsertKeysByKey: Map<String, LibrarySyncKey>,
+     pendingDeleteKeysByKey: Map<String, LibrarySyncKey>,
+-    preserveLegacyLocalWhenServerEmpty: Boolean,
+ ): LibrarySnapshotReconciliation {
+     val serverItemsByKey = serverItems.associateByTo(mutableMapOf()) {
+         libraryItemKey(it.id, it.type)
+     }
+     val pendingUpserts = pendingUpsertKeysByKey.toMutableMap()
+     val pendingDeletes = pendingDeleteKeysByKey.toMutableMap()
+-    val migrateLegacyLocalItems =
+-        preserveLegacyLocalWhenServerEmpty &&
+-            serverItemsByKey.isEmpty() &&
+-            localItemsByKey.isNotEmpty() &&
+-            pendingUpserts.isEmpty() &&
+-            pendingDeletes.isEmpty()
+-
+-    if (migrateLegacyLocalItems) {
+-        localItemsByKey.forEach { (key, item) ->
+-            pendingUpserts[key] = item.toLibrarySyncKey()
+-        }
+-    } else {
+-        pendingDeletes.keys.forEach(serverItemsByKey::remove)
+-        pendingUpserts.keys.forEach { key ->
+-            localItemsByKey[key]?.let { item -> serverItemsByKey[key] = item }
+-        }
++    pendingDeletes.keys.forEach(serverItemsByKey::remove)
++    pendingUpserts.keys.forEach { key ->
++        localItemsByKey[key]?.let { item -> serverItemsByKey[key] = item }
+     }
+ 
+     return LibrarySnapshotReconciliation(
+-        itemsByKey = if (migrateLegacyLocalItems) {
+-            localItemsByKey.toMutableMap()
+-        } else {
+-            serverItemsByKey
+-        },
++        itemsByKey = serverItemsByKey,
+         pendingUpsertKeysByKey = pendingUpserts,
+         pendingDeleteKeysByKey = pendingDeletes,
+-        preservedLocalItems = migrateLegacyLocalItems || pendingUpserts.isNotEmpty() || pendingDeletes.isNotEmpty(),
++        preservedLocalItems = pendingUpserts.isNotEmpty() || pendingDeletes.isNotEmpty(),
+     )
+ }
+ 
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/library/sync/SupabaseLibrarySyncAdapter.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/library/sync/SupabaseLibrarySyncAdapter.kt
+index d730641..6b82354 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/library/sync/SupabaseLibrarySyncAdapter.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/library/sync/SupabaseLibrarySyncAdapter.kt
+@@ -96,13 +96,14 @@ object SupabaseLibrarySyncAdapter : LibrarySyncAdapter {
+ }
+ 
+ @Serializable
+-private data class LibrarySyncItem(
++internal data class LibrarySyncItem(
+     @SerialName("content_id") override val contentId: String,
+     @SerialName("content_type") override val contentType: String,
+     override val name: String = "",
+     override val poster: String? = null,
+     @SerialName("poster_shape") override val posterShape: String = "POSTER",
+     override val background: String? = null,
++    override val logo: String? = null,
+     override val description: String? = null,
+     @SerialName("release_info") override val releaseInfo: String? = null,
+     @SerialName("imdb_rating") override val imdbRating: Float? = null,
+@@ -112,7 +113,7 @@ private data class LibrarySyncItem(
+ ) : LibrarySyncFields
+ 
+ @Serializable
+-private data class LibraryDeltaSyncItem(
++internal data class LibraryDeltaSyncItem(
+     @SerialName("event_id") val eventId: Long,
+     val operation: String,
+     @SerialName("content_id") override val contentId: String,
+@@ -121,6 +122,7 @@ private data class LibraryDeltaSyncItem(
+     override val poster: String? = null,
+     @SerialName("poster_shape") override val posterShape: String = "POSTER",
+     override val background: String? = null,
++    override val logo: String? = null,
+     override val description: String? = null,
+     @SerialName("release_info") override val releaseInfo: String? = null,
+     @SerialName("imdb_rating") override val imdbRating: Float? = null,
+@@ -129,13 +131,14 @@ private data class LibraryDeltaSyncItem(
+     @SerialName("added_at") override val addedAt: Long = 0,
+ ) : LibrarySyncFields
+ 
+-private interface LibrarySyncFields {
++internal interface LibrarySyncFields {
+     val contentId: String
+     val contentType: String
+     val name: String
+     val poster: String?
+     val posterShape: String
+     val background: String?
++    val logo: String?
+     val description: String?
+     val releaseInfo: String?
+     val imdbRating: Float?
+@@ -144,13 +147,14 @@ private interface LibrarySyncFields {
+     val addedAt: Long
+ }
+ 
+-private fun LibrarySyncFields.toLibraryItem(): LibraryItem =
++internal fun LibrarySyncFields.toLibraryItem(): LibraryItem =
+     LibraryItem(
+         id = contentId,
+         type = contentType,
+         name = name,
+         poster = poster,
+         banner = background,
++        logo = logo,
+         description = description,
+         releaseInfo = releaseInfo,
+         imdbRating = imdbRating?.toString(),
+@@ -160,7 +164,7 @@ private fun LibrarySyncFields.toLibraryItem(): LibraryItem =
+         savedAtEpochMs = addedAt,
+     )
+ 
+-private fun LibraryItem.toSyncItem(): LibrarySyncItem =
++internal fun LibraryItem.toSyncItem(): LibrarySyncItem =
+     LibrarySyncItem(
+         contentId = id,
+         contentType = type,
+@@ -168,6 +172,7 @@ private fun LibraryItem.toSyncItem(): LibrarySyncItem =
+         poster = poster,
+         posterShape = posterShape.toSyncName(),
+         background = banner,
++        logo = logo,
+         description = description,
+         releaseInfo = releaseInfo,
+         imdbRating = imdbRating?.toFloatOrNull(),
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
+index 28afd05..9364769 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/player/PlayerSettingsRepository.kt
+@@ -70,7 +70,7 @@ data class PlayerSettingsUiState(
+     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
+     val streamAutoPlayNextEpisodeFallbackEnabled: Boolean = true,
+     val streamAutoPlayPreferBingeGroup: Boolean = true,
+-    val streamAutoPlayReuseBingeGroup: Boolean = true,
++    val streamAutoPlayReuseBingeGroup: Boolean = false,
+     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
+     val nextEpisodeThresholdPercent: Float = 99f,
+     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
+@@ -136,7 +136,7 @@ object PlayerSettingsRepository {
+     private var streamAutoPlayNextEpisodeEnabled = false
+     private var streamAutoPlayNextEpisodeFallbackEnabled = true
+     private var streamAutoPlayPreferBingeGroup = true
+-    private var streamAutoPlayReuseBingeGroup = true
++    private var streamAutoPlayReuseBingeGroup = false
+     private var nextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
+     private var nextEpisodeThresholdPercent = 99f
+     private var nextEpisodeThresholdMinutesBeforeEnd = 2f
+@@ -207,7 +207,7 @@ object PlayerSettingsRepository {
+         streamAutoPlayNextEpisodeEnabled = false
+         streamAutoPlayNextEpisodeFallbackEnabled = true
+         streamAutoPlayPreferBingeGroup = true
+-        streamAutoPlayReuseBingeGroup = true
++        streamAutoPlayReuseBingeGroup = false
+         nextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
+         nextEpisodeThresholdPercent = 99f
+         nextEpisodeThresholdMinutesBeforeEnd = 2f
+@@ -330,7 +330,7 @@ object PlayerSettingsRepository {
+         streamAutoPlayNextEpisodeEnabled = PlayerSettingsStorage.loadStreamAutoPlayNextEpisodeEnabled() ?: false
+         streamAutoPlayNextEpisodeFallbackEnabled = PlayerSettingsStorage.loadStreamAutoPlayNextEpisodeFallbackEnabled() ?: true
+         streamAutoPlayPreferBingeGroup = PlayerSettingsStorage.loadStreamAutoPlayPreferBingeGroup() ?: true
+-        streamAutoPlayReuseBingeGroup = PlayerSettingsStorage.loadStreamAutoPlayReuseBingeGroup() ?: true
++        streamAutoPlayReuseBingeGroup = PlayerSettingsStorage.loadStreamAutoPlayReuseBingeGroup() ?: false
+         nextEpisodeThresholdMode = PlayerSettingsStorage.loadNextEpisodeThresholdMode()
+             ?.let { runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrNull() }
+             ?: NextEpisodeThresholdMode.PERCENTAGE
