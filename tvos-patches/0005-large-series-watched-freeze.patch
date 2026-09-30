@@ -1,8 +1,8 @@
 diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt
-index 1bd1164b..5796cda7 100644
+index f634aa2..74796a1 100644
 --- a/shared/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt
 +++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/watched/WatchedEpisodeActions.kt
-@@ -77,13 +77,21 @@ fun MetaDetails.releasedEpisodesForSeason(
+@@ -76,13 +76,21 @@ fun MetaDetails.releasedEpisodesForSeason(
  fun MetaDetails.hasWatchedAllMainSeasonEpisodes(
      todayIsoDate: String,
      isEpisodeWatched: (MetaVideo) -> Boolean,
@@ -32,10 +32,10 @@ index 1bd1164b..5796cda7 100644
  fun MetaDetails.episodePlaybackId(video: MetaVideo): String =
      buildPlaybackVideoId(
 diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt
-index d3d46372..7c48e77e 100644
+index 8bc13e2..ce5172a 100644
 --- a/shared/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt
 +++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/watching/application/WatchingActions.kt
-@@ -140,16 +140,15 @@ object WatchingActions {
+@@ -144,16 +144,15 @@ object WatchingActions {
      ) {
          if (!meta.type.isSeriesLikeType()) return
  
@@ -58,10 +58,10 @@ index d3d46372..7c48e77e 100644
          )
      }
 diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-index 753f1e0a..3419793d 100644
+index 4772300..1d4a564 100644
 --- a/shared/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
 +++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/watchprogress/WatchProgressRepository.kt
-@@ -1127,8 +1127,9 @@ object WatchProgressRepository {
+@@ -1254,8 +1254,9 @@ object WatchProgressRepository {
          if (videoIds.isEmpty()) return
  
          activeProgressProvider()?.let { provider ->

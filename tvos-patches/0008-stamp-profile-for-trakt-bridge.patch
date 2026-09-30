@@ -1,8 +1,8 @@
 diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-index 8638463..8bfcddb 100644
+index be736b3..5ce394a 100644
 --- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
 +++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-@@ -688,10 +688,23 @@ struct StreamPickerView: View {
+@@ -696,10 +696,23 @@ struct StreamPickerView: View {
              skipSegmentsJson: nil
          )
          if playerId == "infuse", let handoffUrl = URL(string: urlString) {

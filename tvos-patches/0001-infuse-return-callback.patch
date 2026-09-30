@@ -1,21 +1,22 @@
 diff --git a/iosApp/NuvioTV/ContentView.swift b/iosApp/NuvioTV/ContentView.swift
-index 2ac4509..0ba3057 100644
+index f309829..5e02a73 100644
 --- a/iosApp/NuvioTV/ContentView.swift
 +++ b/iosApp/NuvioTV/ContentView.swift
-@@ -194,6 +194,7 @@ struct ContentView: View {
-             }
-         }
-         .onOpenURL { url in
-+            if InfuseHandoff.handle(url) { return }
-             if auth.gate == .main, entered {
-                 deepLink = DeepLink.parse(url)
-             } else {
+@@ -279,6 +279,8 @@ struct ContentView: View {
+     /// `-debug.openDeepLink` test hook above — one code path so a UI test exercises exactly what a
+     /// device deep link does, not a parallel imitation of it.
+     private func handleDeepLink(_ url: URL) {
++        // Infuse's x-success/x-error return (see InfuseHandoff), not a Top Shelf deep link.
++        if InfuseHandoff.handle(url) { return }
+         if auth.gate == .main, entered {
+             deepLink = DeepLink.parse(url)
+         } else {
 diff --git a/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift b/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
-index f351f3c..5412d01 100644
+index 85d257a..c88f95f 100644
 --- a/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
 +++ b/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
-@@ -123,3 +123,56 @@ final class PlaybackProgressRecorder {
-         return Float(min(100, max(0, positionSec / durationSec * 100)))
+@@ -309,3 +309,56 @@ final class TrackerScrobbleSession {
+         }
      }
  }
 +
@@ -72,10 +73,10 @@ index f351f3c..5412d01 100644
 +    }
 +}
 diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-index f31ea6e..8638463 100644
+index 53bebe6..be736b3 100644
 --- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
 +++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-@@ -687,9 +687,16 @@ struct StreamPickerView: View {
+@@ -695,9 +695,16 @@ struct StreamPickerView: View {
              episodeTitle: nil,
              skipSegmentsJson: nil
          )
@@ -92,7 +93,7 @@ index f31ea6e..8638463 100644
          if fallbackToInternal, let url = URL(string: urlString) {
              showToast(String(localized: "Couldn\u{2019}t open the external player \u{2014} playing in NuvioTV."))
              NextEpisodeEngine.consecutiveAutoPlays = 0
-@@ -719,6 +726,27 @@ struct StreamPickerView: View {
+@@ -727,6 +734,27 @@ struct StreamPickerView: View {
          }
      }
  
@@ -121,19 +122,10 @@ index f31ea6e..8638463 100644
          withAnimation { toast = message }
          let shown = message
 diff --git a/shared/src/appleMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.apple.kt b/shared/src/appleMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.apple.kt
-index 34704b3..f50306e 100644
+index 7940737..95c4b7f 100644
 --- a/shared/src/appleMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.apple.kt
 +++ b/shared/src/appleMain/kotlin/com/nuvio/app/features/player/ExternalPlayerPlatform.apple.kt
-@@ -21,12 +21,21 @@ private val iosExternalPlayerSpecs = listOf(
-             buildString {
-                 append("infuse://x-callback-url/play?url=")
-                 append(request.sourceUrl.urlQueryEncode())
-+                if (request.resumePositionMs > 0L) {
-+                    append("&position=${request.resumePositionMs / 1000L}")
-+                }
-                 append("&filename=")
-                 append(request.buildPlayerTitle(includeEpisodeTitle = true).urlQueryEncode())
-                 request.subtitles?.forEach { subtitle ->
+@@ -29,6 +29,12 @@ private val iosExternalPlayerSpecs = listOf(
                      append("&sub=")
                      append(subtitle.url.urlQueryEncode())
                  }

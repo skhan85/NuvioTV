@@ -1,8 +1,8 @@
 diff --git a/iosApp/NuvioTV/Screens/MPVPlayerView.swift b/iosApp/NuvioTV/Screens/MPVPlayerView.swift
-index 81c0cc3..b3ea866 100644
+index 359c986..dc18fb6 100644
 --- a/iosApp/NuvioTV/Screens/MPVPlayerView.swift
 +++ b/iosApp/NuvioTV/Screens/MPVPlayerView.swift
-@@ -1110,7 +1110,10 @@ final class MPVTVPlayerViewController: UIViewController {
+@@ -1155,7 +1155,10 @@ final class MPVTVPlayerViewController: UIViewController {
              videoHeight: Int32(truncatingIfNeeded: cachedProps().videoH)
          )
          if flush {
@@ -15,10 +15,10 @@ index 81c0cc3..b3ea866 100644
              WatchProgressRepository.shared.upsertPlaybackProgress(session: session, snapshot: snapshot, syncRemote: false)
          }
 diff --git a/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift b/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
-index a3bc8ef..36bcbb9 100644
+index c88f95f..0a3b87f 100644
 --- a/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
 +++ b/iosApp/NuvioTV/Screens/PlaybackProgressRecorder.swift
-@@ -64,7 +64,10 @@ final class PlaybackProgressRecorder {
+@@ -83,7 +83,10 @@ final class PlaybackProgressRecorder {
              videoHeight: 0
          )
          if flush {
