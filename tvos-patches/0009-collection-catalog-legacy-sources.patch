@@ -1,0 +1,233 @@
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolver.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolver.kt
+index 81ba720..365ec7b 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolver.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolver.kt
+@@ -7,7 +7,24 @@ import com.nuvio.app.features.addons.enabledAddons
+ data class ResolvedCollectionCatalog(
+     val addon: ManagedAddon,
+     val catalog: AddonCatalog,
+-)
++    val requestedSource: CollectionCatalogSource,
++) {
++    /**
++     * The catalog coordinates that are safe to send to the addon transport.
++     *
++     * Older collection payloads (and payloads produced by the web/mobile editor) can store the
++     * human-facing catalog label in [CollectionCatalogSource.type], for example
++     * "All Movies on Netflix". The Stremio transport requires the manifest type (`movie` or
++     * `series`), so the manifest's catalog definition is the source of truth once the catalog has
++     * been resolved.
++     */
++    val canonicalSource: CollectionCatalogSource
++        get() = requestedSource.copy(
++            addonId = addon.manifest?.id ?: requestedSource.addonId,
++            type = catalog.type,
++            catalogId = catalog.id,
++        )
++}
+ 
+ fun List<ManagedAddon>. findCollectionCatalog(
+     source: CollectionCatalogSource,
+@@ -16,14 +33,21 @@ fun List<ManagedAddon>. findCollectionCatalog(
+     val declaredAddon = activeAddons.firstOrNull { it.manifest?.id == source.addonId }
+     val declaredCatalog = declaredAddon?.manifest?.catalogs?.findSourceCatalog(source)
+     if (declaredAddon != null && declaredCatalog != null) {
+-        return ResolvedCollectionCatalog(addon = declaredAddon, catalog = declaredCatalog)
++        return ResolvedCollectionCatalog(
++            addon = declaredAddon,
++            catalog = declaredCatalog,
++            requestedSource = source,
++        )
+     }
+ 
+     return activeAddons.firstNotNullOfOrNull { addon ->
+-        val catalog = addon.manifest?.catalogs?.find {
+-            it.id == source.catalogId && it.type == source.type
+-        } ?: return@firstNotNullOfOrNull null
+-        ResolvedCollectionCatalog(addon = addon, catalog = catalog)
++        val catalog = addon.manifest?.catalogs?.findSourceCatalog(source)
++            ?: return@firstNotNullOfOrNull null
++        ResolvedCollectionCatalog(
++            addon = addon,
++            catalog = catalog,
++            requestedSource = source,
++        )
+     }
+ }
+ 
+@@ -32,13 +56,25 @@ fun List<AvailableCatalog>. findAvailableCatalog(
+ ): AvailableCatalog? {
+     val declaredCatalogs = filter { it.addonId == source.addonId }
+     return declaredCatalogs.findSourceCatalog(source)
+-        ?: firstOrNull { it.catalogId == source.catalogId && it.type == source.type }
++        ?: findSourceCatalog(source)
+ }
+ 
+ private fun List<AddonCatalog>.findSourceCatalog(source: CollectionCatalogSource): AddonCatalog? =
+-    find { it.id == source.catalogId && it.type == source.type }
+-        ?: find { it.id == source.catalogId.substringBefore(",") && it.type == source.type }
++    find { it.id == source.catalogId && it.type.equals(source.type, ignoreCase = true) }
++        ?: find {
++            it.id == source.catalogId.substringBefore(",") &&
++                it.type.equals(source.type, ignoreCase = true)
++        }
++        // Legacy collection exports sometimes put the display name in `type`. Catalog IDs are
++        // stable and unique within a manifest, so use the manifest's type when the ID matches.
++        ?: find { it.id == source.catalogId }
++        ?: find { it.id == source.catalogId.substringBefore(",") }
+ 
+ private fun List<AvailableCatalog>.findSourceCatalog(source: CollectionCatalogSource): AvailableCatalog? =
+-    find { it.catalogId == source.catalogId && it.type == source.type }
+-        ?: find { it.catalogId == source.catalogId.substringBefore(",") && it.type == source.type }
++    find { it.catalogId == source.catalogId && it.type.equals(source.type, ignoreCase = true) }
++        ?: find {
++            it.catalogId == source.catalogId.substringBefore(",") &&
++                it.type.equals(source.type, ignoreCase = true)
++        }
++        ?: find { it.catalogId == source.catalogId }
++        ?: find { it.catalogId == source.catalogId.substringBefore(",") }
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderCoverResolver.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderCoverResolver.kt
+index 281ba11..53f3573 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderCoverResolver.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderCoverResolver.kt
+@@ -163,11 +163,12 @@ object FolderCoverResolver {
+         else -> {
+             val catalogSource = addonCatalogSource() ?: return null
+             val resolvedCatalog = addons.findCollectionCatalog(catalogSource) ?: return null
++            val effectiveSource = resolvedCatalog.canonicalSource
+             fetchCatalogPage(
+                 manifestUrl = resolvedCatalog.addon.manifestUrl,
+-                type = catalogSource.type,
+-                catalogId = catalogSource.catalogId,
+-                genre = catalogSource.genre,
++                type = effectiveSource.type,
++                catalogId = effectiveSource.catalogId,
++                genre = effectiveSource.genre,
+                 maxItems = 1,
+             )
+         }
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailRepository.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailRepository.kt
+index 58c5ad9..c90ca18 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailRepository.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailRepository.kt
+@@ -244,11 +244,12 @@ object FolderDetailRepository {
+                 } else {
+                     val catalogSource = source.addonCatalogSource() ?: return@forEachIndexed
+                     val resolvedCatalog = addons.findCollectionCatalog(catalogSource)
++                    val effectiveSource = resolvedCatalog?.canonicalSource ?: catalogSource
+                     val addon = resolvedCatalog?.addon
+                     val catalog = resolvedCatalog?.catalog
+                     val label = catalog?.name ?: catalogSource.catalogId
+-                    val typeLabel = localizedMediaTypeLabel(catalogSource.type)
+-                    val genreSuffix = if (catalogSource.genre != null) " · ${catalogSource.genre}" else ""
++                    val typeLabel = localizedMediaTypeLabel(effectiveSource.type)
++                    val genreSuffix = if (effectiveSource.genre != null) " · ${effectiveSource.genre}" else ""
+                     add(
+                         FolderTab(
+                             label = "$label ($typeLabel)$genreSuffix",
+@@ -256,9 +257,9 @@ object FolderDetailRepository {
+                             source = source,
+                             sourceKey = source.catalogRouteKey(),
+                             manifestUrl = addon?.manifestUrl,
+-                            type = catalogSource.type,
+-                            catalogId = catalogSource.catalogId,
+-                            genre = catalogSource.genre,
++                            type = effectiveSource.type,
++                            catalogId = effectiveSource.catalogId,
++                            genre = effectiveSource.genre,
+                             supportsPagination = catalog?.supportsPagination() == true,
+                             isLoading = true,
+                         ),
+diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
+index ba4e15c..1332b8a 100644
+--- a/shared/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
++++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
+@@ -1775,11 +1775,12 @@ object HomeRepository {
+             else -> {
+                 val catalogSource = addonCatalogSource() ?: return emptyList()
+                 val resolvedCatalog = addons.findCollectionCatalog(catalogSource) ?: return emptyList()
++                val effectiveSource = resolvedCatalog.canonicalSource
+                 fetchCatalogPage(
+                     manifestUrl = resolvedCatalog.addon.manifestUrl,
+-                    type = catalogSource.type,
+-                    catalogId = catalogSource.catalogId,
+-                    genre = catalogSource.genre,
++                    type = effectiveSource.type,
++                    catalogId = effectiveSource.catalogId,
++                    genre = effectiveSource.genre,
+                     maxItems = HOME_COLLECTION_HERO_SOURCE_ITEM_LIMIT,
+                     forceRefresh = forceRefresh,
+                 )
+diff --git a/shared/src/commonTest/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolverTest.kt b/shared/src/commonTest/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolverTest.kt
+new file mode 100644
+index 0000000..e874315
+--- /dev/null
++++ b/shared/src/commonTest/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolverTest.kt
+@@ -0,0 +1,67 @@
++package com.nuvio.app.features.collection
++
++import com.nuvio.app.features.addons.AddonCatalog
++import com.nuvio.app.features.addons.AddonManifest
++import com.nuvio.app.features.addons.ManagedAddon
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertNotNull
++
++class CollectionCatalogResolverTest {
++    private val manifestUrl = "https://example.com/aio/manifest.json"
++    private val addon = ManagedAddon(
++        manifestUrl = manifestUrl,
++        manifest = AddonManifest(
++            id = "aio-metadata",
++            name = "AIOMetadata",
++            description = "",
++            version = "2.16.5",
++            resources = emptyList(),
++            types = listOf("movie", "series"),
++            catalogs = listOf(
++                AddonCatalog(
++                    id = "mdblist.13914",
++                    type = "movie",
++                    name = "All Movies on Netflix",
++                ),
++                AddonCatalog(
++                    id = "mdblist.13963",
++                    type = "series",
++                    name = "All Series on Netflix",
++                ),
++            ),
++            transportUrl = manifestUrl,
++        ),
++    )
++
++    @Test
++    fun `legacy display label is resolved to manifest type and id`() {
++        val source = CollectionCatalogSource(
++            addonId = "aio-metadata",
++            type = "All Movies on Netflix",
++            catalogId = "mdblist.13914",
++        )
++
++        val resolved = listOf(addon).findCollectionCatalog(source)
++
++        assertNotNull(resolved)
++        assertEquals("movie", resolved.catalog.type)
++        assertEquals("mdblist.13914", resolved.canonicalSource.catalogId)
++        assertEquals("movie", resolved.canonicalSource.type)
++    }
++
++    @Test
++    fun `catalog id resolves even when the saved addon id is stale`() {
++        val source = CollectionCatalogSource(
++            addonId = "old-aio-metadata-instance",
++            type = "All Series on Netflix",
++            catalogId = "mdblist.13963",
++        )
++
++        val resolved = listOf(addon).findCollectionCatalog(source)
++
++        assertNotNull(resolved)
++        assertEquals("aio-metadata", resolved.canonicalSource.addonId)
++        assertEquals("series", resolved.canonicalSource.type)
++    }
++}

@@ -1,29 +1,23 @@
 diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-index be736b3..5ce394a 100644
+index 8df7622..1e6e2f7 100644
 --- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
 +++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-@@ -696,10 +696,23 @@ struct StreamPickerView: View {
-             skipSegmentsJson: nil
-         )
-         if playerId == "infuse", let handoffUrl = URL(string: urlString) {
--            InfuseHandoff.pending = InfuseHandoff(
-+            let handoff = InfuseHandoff(
-                 context: context(url: handoffUrl, stream: stream),
-                 durationSec: infuseHandoffDurationSec(storedDurationMs: progress?.durationMs)
-             )
-+            InfuseHandoff.pending = handoff
+@@ -895,6 +895,18 @@ struct StreamPickerView: View {
+             launchSessionId = session.id
+             callbackSuccessUrl = callbacks.first.map { $0 as String }
+             callbackErrorUrl = callbacks.second.map { $0 as String }
 +            // Trakt bridge (home Pi): stamp this title on the active profile in Nuvio Sync before
 +            // Infuse starts, so the bridge saves Infuse's positions to the profile that pressed
 +            // Play (e.g. Kids) rather than the default one. The resume point is unchanged.
-+            if let duration = handoff.durationSec, duration > 0 {
-+                PlaybackProgressRecorder(context: handoff.context).record(
++            if let durationMs = externalDurationMs(progress: progress), durationMs > 0 {
++                PlaybackProgressRecorder(context: context(url: sourceURL, stream: stream)).record(
 +                    positionSec: max(Double(resumeMs) / 1000.0, 2),
-+                    durationSec: duration,
++                    durationSec: Double(durationMs) / 1000.0,
 +                    isPaused: true,
 +                    speed: 1,
 +                    flush: true
 +                )
 +            }
          }
-         let result = ExternalPlayerPlatform.shared.open(request: request, playerId: playerId)
-         // SharedCore lowercases the whole Kotlin enum entry name (see KMP bridging notes).
+         let request = ExternalPlayerPlaybackRequest(
+             sourceUrl: urlString,
