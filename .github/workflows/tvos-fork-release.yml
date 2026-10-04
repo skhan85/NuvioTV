@@ -151,7 +151,7 @@ jobs:
           TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
           PREMIUMIZE_CLIENT_ID: ${{ secrets.PREMIUMIZE_CLIENT_ID }}
           # MDBList sign-in (device code); free app at mdblist.com/developer. Blank = MDBList off.
-          MDBLIST_CLIENT_ID: ${{ secrets.MDBLIST_CLIENT_ID }}
+          MDBLIST_CLIENT_ID: ${{ secrets.MDBLIST_CLIENT_ID || '63lxs5y12mtmidz76v8s06q6s' }}
           # The source bundles the TMDB key at build time (no Settings entry since upstream
           # 60ee0160); without it TMDB enrichment is off.
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
