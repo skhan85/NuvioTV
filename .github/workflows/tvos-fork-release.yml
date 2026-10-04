@@ -150,6 +150,8 @@ jobs:
           TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
           TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
           PREMIUMIZE_CLIENT_ID: ${{ secrets.PREMIUMIZE_CLIENT_ID }}
+          # MDBList sign-in (device code); free app at mdblist.com/developer. Blank = MDBList off.
+          MDBLIST_CLIENT_ID: ${{ secrets.MDBLIST_CLIENT_ID }}
           # The source bundles the TMDB key at build time (no Settings entry since upstream
           # 60ee0160); without it TMDB enrichment is off.
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
@@ -158,7 +160,7 @@ jobs:
           for key in NUVIO_SUPABASE_URL NUVIO_SUPABASE_ANON_KEY INTRODB_API_URL \
                      IMDB_RATINGS_API_BASE_URL IMDB_TAPFRAME_API_BASE_URL \
                      SIMKL_CLIENT_ID TRAKT_CLIENT_ID TRAKT_CLIENT_SECRET PREMIUMIZE_CLIENT_ID \
-                     TMDB_API_KEY; do
+                     MDBLIST_CLIENT_ID TMDB_API_KEY; do
             value="${!key}"
             if [[ -n "${value}" ]]; then
               printf '%s=%s\n' "${key}" "${value}" >> src/local.properties
