@@ -1,0 +1,98 @@
+diff --git a/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift b/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
+index 2c7cba9b..cc4184d1 100644
+--- a/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
++++ b/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
+@@ -592,6 +592,7 @@ final class NativePlaybackCoordinator: ObservableObject {
+             print("[NativePlayer] serving \(url.absoluteString)")
+             self.servedURL = url
+             let item = AVPlayerItem(url: url)
++            NativeSubtitleStyle.apply(self.playerSettings?.subtitleStyle, to: item)
+             // Bound how far ahead AVPlayer prefetches: over the infinite-bandwidth loopback origin it
+             // would otherwise race minutes past the ~realtime remux frontier and block on segments that
+             // don't exist yet, tripping CFNetwork's request timeout.
+@@ -657,6 +658,7 @@ final class NativePlaybackCoordinator: ObservableObject {
+         // Cache-bust so AVPlayer refetches the master (the server ignores query strings).
+         let retryURL = URL(string: servedURL.absoluteString + "?r=1") ?? servedURL
+         let item = AVPlayerItem(url: retryURL)
++        NativeSubtitleStyle.apply(playerSettings?.subtitleStyle, to: item)
+         item.preferredForwardBufferDuration = 24
+         playerItem = item
+         legibleGroup = nil
+diff --git a/iosApp/NuvioTV/Screens/NativeSubtitleStyle.swift b/iosApp/NuvioTV/Screens/NativeSubtitleStyle.swift
+new file mode 100644
+index 00000000..3abbb713
+--- /dev/null
++++ b/iosApp/NuvioTV/Screens/NativeSubtitleStyle.swift
+@@ -0,0 +1,31 @@
++import AVFoundation
++import CoreMedia
++import SharedCore
++
++/// Fork (from dotjarden/NuvioMobile `codex/native-tv-experience`): carries the shared subtitle
++/// style (text colour, background, bold, size, outline) onto the native AVPlayer engine's WebVTT
++/// renditions. Before this, only the mpv engine honoured those settings and the native engine fell
++/// back to system defaults. Bitmap captions and the system's caption accessibility overrides stay
++/// under AVKit's control.
++enum NativeSubtitleStyle {
++    static func attributes(_ style: SubtitleStyleState) -> [String: Any] {
++        func components(_ argb: Int64) -> [Double] {
++            [24, 16, 8, 0].map { Double((argb >> $0) & 0xFF) / 255 }
++        }
++        return [
++            kCMTextMarkupAttribute_ForegroundColorARGB as String: components(style.textColor),
++            kCMTextMarkupAttribute_BackgroundColorARGB as String: components(style.backgroundColor),
++            kCMTextMarkupAttribute_BoldStyle as String: style.bold,
++            // 18 sp is the shared default size, so it maps to AVKit's 100%.
++            kCMTextMarkupAttribute_RelativeFontSize as String: max(50, min(200, Double(style.fontSizeSp) / 18 * 100)),
++            kCMTextMarkupAttribute_CharacterEdgeStyle as String: style.outlineEnabled
++                ? kCMTextMarkupCharacterEdgeStyle_Uniform as String
++                : kCMTextMarkupCharacterEdgeStyle_None as String,
++        ]
++    }
++
++    static func apply(_ style: SubtitleStyleState?, to item: AVPlayerItem?) {
++        guard let style, let item else { return }
++        item.textStyleRules = AVTextStyleRule(textMarkupAttributes: attributes(style)).map { [$0] } ?? []
++    }
++}
+diff --git a/iosApp/NuvioTVTests/NativeSubtitleStyleTests.swift b/iosApp/NuvioTVTests/NativeSubtitleStyleTests.swift
+new file mode 100644
+index 00000000..471b127b
+--- /dev/null
++++ b/iosApp/NuvioTVTests/NativeSubtitleStyleTests.swift
+@@ -0,0 +1,35 @@
++import AVFoundation
++import CoreMedia
++import SharedCore
++import XCTest
++@testable import NuvioTV
++
++final class NativeSubtitleStyleTests: XCTestCase {
++    private func style(size: Int32 = 24, outline: Bool = true) -> SubtitleStyleState {
++        SubtitleStyleState(textColor: 0xFFFFFF00, backgroundColor: 0x80000000,
++            outlineColor: 0xFF000000, outlineEnabled: outline, outlineWidth: 2, bold: true,
++            fontSizeSp: size, bottomOffset: 0, stripSdh: false,
++            useForcedSubtitles: false, showOnlyPreferredLanguages: false)
++    }
++
++    @MainActor func testAppearanceReachesActualAVPlayerItem() {
++        let item = AVPlayerItem(asset: AVMutableComposition())
++        NativeSubtitleStyle.apply(style(), to: item)
++        let attributes = item.textStyleRules?.first?.textMarkupAttributes
++        XCTAssertEqual(attributes?[kCMTextMarkupAttribute_ForegroundColorARGB as String] as? [Double], [1, 1, 1, 0])
++        XCTAssertEqual(attributes?[kCMTextMarkupAttribute_BackgroundColorARGB as String] as? [Double], [128.0 / 255, 0, 0, 0])
++        XCTAssertEqual(attributes?[kCMTextMarkupAttribute_BoldStyle as String] as? Bool, true)
++        XCTAssertEqual(attributes?[kCMTextMarkupAttribute_RelativeFontSize as String] as? Double ?? 0, 133.333333, accuracy: 0.001)
++        XCTAssertEqual(attributes?[kCMTextMarkupAttribute_CharacterEdgeStyle as String] as? String, kCMTextMarkupCharacterEdgeStyle_Uniform as String)
++    }
++
++    @MainActor func testChangingAppearanceReplacesPriorRules() {
++        let item = AVPlayerItem(asset: AVMutableComposition())
++        NativeSubtitleStyle.apply(style(), to: item)
++        NativeSubtitleStyle.apply(style(size: 18, outline: false), to: item)
++        XCTAssertEqual(item.textStyleRules?.count, 1)
++        let attributes = item.textStyleRules?.first?.textMarkupAttributes
++        XCTAssertEqual(attributes?[kCMTextMarkupAttribute_RelativeFontSize as String] as? Double, 100)
++        XCTAssertEqual(attributes?[kCMTextMarkupAttribute_CharacterEdgeStyle as String] as? String, kCMTextMarkupCharacterEdgeStyle_None as String)
++    }
++}

@@ -1,0 +1,307 @@
+diff --git a/iosApp/NuvioTV/Screens/MPVPlayerView.swift b/iosApp/NuvioTV/Screens/MPVPlayerView.swift
+index 43fb96da..5764dc67 100644
+--- a/iosApp/NuvioTV/Screens/MPVPlayerView.swift
++++ b/iosApp/NuvioTV/Screens/MPVPlayerView.swift
+@@ -120,6 +120,12 @@ final class MPVTVPlayerViewController: UIViewController {
+     private var playerSettingsWatcher: FlowWatcher?
+     private var playerSettings: PlayerSettingsUiState?
+     private var didAutoSelectTracks = false
++    /// Fork: auto-show subtitles on rewind (see `RewindSubtitleWatch`). The subtitle track infos
++    /// from the last track walk, and the track this feature switched on (so it only switches off
++    /// what it switched on itself).
++    private var rewindSubtitles = RewindSubtitleWatch()
++    private var lastSubtitleInfos: [TrackInfo] = []
++    private var rewindShownSubtitleId: Int?
+     /// Preferred audio-language targets in priority order, resolved once in `setupMpv()` (before
+     /// `mpv_initialize`) so mpv's own first `aid=auto` resolution already honors them.
+     private var preferredAudioLanguages: [String] = []
+@@ -256,7 +262,12 @@ final class MPVTVPlayerViewController: UIViewController {
+         layoutMetalLayer()
+ 
+         state.selectAudio = { [weak self] id in self?.selectAudio(id) }
+-        state.selectSubtitle = { [weak self] id in self?.selectSubtitle(id) }
++        state.selectSubtitle = { [weak self] id in
++            // A manual pick (including Off) always wins over the rewind auto-show.
++            self?.rewindSubtitles.reset()
++            self?.rewindShownSubtitleId = nil
++            self?.selectSubtitle(id)
++        }
+         state.setSpeed = { [weak self] speed in self?.setSpeed(speed) }
+         state.setSubtitleDelay = { [weak self] seconds in self?.setSubtitleDelay(seconds) }
+         state.setAudioDelay = { [weak self] seconds in self?.setAudioDelay(seconds) }
+@@ -639,6 +650,7 @@ final class MPVTVPlayerViewController: UIViewController {
+             // The panel diffs its rows by stable ids, so refreshing while it is open is safe.
+             if self.state.audioTracks != audio { self.state.audioTracks = audio }
+             if self.state.subtitleTracks != newSubs { self.state.subtitleTracks = newSubs }
++            self.lastSubtitleInfos = subInfos
+             self.autoSelectPreferredTracks(audioInfos: audioInfos, subInfos: subInfos)
+         }
+     }
+@@ -1310,6 +1322,7 @@ final class MPVTVPlayerViewController: UIViewController {
+     /// disappears cleanly at the end), and auto-skip the segment types chosen in Settings. Cached
+     /// values only (called from `refreshState`).
+     private func updateSkipPrompt(position: Double, duration: Double, paused: Bool) {
++        tickRewindSubtitles(position: position)
+         // Auto-skip also requires Skip Intro (the fetch already returns nothing without it).
+         let autoSkipTypes: [AutoSkipSegmentType]? = playerSettings.flatMap { $0.skipIntroEnabled ? Array($0.autoSkipSegmentTypes) : nil }
+         let decision = skipPlanner.evaluate(positionSec: position, durationSec: duration,
+@@ -1442,6 +1455,30 @@ final class MPVTVPlayerViewController: UIViewController {
+         }
+         issueSeek(kind: .user, targetSec: base.map { $0 + seconds }, fromSec: base,
+                   args: [String(format: "%.3f", seconds), "relative"])
++        if seconds < 0, let base { handleRewindForSubtitles(fromSec: base, toSec: base + seconds) }
++    }
++
++    /// Fork: turn subtitles on for a rewind while they are off (`RewindSubtitleWatch`).
++    private func handleRewindForSubtitles(fromSec: Double, toSec: Double) {
++        guard !lastSubtitleInfos.isEmpty else { return }
++        let selectedId = state.subtitleTracks.first(where: { $0.isSelected })?.id ?? -1
++        guard rewindSubtitles.rewound(fromSec: fromSec, toSec: toSec, subtitlesOff: selectedId < 0),
++              let index = RewindSubtitleWatch.pickTrack(
++                  languages: lastSubtitleInfos.map { $0.lang.isEmpty ? nil : $0.lang },
++                  forced: lastSubtitleInfos.map(\.forced)
++              )
++        else { return }
++        let id = lastSubtitleInfos[index].id
++        rewindShownSubtitleId = id
++        selectSubtitle(id)
++    }
++
++    /// Fork: switch the rewind subtitles off once playback is back where the rewind started.
++    private func tickRewindSubtitles(position: Double) {
++        guard rewindSubtitles.tick(positionSec: position), let shown = rewindShownSubtitleId else { return }
++        rewindShownSubtitleId = nil
++        // Only undo our own pick: if the viewer changed tracks meanwhile, leave theirs alone.
++        if state.subtitleTracks.first(where: { $0.isSelected })?.id == shown { selectSubtitle(-1) }
+     }
+ 
+     private func seekAbsolute(_ seconds: Double, kind: SkipSegmentPlanner.SeekKind) {
+diff --git a/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift b/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
+index cc4184d1..8d65bb6b 100644
+--- a/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
++++ b/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
+@@ -751,6 +751,12 @@ final class NativePlaybackCoordinator: ObservableObject {
+                         let userSeek = self.onPositionTick?(self.lastPositionSec, pos)
+                             ?? (abs(pos - self.lastPositionSec) > SkipSegmentPlanner.userJumpThresholdSec)
+                         if userSeek { waitingTicks = 0 }
++                        // Fork: auto-show subtitles on rewind (`RewindSubtitleWatch`).
++                        if userSeek, pos < self.lastPositionSec {
++                            self.handleRewindForSubtitles(fromSec: self.lastPositionSec, toSec: pos)
++                        } else {
++                            self.tickRewindSubtitles(positionSec: pos)
++                        }
+                     }
+                     if let pct = pendingResumePercent, pos.isFinite, dur.isFinite, dur > 0 {
+                         pendingResumePercent = nil
+@@ -897,6 +903,9 @@ final class NativePlaybackCoordinator: ObservableObject {
+ 
+     /// Select a legible option (nil = Off). AVPlayer honours manual picks over the criteria.
+     func select(subtitle option: AVMediaSelectionOption?) {
++        // A manual pick (including Off) always wins over the rewind auto-show.
++        rewindSubtitles.reset()
++        rewindShownSubtitleName = nil
+         subtitleRefetchRestoreTask?.cancel(); subtitleRefetchRestoreTask = nil
+         isRefetchingSubtitles = false
+         guard let item = playerItem, let group = legibleGroup else { return }
+@@ -905,6 +914,47 @@ final class NativePlaybackCoordinator: ObservableObject {
+         selectionVersion &+= 1
+     }
+ 
++    // MARK: - Fork: auto-show subtitles on rewind
++
++    private var rewindSubtitles = RewindSubtitleWatch()
++    /// Canonical rendition name this feature switched on, so it only switches off its own pick.
++    private var rewindShownSubtitleName: String?
++
++    /// Turn subtitles on for a rewind while they are off. Same menu entries as the Subtitles tab:
++    /// slot-0 renditions allowed by "Show only preferred languages".
++    private func handleRewindForSubtitles(fromSec: Double, toSec: Double) {
++        guard let item = playerItem, let group = legibleGroup else { return }
++        let options = group.options
++            .filter { Self.subtitleSlot(ofName: Self.renditionName(of: $0)) == 0 }
++            .filter { subtitleOptionAllowed($0) }
++        guard !options.isEmpty,
++              rewindSubtitles.rewound(fromSec: fromSec, toSec: toSec,
++                                      subtitlesOff: item.currentMediaSelection.selectedMediaOption(in: group) == nil),
++              let index = RewindSubtitleWatch.pickTrack(
++                  languages: options.map { $0.extendedLanguageTag },
++                  forced: options.map { $0.hasMediaCharacteristic(.containsOnlyForcedSubtitles) }
++              )
++        else { return }
++        let option = options[index]
++        item.select(option, in: group)
++        rewindShownSubtitleName = Self.canonicalSubtitleName(Self.renditionName(of: option))
++        selectionVersion &+= 1
++        print("[NativePlayer] rewind → subtitles on (\(rewindShownSubtitleName ?? "?")) until \(Int(fromSec))s")
++    }
++
++    /// Switch the rewind subtitles off once playback is back where the rewind started.
++    private func tickRewindSubtitles(positionSec: Double) {
++        guard rewindSubtitles.tick(positionSec: positionSec), let shown = rewindShownSubtitleName else { return }
++        rewindShownSubtitleName = nil
++        guard let item = playerItem, let group = legibleGroup,
++              let current = item.currentMediaSelection.selectedMediaOption(in: group),
++              Self.canonicalSubtitleName(Self.renditionName(of: current)) == shown
++        else { return }   // the viewer changed tracks meanwhile: leave theirs alone
++        item.select(nil, in: group)
++        selectionVersion &+= 1
++        print("[NativePlayer] caught up → rewind subtitles off")
++    }
++
+     // MARK: - Subtitle delay
+ 
+     /// The rendition NAME without the delay-slot suffix the master's twin entries carry.
+diff --git a/iosApp/NuvioTV/Screens/Player/RewindSubtitleWatch.swift b/iosApp/NuvioTV/Screens/Player/RewindSubtitleWatch.swift
+new file mode 100644
+index 00000000..ee80f592
+--- /dev/null
++++ b/iosApp/NuvioTV/Screens/Player/RewindSubtitleWatch.swift
+@@ -0,0 +1,74 @@
++import Foundation
++import SharedCore
++
++/// Fork: Apple TV port of the iPhone "auto-show subtitles on rewind" feature (Nuvio Enhanced
++/// 611b0201, iPhone fork patch 0011). When subtitles are off and you rewind, they turn on until
++/// playback catches back up to the point you rewound from, then turn off again. Rewinding again
++/// before catching up only moves that point further out. A manual subtitle pick ends it at once.
++///
++/// Pure state; both engines (mpv and native) feed it rewinds and ticks and do the track switching.
++struct RewindSubtitleWatch {
++    /// Settings → Subtitles toggle (on by default). Device-local, like the other tvOS-only tuning keys.
++    static let enabledKey = "autoShowSubtitlesOnRewind"
++    static var isEnabled: Bool {
++        UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
++    }
++
++    /// A backward user jump smaller than this (a frame-step or position jitter) is not a rewind.
++    static let minimumRewindSec: Double = 3
++
++    private(set) var watermarkSec: Double?
++    private(set) var autoShowing = false
++
++    /// A user rewind from `fromSec` to `toSec`. Returns true when subtitles should be turned on now.
++    mutating func rewound(fromSec: Double, toSec: Double, subtitlesOff: Bool, enabled: Bool = Self.isEnabled) -> Bool {
++        guard enabled, fromSec.isFinite, toSec.isFinite, fromSec - toSec >= Self.minimumRewindSec else { return false }
++        if autoShowing {
++            watermarkSec = max(watermarkSec ?? fromSec, fromSec)
++            return false
++        }
++        guard subtitlesOff else { return false }
++        watermarkSec = fromSec
++        autoShowing = true
++        return true
++    }
++
++    /// Called on every position tick. Returns true when the auto-shown subtitles should be turned
++    /// off again (playback reached the rewind point).
++    mutating func tick(positionSec: Double) -> Bool {
++        guard autoShowing, let watermark = watermarkSec, positionSec.isFinite, positionSec >= watermark else { return false }
++        reset()
++        return true
++    }
++
++    /// The viewer picked a subtitle (or Off) themselves: never undo their choice later.
++    mutating func reset() {
++        watermarkSec = nil
++        autoShowing = false
++    }
++
++    /// Index of the track to show: the first non-forced track in a preferred subtitle language,
++    /// else any track in one, else the first non-forced track, else the first track.
++    static func pickTrack(languages: [String?], forced: [Bool]) -> Int? {
++        guard !languages.isEmpty else { return nil }
++        PlayerSettingsRepository.shared.ensureLoaded()
++        let settings = PlayerSettingsRepository.shared.uiState.value_ as? PlayerSettingsUiState
++        let targets = settings.map {
++            PlayerLanguagePreferencesKt.resolvePreferredSubtitleLanguageTargets(
++                preferredSubtitleLanguage: $0.preferredSubtitleLanguage,
++                secondaryPreferredSubtitleLanguage: $0.secondaryPreferredSubtitleLanguage,
++                deviceLanguages: DeviceLanguagePreferences.shared.preferredLanguageCodes()
++            )
++        } ?? []
++        func matches(_ index: Int) -> Bool {
++            targets.contains { SubtitleLanguageMatching.shared.matchesLanguageCode(language: languages[index], target: $0) }
++        }
++        let all = Array(languages.indices)
++        let nonForced = all.filter { !(forced[safe: $0] ?? false) }
++        return nonForced.first(where: matches) ?? all.first(where: matches) ?? nonForced.first ?? all.first
++    }
++}
++
++private extension Array {
++    subscript(safe index: Int) -> Element? { indices.contains(index) ? self[index] : nil }
++}
+diff --git a/iosApp/NuvioTV/Screens/Settings/SubtitlesAudioSettingsPane.swift b/iosApp/NuvioTV/Screens/Settings/SubtitlesAudioSettingsPane.swift
+index fc6b5c72..a5067a72 100644
+--- a/iosApp/NuvioTV/Screens/Settings/SubtitlesAudioSettingsPane.swift
++++ b/iosApp/NuvioTV/Screens/Settings/SubtitlesAudioSettingsPane.swift
+@@ -6,6 +6,8 @@ import SharedCore
+ /// wiring unchanged. Returns ROWS ONLY; the pane scaffold supplies the List.
+ struct SubtitlesAudioSettingsPane: View {
+     @ObservedObject var model: SettingsViewModel
++    /// Fork: auto-show subtitles on rewind (`RewindSubtitleWatch.enabledKey`, on by default).
++    @AppStorage(RewindSubtitleWatch.enabledKey) private var autoSubtitlesOnRewind = true
+ 
+     var body: some View {
+         SettingsSection(String(localized: "Subtitles")) {
+@@ -24,6 +26,11 @@ struct SubtitlesAudioSettingsPane: View {
+                     .font(Theme.Font.body)
+                     .foregroundStyle(Theme.Palette.textSecondary)
+             }
++            SettingsToggleRow(
++                title: String(localized: "Show Subtitles When Rewinding"),
++                subtitle: String(localized: "When subtitles are off, turn them on while you rewind and hide them again once playback catches up."),
++                isOn: $autoSubtitlesOnRewind
++            )
+         }
+ 
+         SettingsSection(String(localized: "Audio & Subtitle Language")) {
+diff --git a/iosApp/NuvioTVTests/RewindSubtitleWatchTests.swift b/iosApp/NuvioTVTests/RewindSubtitleWatchTests.swift
+new file mode 100644
+index 00000000..6867e738
+--- /dev/null
++++ b/iosApp/NuvioTVTests/RewindSubtitleWatchTests.swift
+@@ -0,0 +1,43 @@
++import XCTest
++@testable import NuvioTV
++
++/// Fork: auto-show subtitles on rewind (`RewindSubtitleWatch`).
++final class RewindSubtitleWatchTests: XCTestCase {
++    func testRewindWithSubtitlesOffTurnsThemOnUntilCaughtUp() {
++        var watch = RewindSubtitleWatch()
++        XCTAssertTrue(watch.rewound(fromSec: 600, toSec: 590, subtitlesOff: true, enabled: true))
++        XCTAssertFalse(watch.tick(positionSec: 599))
++        XCTAssertTrue(watch.tick(positionSec: 600))
++        XCTAssertFalse(watch.autoShowing)
++    }
++
++    func testRepeatedRewindKeepsTheFarthestPoint() {
++        var watch = RewindSubtitleWatch()
++        XCTAssertTrue(watch.rewound(fromSec: 600, toSec: 590, subtitlesOff: true, enabled: true))
++        XCTAssertFalse(watch.tick(positionSec: 595))
++        // Already showing: a further rewind never re-triggers, and never lowers the watermark.
++        XCTAssertFalse(watch.rewound(fromSec: 595, toSec: 580, subtitlesOff: false, enabled: true))
++        XCTAssertEqual(watch.watermarkSec, 600)
++        XCTAssertFalse(watch.tick(positionSec: 599))
++        XCTAssertTrue(watch.tick(positionSec: 600))
++    }
++
++    func testNothingHappensWhenSubtitlesAreAlreadyOnOrDisabled() {
++        var watch = RewindSubtitleWatch()
++        XCTAssertFalse(watch.rewound(fromSec: 600, toSec: 590, subtitlesOff: false, enabled: true))
++        XCTAssertFalse(watch.rewound(fromSec: 600, toSec: 590, subtitlesOff: true, enabled: false))
++        XCTAssertFalse(watch.autoShowing)
++    }
++
++    func testTinyBackwardJumpIsNotARewind() {
++        var watch = RewindSubtitleWatch()
++        XCTAssertFalse(watch.rewound(fromSec: 600, toSec: 598.5, subtitlesOff: true, enabled: true))
++    }
++
++    func testManualPickEndsTheAutoShow() {
++        var watch = RewindSubtitleWatch()
++        XCTAssertTrue(watch.rewound(fromSec: 600, toSec: 590, subtitlesOff: true, enabled: true))
++        watch.reset()
++        XCTAssertFalse(watch.tick(positionSec: 700))
++    }
++}

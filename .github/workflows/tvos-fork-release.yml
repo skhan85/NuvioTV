@@ -210,7 +210,7 @@ jobs:
         working-directory: src
         run: |
           set -o pipefail
-          xcodebuild build \
+          if ! xcodebuild build \
             -project iosApp/iosApp.xcodeproj \
             -scheme NuvioTV \
             -configuration Release \
@@ -219,7 +219,11 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            NUVIO_BETA_TAG="${TAG}"
+            NUVIO_BETA_TAG="${TAG}" 2>&1 | tee xcodebuild.log; then
+            # Surface compile errors as annotations, readable without downloading the full log.
+            grep -E "error: " xcodebuild.log | sort -u | head -40 | sed -e 's/%/%25/g' -e 's/^/::error::/' || true
+            exit 1
+          fi
 
       - name: Package IPA
         working-directory: src/build/tvos-ipa/Build/Products/Release-appletvos
@@ -234,7 +238,18 @@ jobs:
           zip -qry "${GITHUB_WORKSPACE}/NuvioTV-${VERSION}-fork.ipa" Payload
           ls -la "${GITHUB_WORKSPACE}/NuvioTV-${VERSION}-fork.ipa"
 
+      # Branches other than main only test that the patches still build; their IPA is kept as a
+      # run artifact instead of a release, so the Raspberry Pi never installs a test build.
+      - name: Keep test build as an artifact
+        if: github.ref_name != 'main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-ipa
+          path: NuvioTV-*-fork.ipa
+          retention-days: 7
+
       - name: Publish release
+        if: github.ref_name == 'main'
         run: |
           notes="NuvioTV built from ${SOURCE_REPO}@${{ needs.prepare.outputs.source_sha }} (${SOURCE_BRANCH}) with fork patches:"
           for patch in fork/tvos-patches/*.patch; do notes+=$'\n'"- $(basename "${patch}")"; done
