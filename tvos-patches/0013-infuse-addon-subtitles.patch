@@ -1,0 +1,133 @@
+diff --git a/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift b/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
+new file mode 100644
+index 00000000..fe8899d4
+--- /dev/null
++++ b/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
+@@ -0,0 +1,61 @@
++import Foundation
++import SharedCore
++
++/// Fork: subtitles from the installed subtitle add-ons (OpenSubtitles and the like) go to Infuse
++/// along with the stream, the way the iPhone fork sends them.
++///
++/// The stream picker already starts the add-on subtitle fetch when it opens, so by the time a
++/// stream is chosen the results are usually in; whatever has arrived is sent, nothing waits.
++/// Only the preferred and secondary subtitle languages are sent, the first few of each language
++/// in the add-on's own order, after the stream's own subtitles.
++enum InfuseSubtitlePicker {
++    struct Candidate: Equatable {
++        let url: String
++        let name: String
++        let language: String
++    }
++
++    static let maxPerLanguage = 3
++
++    /// Pure selection, for tests: `matches` says whether a language is one the viewer wants.
++    static func pick(streamSubtitles: [Candidate], addonSubtitles: [Candidate],
++                     matches: (String) -> Bool) -> [Candidate] {
++        var seen = Set(streamSubtitles.map(\.url))
++        var perLanguage: [String: Int] = [:]
++        var picked = streamSubtitles
++        for subtitle in addonSubtitles where matches(subtitle.language) && !seen.contains(subtitle.url) {
++            let key = subtitle.language.lowercased()
++            guard perLanguage[key, default: 0] < maxPerLanguage else { continue }
++            perLanguage[key, default: 0] += 1
++            seen.insert(subtitle.url)
++            picked.append(subtitle)
++        }
++        return picked
++    }
++
++    /// The stream's subtitles plus the add-on subtitles fetched so far for this title.
++    static func subtitles(for stream: StreamItem) -> [SubtitleInput] {
++        let own = stream.externalSubtitles.map { sub in
++            Candidate(url: sub.url, name: { let n: String? = sub.name; return n }() ?? sub.language,
++                      language: sub.language)
++        }
++        // Same language targets the built-in players use (None = no add-on subtitles,
++        // Device = the Apple TV's languages); nothing is sent when no target resolves.
++        let targets: [String] = {
++            guard let settings = PlayerSettingsRepository.shared.uiState.value_ as? PlayerSettingsUiState else { return [] }
++            return PlayerLanguagePreferencesKt.resolvePreferredSubtitleLanguageTargets(
++                preferredSubtitleLanguage: settings.preferredSubtitleLanguage,
++                secondaryPreferredSubtitleLanguage: settings.secondaryPreferredSubtitleLanguage,
++                deviceLanguages: DeviceLanguagePreferences.shared.preferredLanguageCodes()
++            )
++        }()
++        let addon: [Candidate] = targets.isEmpty ? [] :
++            ((SubtitleRepository.shared.addonSubtitles.value_ as? [AddonSubtitle]) ?? []).map {
++                Candidate(url: $0.url, name: $0.display, language: $0.language)
++            }
++        let picked = pick(streamSubtitles: own, addonSubtitles: addon) { language in
++            targets.contains { PlayerLanguagePreferencesKt.languageMatchesPreference(trackLanguage: language, targetLanguage: $0) }
++        }
++        return picked.map { SubtitleInput(url: $0.url, name: $0.name, lang: $0.language) }
++    }
++}
+diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+index 964783dc..5b18bd20 100644
+--- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
++++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+@@ -916,9 +916,12 @@ struct StreamPickerView: View {
+             streamTitle: nil,
+             sourceHeaders: [:],
+             resumePositionMs: resumeMs,
+-            subtitles: stream.externalSubtitles.map { sub in
+-                SubtitleInput(url: sub.url, name: { let n: String? = sub.name; return n }() ?? sub.language, lang: sub.language)
+-            },
++            // Fork: Infuse also gets the subtitle add-ons' results (OpenSubtitles and the like).
++            subtitles: playerId == Self.infusePlayerId
++                ? InfuseSubtitlePicker.subtitles(for: stream)
++                : stream.externalSubtitles.map { sub in
++                    SubtitleInput(url: sub.url, name: { let n: String? = sub.name; return n }() ?? sub.language, lang: sub.language)
++                },
+             season: season.map { KotlinInt(int: Int32($0)) },
+             episode: episode.map { KotlinInt(int: Int32($0)) },
+             episodeTitle: nil,
+diff --git a/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift b/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
+new file mode 100644
+index 00000000..d148fa01
+--- /dev/null
++++ b/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
+@@ -0,0 +1,40 @@
++import XCTest
++@testable import NuvioTV
++
++/// Fork: add-on subtitles handed to Infuse (`InfuseSubtitlePicker`).
++final class InfuseSubtitlePickerTests: XCTestCase {
++    private typealias C = InfuseSubtitlePicker.Candidate
++
++    func testKeepsStreamSubtitlesThenAFewMatchingAddonOnesPerLanguage() {
++        let own = [C(url: "https://s/own.srt", name: "Own", language: "en")]
++        let english = (1...5).map { C(url: "https://os/en/\($0)", name: "EN \($0)", language: "en") }
++        let french = [C(url: "https://os/fr/1", name: "FR", language: "fr")]
++        let arabic = [C(url: "https://os/ar/1", name: "AR", language: "ar")]
++        let picked = InfuseSubtitlePicker.pick(
++            streamSubtitles: own,
++            addonSubtitles: english + french + arabic + [english[0]],
++            matches: { $0 == "en" || $0 == "ar" }
++        )
++        XCTAssertEqual(picked, own + Array(english.prefix(InfuseSubtitlePicker.maxPerLanguage)) + arabic)
++    }
++
++    func testSkipsAddonCopiesOfTheStreamsOwnSubtitles() {
++        let own = [C(url: "https://s/1", name: "Own", language: "en")]
++        let picked = InfuseSubtitlePicker.pick(
++            streamSubtitles: own,
++            addonSubtitles: [C(url: "https://s/1", name: "Dup", language: "en")],
++            matches: { _ in true }
++        )
++        XCTAssertEqual(picked, own)
++    }
++
++    func testNoTargetLanguageSendsOnlyTheStreamsSubtitles() {
++        let own = [C(url: "https://s/1", name: "Own", language: "de")]
++        let picked = InfuseSubtitlePicker.pick(
++            streamSubtitles: own,
++            addonSubtitles: [C(url: "https://os/en/1", name: "EN", language: "en")],
++            matches: { _ in false }
++        )
++        XCTAssertEqual(picked, own)
++    }
++}
