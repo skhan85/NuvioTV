@@ -1,0 +1,42 @@
+diff --git a/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift b/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
+index fe8899d4..fd77eaad 100644
+--- a/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
++++ b/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
+@@ -56,6 +56,20 @@ enum InfuseSubtitlePicker {
+         let picked = pick(streamSubtitles: own, addonSubtitles: addon) { language in
+             targets.contains { PlayerLanguagePreferencesKt.languageMatchesPreference(trackLanguage: language, targetLanguage: $0) }
+         }
+-        return picked.map { SubtitleInput(url: $0.url, name: $0.name, lang: $0.language) }
++        return picked.map { SubtitleInput(url: relayURL($0.url, language: $0.language), name: $0.name, lang: $0.language) }
++    }
++
++    static let relayBase = "https://kuiper.khanofmilton.ca/subs/"
++
++    /// Add-on subtitle links have no file ending, often redirect and can be gzipped or WebVTT;
++    /// Infuse showed none of them. Kuiper's `/subs/` relay serves each one as a plain `.srt`.
++    static func relayURL(_ url: String, language: String) -> String {
++        guard url.hasPrefix("http://") || url.hasPrefix("https://"), !url.hasPrefix(relayBase) else { return url }
++        let encoded = Data(url.utf8).base64EncodedString()
++            .replacingOccurrences(of: "+", with: "-")
++            .replacingOccurrences(of: "/", with: "_")
++            .trimmingCharacters(in: CharacterSet(charactersIn: "="))
++        let name = String(language.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "-" })
++        return relayBase + encoded + "/" + (name.isEmpty ? "sub" : name) + ".srt"
+     }
+ }
+diff --git a/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift b/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
+index d148fa01..ed9a7427 100644
+--- a/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
++++ b/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
+@@ -37,4 +37,11 @@ final class InfuseSubtitlePickerTests: XCTestCase {
+         )
+         XCTAssertEqual(picked, own)
+     }
++
++    func testRelaysAddonLinksAsSrtThroughKuiper() {
++        let relayed = InfuseSubtitlePicker.relayURL("https://subs5.strem.io/en/download/file/123", language: "eng")
++        XCTAssertEqual(relayed, "https://kuiper.khanofmilton.ca/subs/aHR0cHM6Ly9zdWJzNS5zdHJlbS5pby9lbi9kb3dubG9hZC9maWxlLzEyMw/eng.srt")
++        XCTAssertEqual(InfuseSubtitlePicker.relayURL(relayed, language: "eng"), relayed)
++        XCTAssertEqual(InfuseSubtitlePicker.relayURL("file:///tmp/a.srt", language: "en"), "file:///tmp/a.srt")
++    }
+ }
