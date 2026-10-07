@@ -1,0 +1,296 @@
+diff --git a/iosApp/NuvioTV/Screens/DetailView.swift b/iosApp/NuvioTV/Screens/DetailView.swift
+index b1573fdf..2da2f36c 100644
+--- a/iosApp/NuvioTV/Screens/DetailView.swift
++++ b/iosApp/NuvioTV/Screens/DetailView.swift
+@@ -345,6 +345,10 @@ struct DetailView: View {
+     /// the list. Reset when the cover goes away. Series carry the same flag on `SeriesPlayRoute`.
+     @State private var forceManualPlay = false
+     @State private var seriesPlay: SeriesPlayRoute?
++    /// Fork: the next episode offered after Infuse handed back near the end (`InfuseUpNext`).
++    @State private var infuseUpNext: SeriesPlayRoute?
++    @State private var infuseUpNextTask: Task<Void, Never>?
++    @State private var showInfuseUpNext = false
+     /// Episode shuffle sheet (upstream `23b048c3`), opened from the action row's Shuffle button.
+     @State private var showShuffleSheet = false
+     /// The shuffle pick the sheet asked to play; presented as `seriesPlay` once the sheet is gone
+@@ -1043,6 +1047,44 @@ struct DetailView: View {
+                 withdrawTrailerBridgeIfLeaving()
+             }
+         }
++        // Fork: Up Next after Infuse. Close the picker of the episode that just finished, then offer
++        // the next one; it starts by itself after ten seconds unless cancelled.
++        .onReceive(NotificationCenter.default.publisher(for: InfuseUpNext.returnedNearEnd)) { note in
++            guard let videoId = note.object as? String, let route = seriesPlay, route.action.videoId == videoId,
++                  let season = route.action.seasonNumber?.intValue, let episode = route.action.episodeNumber?.intValue,
++                  let next = InfuseUpNext.nextEpisode(in: route.meta.videos, season: Int(season), episode: Int(episode))
++            else { return }
++            let nextRoute = SeriesPlayRoute(meta: route.meta, action: SeriesPrimaryAction(
++                label: "", videoId: next.id,
++                seasonNumber: next.season, episodeNumber: next.episode,
++                episodeTitle: next.title, episodeThumbnail: next.thumbnail,
++                resumePositionMs: nil
++            ))
++            seriesPlay = nil
++            infuseUpNextTask?.cancel()
++            infuseUpNextTask = Task { @MainActor in
++                // Let the picker's cover finish closing before the prompt appears.
++                try? await Task.sleep(nanoseconds: 700_000_000)
++                guard !Task.isCancelled else { return }
++                infuseUpNext = nextRoute
++                showInfuseUpNext = true
++                try? await Task.sleep(nanoseconds: UInt64(InfuseUpNext.countdownSeconds) * 1_000_000_000)
++                guard !Task.isCancelled, showInfuseUpNext, let pending = infuseUpNext else { return }
++                startInfuseUpNext(pending)
++            }
++        }
++        .alert(infuseUpNextTitle, isPresented: $showInfuseUpNext) {
++            Button("Play Now") {
++                if let pending = infuseUpNext { startInfuseUpNext(pending) }
++            }
++            Button("Cancel", role: .cancel) {
++                infuseUpNextTask?.cancel()
++                infuseUpNext = nil
++                showInfuseUpNext = false
++            }
++        } message: {
++            Text("Plays automatically in \(InfuseUpNext.countdownSeconds) seconds.")
++        }
+         .onChange(of: userInteracted) { _, interacted in
+             if interacted { cancelAutoPlayTrailer() }
+         }
+@@ -2994,6 +3036,26 @@ private struct CompanyChip: View {
+     }
+ }
+ 
++private extension DetailView {
++    /// "Up Next: S2 E6 · Title" for the Infuse Up Next prompt.
++    var infuseUpNextTitle: String {
++        guard let action = infuseUpNext?.action else { return "Up Next" }
++        var parts: [String] = []
++        if let s = action.seasonNumber?.intValue, let e = action.episodeNumber?.intValue { parts.append("S\(s) E\(e)") }
++        let episodeTitle: String? = action.episodeTitle
++        if let episodeTitle, !episodeTitle.isEmpty { parts.append(episodeTitle) }
++        return parts.isEmpty ? "Up Next" : "Up Next: " + parts.joined(separator: " · ")
++    }
++
++    func startInfuseUpNext(_ route: SeriesPlayRoute) {
++        infuseUpNextTask?.cancel()
++        infuseUpNext = nil
++        showInfuseUpNext = false
++        model.noteSeriesPlayStarted(route.action)
++        seriesPlay = route
++    }
++}
++
+ /// Identifiable wrapper so the series primary action can drive `.fullScreenCover(item:)`.
+ private struct SeriesPlayRoute: Identifiable {
+     let meta: MetaDetails
+diff --git a/iosApp/NuvioTV/Screens/ExternalPlaybackReturn.swift b/iosApp/NuvioTV/Screens/ExternalPlaybackReturn.swift
+index fed9845a..c82af9b1 100644
+--- a/iosApp/NuvioTV/Screens/ExternalPlaybackReturn.swift
++++ b/iosApp/NuvioTV/Screens/ExternalPlaybackReturn.swift
+@@ -91,6 +91,7 @@ enum ExternalPlaybackReturnRouter {
+         }
+         NSLog("[ExtReturn] consumed %@", url.path)
+         if Self.outcome(of: url) == .success {
++            InfuseUpNext.noteReturn(url)
+             SyncManager.shared.requestForegroundPull(
+                 profileId: ProfileRepository.shared.activeProfileId,
+                 force: false
+diff --git a/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift b/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
+index fd77eaad..2c355110 100644
+--- a/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
++++ b/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
+@@ -56,20 +56,30 @@ enum InfuseSubtitlePicker {
+         let picked = pick(streamSubtitles: own, addonSubtitles: addon) { language in
+             targets.contains { PlayerLanguagePreferencesKt.languageMatchesPreference(trackLanguage: language, targetLanguage: $0) }
+         }
+-        return picked.map { SubtitleInput(url: relayURL($0.url, language: $0.language), name: $0.name, lang: $0.language) }
++        return picked.enumerated().map { index, sub in
++            SubtitleInput(url: relayURL(sub.url, language: sub.language, name: sub.name, number: index + 1),
++                          name: sub.name, lang: sub.language)
++        }
+     }
+ 
+     static let relayBase = "https://kuiper.khanofmilton.ca/subs/"
+ 
+     /// Add-on subtitle links have no file ending, often redirect and can be gzipped or WebVTT;
+-    /// Infuse showed none of them. Kuiper's `/subs/` relay serves each one as a plain `.srt`.
+-    static func relayURL(_ url: String, language: String) -> String {
++    /// Infuse showed none of them. Kuiper's `/subs/` relay serves each one as a plain `.srt`. The
++    /// file name carries the track's label and a two-letter language code
++    /// ("English (OpenSubtitles v3) 1.en.srt") so Infuse shows a readable, correctly tagged track.
++    static func relayURL(_ url: String, language: String, name: String = "", number: Int = 1) -> String {
+         guard url.hasPrefix("http://") || url.hasPrefix("https://"), !url.hasPrefix(relayBase) else { return url }
+         let encoded = Data(url.utf8).base64EncodedString()
+             .replacingOccurrences(of: "+", with: "-")
+             .replacingOccurrences(of: "/", with: "_")
+             .trimmingCharacters(in: CharacterSet(charactersIn: "="))
+-        let name = String(language.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "-" })
+-        return relayBase + encoded + "/" + (name.isEmpty ? "sub" : name) + ".srt"
++        let normalized: String? = PlayerLanguagePreferencesKt.normalizeLanguageCode(language: language)
++        let code = String((normalized ?? "").split(separator: "-").first ?? "").filter { $0.isLetter }
++        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: " ()-_."))
++        let label = String(String(name.unicodeScalars.filter { allowed.contains($0) }).trimmingCharacters(in: .whitespaces).prefix(60))
++        let file = "\(label.isEmpty ? "Subtitle" : label) \(number).\(code.isEmpty ? "und" : code).srt"
++        let path = file.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? "sub.srt"
++        return relayBase + encoded + "/" + path
+     }
+ }
+diff --git a/iosApp/NuvioTV/Screens/InfuseUpNext.swift b/iosApp/NuvioTV/Screens/InfuseUpNext.swift
+new file mode 100644
+index 00000000..74a15deb
+--- /dev/null
++++ b/iosApp/NuvioTV/Screens/InfuseUpNext.swift
+@@ -0,0 +1,76 @@
++import Foundation
++import SharedCore
++
++/// Fork: Up Next for episodes played in Infuse.
++///
++/// Infuse plays one file and calls back when it stops. `StreamPickerView` notes which episode it
++/// handed over (and the duration it expects); when Infuse's success callback reports a position
++/// near the end (past 90%, or inside the last two minutes), this posts `returnedNearEnd` with the
++/// episode's video id. `DetailView` then closes the picker and offers the next episode, starting it
++/// after ten seconds unless cancelled.
++enum InfuseUpNext {
++    static let returnedNearEnd = Notification.Name("InfuseUpNextReturnedNearEnd")
++    static let countdownSeconds = 10
++
++    private struct Launch {
++        let videoId: String
++        let durationMs: Int64
++    }
++
++    /// Main thread only (set from the picker, read from the callback router).
++    private static var lastLaunch: Launch?
++
++    static func noteLaunch(videoId: String, durationMs: Int64?) {
++        guard let durationMs, durationMs > 0 else {
++            lastLaunch = nil
++            return
++        }
++        lastLaunch = Launch(videoId: videoId, durationMs: durationMs)
++    }
++
++    /// Called with a consumed Infuse success callback (`…/success?…&position=<seconds>`).
++    static func noteReturn(_ url: URL) {
++        guard let launch = lastLaunch else { return }
++        lastLaunch = nil
++        let position = URLComponents(url: url, resolvingAgainstBaseURL: false)?
++            .queryItems?.first { $0.name == "position" }?.value.flatMap(Double.init)
++        guard let position, reachedEnd(positionMs: Int64(position * 1000), durationMs: launch.durationMs) else { return }
++        NotificationCenter.default.post(name: returnedNearEnd, object: launch.videoId)
++    }
++
++    static func reachedEnd(positionMs: Int64, durationMs: Int64) -> Bool {
++        guard durationMs > 0, positionMs > 0 else { return false }
++        return positionMs >= durationMs * 9 / 10 || durationMs - positionMs <= 120_000
++    }
++
++    /// The episode after (season, episode) in air order, skipping ones not released yet.
++    static func nextEpisode(in videos: [MetaVideo], season: Int, episode: Int, today: Date = Date()) -> MetaVideo? {
++        let numbered = videos
++            .compactMap { video -> (Int, Int, MetaVideo)? in
++                guard let s = video.season?.intValue, let e = video.episode?.intValue else { return nil }
++                return (Int(s), Int(e), video)
++            }
++            .sorted { ($0.0, $0.1) < ($1.0, $1.1) }
++        guard let index = numbered.firstIndex(where: { $0.0 == season && $0.1 == episode }),
++              index + 1 < numbered.count else { return nil }
++        let next = numbered[index + 1].2
++        return hasAired(next.released, today: today) ? next : nil
++    }
++
++    static func hasAired(_ released: String?, today: Date = Date()) -> Bool {
++        guard let released, released.count >= 10 else { return true }
++        let formatter = DateFormatter()
++        formatter.dateFormat = "yyyy-MM-dd"
++        formatter.timeZone = TimeZone(identifier: "UTC")
++        let todayString = formatter.string(from: today)
++        return String(released.prefix(10)) <= todayString
++    }
++
++    /// "Dune (2021)" for a movie, so Infuse matches the right film; episodes keep their title.
++    static func titleWithYear(_ title: String, year: String?, isEpisode: Bool) -> String {
++        guard !isEpisode, let year,
++              let range = year.range(of: #"(19|20)\d{2}"#, options: .regularExpression) else { return title }
++        let value = String(year[range])
++        return title.contains("(\(value))") ? title : "\(title) (\(value))"
++    }
++}
+diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+index 5b18bd20..95924c5f 100644
+--- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
++++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+@@ -895,6 +895,10 @@ struct StreamPickerView: View {
+                 scheme: AppCallbackScheme.value, playerId: Self.infusePlayerId, sessionId: session.id
+             )
+             launchSessionId = session.id
++            // Fork: Up Next after Infuse (`InfuseUpNext`) — episodes only.
++            if season != nil {
++                InfuseUpNext.noteLaunch(videoId: videoId, durationMs: externalDurationMs(progress: progress))
++            }
+             callbackSuccessUrl = callbacks.first.map { $0 as String }
+             callbackErrorUrl = callbacks.second.map { $0 as String }
+             // Trakt bridge (home Pi): stamp this title on the active profile in Nuvio Sync before
+@@ -912,7 +916,10 @@ struct StreamPickerView: View {
+         }
+         let request = ExternalPlayerPlaybackRequest(
+             sourceUrl: urlString,
+-            title: title,
++            // Fork: "Dune (2021)" so Infuse matches the right film.
++            title: playerId == Self.infusePlayerId
++                ? InfuseUpNext.titleWithYear(title, year: meta?.year, isEpisode: season != nil)
++                : title,
+             streamTitle: nil,
+             sourceHeaders: [:],
+             resumePositionMs: resumeMs,
+diff --git a/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift b/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
+index ed9a7427..27fdf08b 100644
+--- a/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
++++ b/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
+@@ -39,8 +39,9 @@ final class InfuseSubtitlePickerTests: XCTestCase {
+     }
+ 
+     func testRelaysAddonLinksAsSrtThroughKuiper() {
+-        let relayed = InfuseSubtitlePicker.relayURL("https://subs5.strem.io/en/download/file/123", language: "eng")
+-        XCTAssertEqual(relayed, "https://kuiper.khanofmilton.ca/subs/aHR0cHM6Ly9zdWJzNS5zdHJlbS5pby9lbi9kb3dubG9hZC9maWxlLzEyMw/eng.srt")
++        let relayed = InfuseSubtitlePicker.relayURL("https://subs5.strem.io/en/download/file/123", language: "eng",
++                                                    name: "English (OpenSubtitles v3)", number: 2)
++        XCTAssertEqual(relayed, "https://kuiper.khanofmilton.ca/subs/aHR0cHM6Ly9zdWJzNS5zdHJlbS5pby9lbi9kb3dubG9hZC9maWxlLzEyMw/English%20(OpenSubtitles%20v3)%202.en.srt")
+         XCTAssertEqual(InfuseSubtitlePicker.relayURL(relayed, language: "eng"), relayed)
+         XCTAssertEqual(InfuseSubtitlePicker.relayURL("file:///tmp/a.srt", language: "en"), "file:///tmp/a.srt")
+     }
+diff --git a/iosApp/NuvioTVTests/InfuseUpNextTests.swift b/iosApp/NuvioTVTests/InfuseUpNextTests.swift
+new file mode 100644
+index 00000000..0c7a14d6
+--- /dev/null
++++ b/iosApp/NuvioTVTests/InfuseUpNextTests.swift
+@@ -0,0 +1,26 @@
++import XCTest
++@testable import NuvioTV
++
++/// Fork: Up Next after Infuse and the movie year in the Infuse title (`InfuseUpNext`).
++final class InfuseUpNextTests: XCTestCase {
++    func testNearEndMeansPastNinetyPercentOrInsideTheLastTwoMinutes() {
++        XCTAssertTrue(InfuseUpNext.reachedEnd(positionMs: 2_700_000, durationMs: 3_000_000))
++        XCTAssertTrue(InfuseUpNext.reachedEnd(positionMs: 2_500_000, durationMs: 2_600_000))
++        XCTAssertFalse(InfuseUpNext.reachedEnd(positionMs: 1_200_000, durationMs: 3_000_000))
++        XCTAssertFalse(InfuseUpNext.reachedEnd(positionMs: 0, durationMs: 3_000_000))
++    }
++
++    func testReleaseDateDecidesWhetherTheNextEpisodeHasAired() {
++        let today = ISO8601DateFormatter().date(from: "2026-10-07T12:00:00Z")!
++        XCTAssertTrue(InfuseUpNext.hasAired("2026-10-07T00:00:00.000Z", today: today))
++        XCTAssertFalse(InfuseUpNext.hasAired("2026-10-14", today: today))
++        XCTAssertTrue(InfuseUpNext.hasAired(nil, today: today))
++    }
++
++    func testMovieTitleGetsItsYearOnce() {
++        XCTAssertEqual(InfuseUpNext.titleWithYear("Dune", year: "2021", isEpisode: false), "Dune (2021)")
++        XCTAssertEqual(InfuseUpNext.titleWithYear("Dune (2021)", year: "2021", isEpisode: false), "Dune (2021)")
++        XCTAssertEqual(InfuseUpNext.titleWithYear("Severance", year: "2022–", isEpisode: true), "Severance")
++        XCTAssertEqual(InfuseUpNext.titleWithYear("Untitled", year: nil, isEpisode: false), "Untitled")
++    }
++}
