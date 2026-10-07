@@ -1,8 +1,8 @@
 diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-index 8df7622..1e6e2f7 100644
+index 6e285734..e85f1d2f 100644
 --- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
 +++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-@@ -895,6 +895,18 @@ struct StreamPickerView: View {
+@@ -909,6 +909,18 @@ struct StreamPickerView: View {
              launchSessionId = session.id
              callbackSuccessUrl = callbacks.first.map { $0 as String }
              callbackErrorUrl = callbacks.second.map { $0 as String }

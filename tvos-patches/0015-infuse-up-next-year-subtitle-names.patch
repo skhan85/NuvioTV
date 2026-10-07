@@ -1,8 +1,8 @@
 diff --git a/iosApp/NuvioTV/Screens/DetailView.swift b/iosApp/NuvioTV/Screens/DetailView.swift
-index b1573fdf..2da2f36c 100644
+index 01e3f1a2..9f1f2fcb 100644
 --- a/iosApp/NuvioTV/Screens/DetailView.swift
 +++ b/iosApp/NuvioTV/Screens/DetailView.swift
-@@ -345,6 +345,10 @@ struct DetailView: View {
+@@ -352,6 +352,10 @@ struct DetailView: View {
      /// the list. Reset when the cover goes away. Series carry the same flag on `SeriesPlayRoute`.
      @State private var forceManualPlay = false
      @State private var seriesPlay: SeriesPlayRoute?
@@ -13,7 +13,7 @@ index b1573fdf..2da2f36c 100644
      /// Episode shuffle sheet (upstream `23b048c3`), opened from the action row's Shuffle button.
      @State private var showShuffleSheet = false
      /// The shuffle pick the sheet asked to play; presented as `seriesPlay` once the sheet is gone
-@@ -1043,6 +1047,44 @@ struct DetailView: View {
+@@ -1050,6 +1054,44 @@ struct DetailView: View {
                  withdrawTrailerBridgeIfLeaving()
              }
          }
@@ -58,7 +58,7 @@ index b1573fdf..2da2f36c 100644
          .onChange(of: userInteracted) { _, interacted in
              if interacted { cancelAutoPlayTrailer() }
          }
-@@ -2994,6 +3036,26 @@ private struct CompanyChip: View {
+@@ -3022,6 +3064,26 @@ private struct CompanyChip: View {
      }
  }
  
@@ -220,10 +220,10 @@ index 00000000..74a15deb
 +    }
 +}
 diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-index 5b18bd20..95924c5f 100644
+index 726bca5e..9be3f860 100644
 --- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
 +++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-@@ -895,6 +895,10 @@ struct StreamPickerView: View {
+@@ -907,6 +907,10 @@ struct StreamPickerView: View {
                  scheme: AppCallbackScheme.value, playerId: Self.infusePlayerId, sessionId: session.id
              )
              launchSessionId = session.id
@@ -234,7 +234,7 @@ index 5b18bd20..95924c5f 100644
              callbackSuccessUrl = callbacks.first.map { $0 as String }
              callbackErrorUrl = callbacks.second.map { $0 as String }
              // Trakt bridge (home Pi): stamp this title on the active profile in Nuvio Sync before
-@@ -912,7 +916,10 @@ struct StreamPickerView: View {
+@@ -924,7 +928,10 @@ struct StreamPickerView: View {
          }
          let request = ExternalPlayerPlaybackRequest(
              sourceUrl: urlString,

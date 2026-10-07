@@ -1,8 +1,8 @@
 diff --git a/iosApp/NuvioTV/Screens/MPVPlayerView.swift b/iosApp/NuvioTV/Screens/MPVPlayerView.swift
-index 43fb96da..5764dc67 100644
+index 7bf855e9..514f4830 100644
 --- a/iosApp/NuvioTV/Screens/MPVPlayerView.swift
 +++ b/iosApp/NuvioTV/Screens/MPVPlayerView.swift
-@@ -120,6 +120,12 @@ final class MPVTVPlayerViewController: UIViewController {
+@@ -153,6 +153,12 @@ final class MPVTVPlayerViewController: UIViewController {
      private var playerSettingsWatcher: FlowWatcher?
      private var playerSettings: PlayerSettingsUiState?
      private var didAutoSelectTracks = false
@@ -15,7 +15,7 @@ index 43fb96da..5764dc67 100644
      /// Preferred audio-language targets in priority order, resolved once in `setupMpv()` (before
      /// `mpv_initialize`) so mpv's own first `aid=auto` resolution already honors them.
      private var preferredAudioLanguages: [String] = []
-@@ -256,7 +262,12 @@ final class MPVTVPlayerViewController: UIViewController {
+@@ -359,7 +365,12 @@ final class MPVTVPlayerViewController: UIViewController {
          layoutMetalLayer()
  
          state.selectAudio = { [weak self] id in self?.selectAudio(id) }
@@ -29,7 +29,7 @@ index 43fb96da..5764dc67 100644
          state.setSpeed = { [weak self] speed in self?.setSpeed(speed) }
          state.setSubtitleDelay = { [weak self] seconds in self?.setSubtitleDelay(seconds) }
          state.setAudioDelay = { [weak self] seconds in self?.setAudioDelay(seconds) }
-@@ -639,6 +650,7 @@ final class MPVTVPlayerViewController: UIViewController {
+@@ -833,6 +844,7 @@ final class MPVTVPlayerViewController: UIViewController {
              // The panel diffs its rows by stable ids, so refreshing while it is open is safe.
              if self.state.audioTracks != audio { self.state.audioTracks = audio }
              if self.state.subtitleTracks != newSubs { self.state.subtitleTracks = newSubs }
@@ -37,15 +37,15 @@ index 43fb96da..5764dc67 100644
              self.autoSelectPreferredTracks(audioInfos: audioInfos, subInfos: subInfos)
          }
      }
-@@ -1310,6 +1322,7 @@ final class MPVTVPlayerViewController: UIViewController {
+@@ -1558,6 +1570,7 @@ final class MPVTVPlayerViewController: UIViewController {
      /// disappears cleanly at the end), and auto-skip the segment types chosen in Settings. Cached
      /// values only (called from `refreshState`).
      private func updateSkipPrompt(position: Double, duration: Double, paused: Bool) {
 +        tickRewindSubtitles(position: position)
          // Auto-skip also requires Skip Intro (the fetch already returns nothing without it).
-         let autoSkipTypes: [AutoSkipSegmentType]? = playerSettings.flatMap { $0.skipIntroEnabled ? Array($0.autoSkipSegmentTypes) : nil }
-         let decision = skipPlanner.evaluate(positionSec: position, durationSec: duration,
-@@ -1442,6 +1455,30 @@ final class MPVTVPlayerViewController: UIViewController {
+         var autoSkipTypes: [AutoSkipSegmentType]? = playerSettings.flatMap { $0.skipIntroEnabled ? Array($0.autoSkipSegmentTypes) : nil }
+         // No auto-skip mid-scan: the user is deliberately moving through the file.
+@@ -2091,6 +2104,30 @@ final class MPVTVPlayerViewController: UIViewController {
          }
          issueSeek(kind: .user, targetSec: base.map { $0 + seconds }, fromSec: base,
                    args: [String(format: "%.3f", seconds), "relative"])
@@ -77,10 +77,10 @@ index 43fb96da..5764dc67 100644
  
      private func seekAbsolute(_ seconds: Double, kind: SkipSegmentPlanner.SeekKind) {
 diff --git a/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift b/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
-index cc4184d1..8d65bb6b 100644
+index 41333e82..0a5939e1 100644
 --- a/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
 +++ b/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
-@@ -751,6 +751,12 @@ final class NativePlaybackCoordinator: ObservableObject {
+@@ -754,6 +754,12 @@ final class NativePlaybackCoordinator: ObservableObject {
                          let userSeek = self.onPositionTick?(self.lastPositionSec, pos)
                              ?? (abs(pos - self.lastPositionSec) > SkipSegmentPlanner.userJumpThresholdSec)
                          if userSeek { waitingTicks = 0 }
@@ -93,7 +93,7 @@ index cc4184d1..8d65bb6b 100644
                      }
                      if let pct = pendingResumePercent, pos.isFinite, dur.isFinite, dur > 0 {
                          pendingResumePercent = nil
-@@ -897,6 +903,9 @@ final class NativePlaybackCoordinator: ObservableObject {
+@@ -900,6 +906,9 @@ final class NativePlaybackCoordinator: ObservableObject {
  
      /// Select a legible option (nil = Off). AVPlayer honours manual picks over the criteria.
      func select(subtitle option: AVMediaSelectionOption?) {
@@ -103,7 +103,7 @@ index cc4184d1..8d65bb6b 100644
          subtitleRefetchRestoreTask?.cancel(); subtitleRefetchRestoreTask = nil
          isRefetchingSubtitles = false
          guard let item = playerItem, let group = legibleGroup else { return }
-@@ -905,6 +914,47 @@ final class NativePlaybackCoordinator: ObservableObject {
+@@ -908,6 +917,47 @@ final class NativePlaybackCoordinator: ObservableObject {
          selectionVersion &+= 1
      }
  

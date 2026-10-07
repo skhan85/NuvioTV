@@ -1,5 +1,5 @@
 diff --git a/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift b/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
-index 2c7cba9b..cc4184d1 100644
+index 0325ffcd..41333e82 100644
 --- a/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
 +++ b/iosApp/NuvioTV/Screens/NativePlaybackCoordinator.swift
 @@ -592,6 +592,7 @@ final class NativePlaybackCoordinator: ObservableObject {

@@ -66,10 +66,10 @@ index 00000000..fe8899d4
 +    }
 +}
 diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-index 964783dc..5b18bd20 100644
+index e85f1d2f..726bca5e 100644
 --- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
 +++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-@@ -916,9 +916,12 @@ struct StreamPickerView: View {
+@@ -928,9 +928,12 @@ struct StreamPickerView: View {
              streamTitle: nil,
              sourceHeaders: [:],
              resumePositionMs: resumeMs,

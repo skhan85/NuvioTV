@@ -1,8 +1,8 @@
 diff --git a/iosApp/NuvioTV/Screens/NextEpisodeAutoPlay.swift b/iosApp/NuvioTV/Screens/NextEpisodeAutoPlay.swift
-index b043017a..e8640876 100644
+index 8fd4da85..b2aa2054 100644
 --- a/iosApp/NuvioTV/Screens/NextEpisodeAutoPlay.swift
 +++ b/iosApp/NuvioTV/Screens/NextEpisodeAutoPlay.swift
-@@ -383,6 +383,11 @@ final class NextEpisodeEngine: ObservableObject {
+@@ -384,6 +384,11 @@ final class NextEpisodeEngine: ObservableObject {
      func onProgress(positionSec: Double, durationSec: Double) {
          lastProgress = (positionSec, durationSec)
          guard nextVideo != nil, durationSec > 0, let trigger else { return }
@@ -14,7 +14,7 @@ index b043017a..e8640876 100644
          if cancelled {
              rearmIfEndedAfterDismiss(positionSec: positionSec, durationSec: durationSec)
              return
-@@ -903,6 +908,16 @@ extension NextEpisodeEngine.TriggerSettings {
+@@ -904,6 +909,16 @@ extension NextEpisodeEngine.TriggerSettings {
  
  /// Pure trigger decisions for `NextEpisodeEngine` (unit-tested in `NextEpisodeEngineTests`).
  enum NextEpisodeTriggerPolicy {

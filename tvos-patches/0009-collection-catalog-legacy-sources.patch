@@ -1,5 +1,5 @@
 diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolver.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolver.kt
-index 81ba720..365ec7b 100644
+index 81ba720c..365ec7b4 100644
 --- a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolver.kt
 +++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolver.kt
 @@ -7,7 +7,24 @@ import com.nuvio.app.features.addons.enabledAddons
@@ -87,7 +87,7 @@ index 81ba720..365ec7b 100644
 +        ?: find { it.catalogId == source.catalogId }
 +        ?: find { it.catalogId == source.catalogId.substringBefore(",") }
 diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderCoverResolver.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderCoverResolver.kt
-index 281ba11..53f3573 100644
+index 281ba119..53f3573d 100644
 --- a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderCoverResolver.kt
 +++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderCoverResolver.kt
 @@ -163,11 +163,12 @@ object FolderCoverResolver {
@@ -107,7 +107,7 @@ index 281ba11..53f3573 100644
              )
          }
 diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailRepository.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailRepository.kt
-index 58c5ad9..c90ca18 100644
+index 58c5ad9e..c90ca182 100644
 --- a/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailRepository.kt
 +++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/collection/FolderDetailRepository.kt
 @@ -244,11 +244,12 @@ object FolderDetailRepository {
@@ -139,7 +139,7 @@ index 58c5ad9..c90ca18 100644
                              isLoading = true,
                          ),
 diff --git a/shared/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt b/shared/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
-index ba4e15c..1332b8a 100644
+index ba4e15c8..1332b8a9 100644
 --- a/shared/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 +++ b/shared/src/commonMain/kotlin/com/nuvio/app/features/home/HomeRepository.kt
 @@ -1775,11 +1775,12 @@ object HomeRepository {
@@ -160,7 +160,7 @@ index ba4e15c..1332b8a 100644
                  )
 diff --git a/shared/src/commonTest/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolverTest.kt b/shared/src/commonTest/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolverTest.kt
 new file mode 100644
-index 0000000..e874315
+index 00000000..e8743151
 --- /dev/null
 +++ b/shared/src/commonTest/kotlin/com/nuvio/app/features/collection/CollectionCatalogResolverTest.kt
 @@ -0,0 +1,67 @@

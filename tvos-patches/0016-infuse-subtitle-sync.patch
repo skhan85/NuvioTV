@@ -66,10 +66,10 @@ index 2c355110..8a9788ac 100644
      }
  }
 diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-index 95924c5f..ef85ca06 100644
+index 9be3f860..5899b95f 100644
 --- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
 +++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
-@@ -925,7 +925,7 @@ struct StreamPickerView: View {
+@@ -937,7 +937,7 @@ struct StreamPickerView: View {
              resumePositionMs: resumeMs,
              // Fork: Infuse also gets the subtitle add-ons' results (OpenSubtitles and the like).
              subtitles: playerId == Self.infusePlayerId
