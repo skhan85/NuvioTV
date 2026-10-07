@@ -1,0 +1,96 @@
+diff --git a/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift b/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
+index 2c355110..8a9788ac 100644
+--- a/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
++++ b/iosApp/NuvioTV/Screens/InfuseSubtitlePicker.swift
+@@ -16,6 +16,9 @@ enum InfuseSubtitlePicker {
+     }
+ 
+     static let maxPerLanguage = 3
++    /// Infuse uses only one of the subtitles it is given (it took the last of three, the add-on's
++    /// lowest-ranked), so just the best add-on match goes, after the stream's own subtitles.
++    static let maxAddonSubtitles = 1
+ 
+     /// Pure selection, for tests: `matches` says whether a language is one the viewer wants.
+     static func pick(streamSubtitles: [Candidate], addonSubtitles: [Candidate],
+@@ -34,7 +37,7 @@ enum InfuseSubtitlePicker {
+     }
+ 
+     /// The stream's subtitles plus the add-on subtitles fetched so far for this title.
+-    static func subtitles(for stream: StreamItem) -> [SubtitleInput] {
++    static func subtitles(for stream: StreamItem, videoURL: String) -> [SubtitleInput] {
+         let own = stream.externalSubtitles.map { sub in
+             Candidate(url: sub.url, name: { let n: String? = sub.name; return n }() ?? sub.language,
+                       language: sub.language)
+@@ -56,8 +59,10 @@ enum InfuseSubtitlePicker {
+         let picked = pick(streamSubtitles: own, addonSubtitles: addon) { language in
+             targets.contains { PlayerLanguagePreferencesKt.languageMatchesPreference(trackLanguage: language, targetLanguage: $0) }
+         }
+-        return picked.enumerated().map { index, sub in
+-            SubtitleInput(url: relayURL(sub.url, language: sub.language, name: sub.name, number: index + 1),
++        let kept = Array(picked.prefix(own.count + maxAddonSubtitles))
++        return kept.enumerated().map { index, sub in
++            SubtitleInput(url: relayURL(sub.url, language: sub.language, name: sub.name, number: index + 1,
++                                        videoURL: videoURL),
+                           name: sub.name, lang: sub.language)
+         }
+     }
+@@ -68,7 +73,11 @@ enum InfuseSubtitlePicker {
+     /// Infuse showed none of them. Kuiper's `/subs/` relay serves each one as a plain `.srt`. The
+     /// file name carries the track's label and a two-letter language code
+     /// ("English (OpenSubtitles v3) 1.en.srt") so Infuse shows a readable, correctly tagged track.
+-    static func relayURL(_ url: String, language: String, name: String = "", number: Int = 1) -> String {
++    ///
++    /// With `videoURL`, the link also names the video (`/subs/<subtitle>/v/<video>/<name>`), so the
++    /// relay lines the subtitle up with the video's audio (Kuiper's `subsync` container).
++    static func relayURL(_ url: String, language: String, name: String = "", number: Int = 1,
++                         videoURL: String? = nil) -> String {
+         guard url.hasPrefix("http://") || url.hasPrefix("https://"), !url.hasPrefix(relayBase) else { return url }
+         let encoded = Data(url.utf8).base64EncodedString()
+             .replacingOccurrences(of: "+", with: "-")
+@@ -80,6 +89,16 @@ enum InfuseSubtitlePicker {
+         let label = String(String(name.unicodeScalars.filter { allowed.contains($0) }).trimmingCharacters(in: .whitespaces).prefix(60))
+         let file = "\(label.isEmpty ? "Subtitle" : label) \(number).\(code.isEmpty ? "und" : code).srt"
+         let path = file.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? "sub.srt"
+-        return relayBase + encoded + "/" + path
++        guard let videoURL, videoURL.hasPrefix("http://") || videoURL.hasPrefix("https://") else {
++            return relayBase + encoded + "/" + path
++        }
++        return relayBase + encoded + "/v/" + base64url(videoURL) + "/" + path
++    }
++
++    private static func base64url(_ text: String) -> String {
++        Data(text.utf8).base64EncodedString()
++            .replacingOccurrences(of: "+", with: "-")
++            .replacingOccurrences(of: "/", with: "_")
++            .trimmingCharacters(in: CharacterSet(charactersIn: "="))
+     }
+ }
+diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+index 95924c5f..ef85ca06 100644
+--- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
++++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+@@ -925,7 +925,7 @@ struct StreamPickerView: View {
+             resumePositionMs: resumeMs,
+             // Fork: Infuse also gets the subtitle add-ons' results (OpenSubtitles and the like).
+             subtitles: playerId == Self.infusePlayerId
+-                ? InfuseSubtitlePicker.subtitles(for: stream)
++                ? InfuseSubtitlePicker.subtitles(for: stream, videoURL: urlString)
+                 : stream.externalSubtitles.map { sub in
+                     SubtitleInput(url: sub.url, name: { let n: String? = sub.name; return n }() ?? sub.language, lang: sub.language)
+                 },
+diff --git a/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift b/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
+index 27fdf08b..4aa1e192 100644
+--- a/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
++++ b/iosApp/NuvioTVTests/InfuseSubtitlePickerTests.swift
+@@ -45,4 +45,11 @@ final class InfuseSubtitlePickerTests: XCTestCase {
+         XCTAssertEqual(InfuseSubtitlePicker.relayURL(relayed, language: "eng"), relayed)
+         XCTAssertEqual(InfuseSubtitlePicker.relayURL("file:///tmp/a.srt", language: "en"), "file:///tmp/a.srt")
+     }
++
++    func testRelayLinkNamesTheVideoForSyncing() {
++        let relayed = InfuseSubtitlePicker.relayURL("https://subs5.strem.io/en/download/file/123", language: "eng",
++                                                    name: "English", number: 1,
++                                                    videoURL: "https://k.example/resolve/tb/abc?x=1")
++        XCTAssertEqual(relayed, "https://kuiper.khanofmilton.ca/subs/aHR0cHM6Ly9zdWJzNS5zdHJlbS5pby9lbi9kb3dubG9hZC9maWxlLzEyMw/v/aHR0cHM6Ly9rLmV4YW1wbGUvcmVzb2x2ZS90Yi9hYmM_eD0x/English%201.en.srt")
++    }
+ }
