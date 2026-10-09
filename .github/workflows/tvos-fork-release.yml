@@ -2,8 +2,8 @@ name: tvOS Fork Release
 
 # Builds an unsigned NuvioTV (Apple TV) IPA from youngchris29-art/NuvioMobile's
 # tvos-shared-extraction branch with the patches in /tvos-patches applied, and publishes it
-# as a GitHub release (picked up by the Raspberry Pi release watcher). Checks hourly, so a new
-# push to that branch is rebuilt within about an hour. A change to /tvos-patches or this file
+# as a GitHub release (picked up by the Raspberry Pi release watcher). Checks every 6 hours, so a new
+# push to that branch is rebuilt within about 6 hours. A change to /tvos-patches or this file
 # also triggers a rebuild.
 
 on:
@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "53 * * * *" # hourly
+    - cron: "53 */6 * * *" # every 6 hours (hourly runs got Actions disabled on this fork)
   push:
     paths:
       - "tvos-patches/**"
