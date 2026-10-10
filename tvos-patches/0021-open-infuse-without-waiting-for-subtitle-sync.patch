@@ -1,0 +1,39 @@
+diff --git a/iosApp/NuvioTV/Screens/StreamPickerView.swift b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+index 7c846ffb..7089460d 100644
+--- a/iosApp/NuvioTV/Screens/StreamPickerView.swift
++++ b/iosApp/NuvioTV/Screens/StreamPickerView.swift
+@@ -880,10 +880,9 @@ struct StreamPickerView: View {
+     }
+ 
+     /// Fork: Infuse reads its subtitle once, when playback starts. The add-on subtitle goes through
+-    /// Kuiper's relay with the video named (`/v/`), and the relay's subsync container needs ~20-35 s
+-    /// the first time a subtitle meets a video. Infuse would get the unsynced copy, so this asks the
+-    /// relay first (`?wait=35`, the same warm-up the iPhone fork does) and opens Infuse once the
+-    /// synced copy is ready — immediately when it was synced before. Menu skips the wait.
++    /// Kuiper's relay with the video named (`/v/`), which serves the synced copy when subsync has it
++    /// and the original otherwise. Infuse opens at once (no wait); the sync is started ahead of time
++    /// by `DetailPreload` and kicked again here so the next play of this file gets it.
+     private func launchExternally(urlString: String, stream: StreamItem, listed: StreamItem, playerId: String,
+                                   fallbackToInternal: Bool = false, autoAttempt: Int? = nil,
+                                   completion: @escaping (Bool) -> Void = { _ in }) {
+@@ -905,15 +904,11 @@ struct StreamPickerView: View {
+             open()
+             return
+         }
+-        withAnimation { syncingSubtitles = true }
+-        subtitleSyncTask = Task { @MainActor in
+-            await InfuseSubtitlePicker.warmUpSync(syncLinks)
+-            // Cleared by onDisappear: the viewer left, so nothing opens.
+-            guard syncingSubtitles else { return }
+-            withAnimation { syncingSubtitles = false }
+-            subtitleSyncTask = nil
+-            open()
+-        }
++        // Fork: open at once. The sync is started here in the background (it is usually already
++        // done, started from the detail page or the Continue Watching card); Infuse gets the synced
++        // copy when it is ready by the time it fetches the link, the original otherwise.
++        Task.detached { await InfuseSubtitlePicker.warmUpSync(syncLinks) }
++        open()
+     }
+ 
+     /// Builds the shared playback request and opens the target player via its x-callback-url
