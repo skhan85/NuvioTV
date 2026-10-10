@@ -1,0 +1,180 @@
+diff --git a/iosApp/NuvioTV/Screens/DetailPreload.swift b/iosApp/NuvioTV/Screens/DetailPreload.swift
+new file mode 100644
+index 00000000..8737aab6
+--- /dev/null
++++ b/iosApp/NuvioTV/Screens/DetailPreload.swift
+@@ -0,0 +1,125 @@
++import Foundation
++import SharedCore
++
++/// Fork: finds sources ahead of time on the detail page.
++///
++/// A few seconds after a detail page settles on its Play/Resume item, this runs the same stream
++/// search the picker would (same request token, so `StreamsRepository.load` skips the repeat when
++/// the picker opens and the list is there at once) and starts the add-on subtitle fetch.
++///
++/// When Infuse is the default player and first-stream auto-play is on, it also asks Kuiper to sync
++/// the subtitle Infuse will get with the stream auto-play will pick, without waiting for it. By the
++/// time Play is pressed the synced copy is usually ready, so `StreamPickerView`'s "Syncing
++/// subtitles…" wait ends at once.
++///
++/// Each item is searched at most once every ten minutes (returning from Infuse, revisiting a page).
++/// Off switch: `UserDefaults` key `fork_preload_detail_sources` = false.
++@MainActor
++enum DetailPreload {
++    struct Target: Equatable {
++        let type: String
++        let videoId: String
++        let parentMetaId: String?
++        let season: Int?
++        let episode: Int?
++
++        var key: String { "\(type)|\(videoId)|\(season.map(String.init) ?? "")|\(episode.map(String.init) ?? "")" }
++    }
++
++    static let enabledKey = "fork_preload_detail_sources"
++    static let dwellSeconds: Double = 3
++    static let repeatAfter: TimeInterval = 600
++
++    private static var pending: Task<Void, Never>?
++    private static var recent: [String: Date] = [:]
++
++    /// The page's Play/Resume item changed (or the page appeared): search for it after the dwell,
++    /// unless the viewer leaves or opens the picker first.
++    static func schedule(_ target: Target?) {
++        cancelPending()
++        guard let target else { return }
++        guard UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true else { return }
++        if let at = recent[target.key], Date().timeIntervalSince(at) < repeatAfter { return }
++        pending = Task { @MainActor in
++            try? await Task.sleep(nanoseconds: UInt64(dwellSeconds * 1_000_000_000))
++            guard !Task.isCancelled else { return }
++            pending = nil
++            recent[target.key] = Date()
++            await run(target)
++        }
++    }
++
++    /// The page went away or the picker opened: drop a search that has not started yet. One that
++    /// has started keeps going (the picker reuses it).
++    static func cancelPending() {
++        pending?.cancel()
++        pending = nil
++    }
++
++    private static func run(_ t: Target) async {
++        PlayerSettingsRepository.shared.ensureLoaded()
++        let settings = PlayerSettingsRepository.shared.uiState.value_ as? PlayerSettingsUiState
++        let autoPlay = settings?.streamAutoPlayMode == StreamAutoPlayMode.firstStream
++        let season = t.season.map { KotlinInt(int: Int32($0)) }
++        let episode = t.episode.map { KotlinInt(int: Int32($0)) }
++        // The picker loads with `manualSelection: !autoPlayArmed`; the same flag gives the same
++        // request token, which is what lets the picker reuse this search.
++        let manual = !autoPlay
++        print("[DetailPreload] searching \(t.key) manual=\(manual)")
++        StreamsRepository.shared.load(type: t.type, videoId: t.videoId, parentMetaId: t.parentMetaId,
++                                      season: season, episode: episode, manualSelection: manual)
++        SubtitleRepository.shared.fetchAddonSubtitles(type: t.type, videoId: t.videoId)
++
++        guard autoPlay, UserDefaults.standard.string(forKey: "default_external_player_id") == "infuse" else { return }
++        let token = StreamsRepository.shared.requestToken(type: t.type, videoId: t.videoId, season: season,
++                                                          episode: episode, manualSelection: false)
++        guard let stream: StreamItem = await first(StreamsRepository.shared.uiState, timeout: 25, { emitted in
++            guard let state = emitted as? StreamsUiState, state.requestToken == token else { return nil }
++            return state.autoPlayStream
++        }) else {
++            print("[DetailPreload] no auto-play pick settled for \(t.key)")
++            return
++        }
++        let direct: String? = stream.playableDirectUrl
++        guard let url = direct, url.hasPrefix("http://") || url.hasPrefix("https://") else { return }
++
++        let subtitleKey = SubtitleRepository.shared.requestKey(type: t.type, videoId: t.videoId)
++        _ = await first(SubtitleRepository.shared.completedRequest, timeout: 20, { emitted in
++            (emitted as? String) == subtitleKey ? true : nil
++        })
++        let links = InfuseSubtitlePicker.subtitles(for: stream, videoURL: url)
++            .map { $0.url }
++            .filter { InfuseSubtitlePicker.isSyncLink($0) }
++        guard !links.isEmpty else { return }
++        print("[DetailPreload] warming subtitle sync for \(t.key) (\(links.count) link)")
++        Task.detached { await InfuseSubtitlePicker.warmUpSync(links) }
++    }
++
++    /// The first value `pick` accepts from `flow`, or nil after `timeout` seconds.
++    private static func first<T>(_ flow: Kotlinx_coroutines_coreStateFlow, timeout: Double,
++                                 _ pick: @escaping (Any?) -> T?) async -> T? {
++        await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
++            let box = WaitBox<T>(continuation)
++            box.watcher = FlowWatcherKt.watch(flow) { emitted in
++                if let value = pick(emitted) { box.finish(value) }
++            }
++            if box.isDone { box.watcher?.cancel() }
++            DispatchQueue.main.asyncAfter(deadline: .now() + timeout) { box.finish(nil) }
++        }
++    }
++
++    private final class WaitBox<T> {
++        private var continuation: CheckedContinuation<T?, Never>?
++        var watcher: FlowWatcher?
++        var isDone: Bool { continuation == nil }
++
++        init(_ continuation: CheckedContinuation<T?, Never>) { self.continuation = continuation }
++
++        func finish(_ value: T?) {
++            guard let continuation else { return }
++            self.continuation = nil
++            watcher?.cancel()
++            continuation.resume(returning: value)
++        }
++    }
++}
+diff --git a/iosApp/NuvioTV/Screens/DetailView.swift b/iosApp/NuvioTV/Screens/DetailView.swift
+index 9f1f2fcb..399de596 100644
+--- a/iosApp/NuvioTV/Screens/DetailView.swift
++++ b/iosApp/NuvioTV/Screens/DetailView.swift
+@@ -1017,8 +1017,16 @@ struct DetailView: View {
+         // This only adds an observer alongside the focus engine's own directional handling (like
+         // `onPlayPauseCommand` above), so ordinary focus movement between buttons/rows is unaffected.
+         .onMoveCommand { _ in userInteracted = true }
++        .onChange(of: preloadTarget) { _, target in
++            if !showStreams, seriesPlay == nil { DetailPreload.schedule(target) }
++        }
++        .onChange(of: showStreams || seriesPlay != nil) { _, pickerOpen in
++            if pickerOpen { DetailPreload.cancelPending() } else { DetailPreload.schedule(preloadTarget) }
++        }
+         .onAppear {
+             model.start()
++            // Fork: find this page's Play/Resume sources ahead of time (`DetailPreload`).
++            DetailPreload.schedule(preloadTarget)
+             // FEAT-8: one-shot per screen visit — a prior visit's expiry must not carry over.
+             backgroundTrailerStopped = false
+             cancelTrailerDurationTask()
+@@ -1027,6 +1035,7 @@ struct DetailView: View {
+         }
+         .onDisappear {
+             model.stop()
++            DetailPreload.cancelPending()
+             cancelAutoPlayTrailer()
+             cancelTrailerDurationTask()
+             // BUG-41 item 6: logs the visit's `[BUG41] hitches=… frames=… maxGap=…` summary; no-op
+@@ -1369,6 +1378,19 @@ struct DetailView: View {
+     /// property must stay a pure read so it can't stall the cover's presentation.
+     private var streamVideoId: String { model.meta?.id ?? preview.id }
+ 
++    /// Fork: the item Play/Resume would open, exactly as the picker is presented with it, for
++    /// `DetailPreload`. Nil until the meta (and, for a series, the next episode) is known.
++    private var preloadTarget: DetailPreload.Target? {
++        guard model.isPlayEnabled, let meta = model.meta else { return nil }
++        if isSeries {
++            guard let action = model.seriesAction else { return nil }
++            return DetailPreload.Target(type: meta.type, videoId: action.videoId, parentMetaId: meta.id,
++                                        season: action.seasonNumber?.value, episode: action.episodeNumber?.value)
++        }
++        return DetailPreload.Target(type: preview.type, videoId: streamVideoId, parentMetaId: nil,
++                                    season: nil, episode: nil)
++    }
++
+     /// Same gate the muted background hero player (and its mute button/play-pause toggle) use.
+     /// FEAT-8: also false once the trailer-duration timer has stopped the background player, so the
+     /// mute button hides and the poster-backdrop layer (below) reclaims the area it faded into.

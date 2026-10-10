@@ -1,0 +1,177 @@
+diff --git a/iosApp/NuvioTV/Screens/HomeView.swift b/iosApp/NuvioTV/Screens/HomeView.swift
+index 70195355..d0733c36 100644
+--- a/iosApp/NuvioTV/Screens/HomeView.swift
++++ b/iosApp/NuvioTV/Screens/HomeView.swift
+@@ -5131,6 +5131,8 @@ struct ContinueWatchingRow: View {
+     /// the strip (`StripRowScrollRestore`), so Classic's row is structurally unchanged.
+     @State private var hScroll = RowHScrollBox()
+     @State private var rowPosition = ScrollPosition()
++    /// Fork: the "N left" counts for the cards (computed in the background, see `RemainingEpisodes`).
++    @ObservedObject private var remaining = RemainingEpisodes.shared
+ 
+     /// rc14 (BUG-122): see `PinnedRowGeometry.shortRowLayoutCompensation`. The natural label is
+     /// what `LandscapeCard` lays out inside the reaches — its fixed height plus the caption when
+@@ -5207,15 +5209,25 @@ struct ContinueWatchingRow: View {
+                                 // Drawn over the artwork's top-right corner: an overlay never
+                                 // affects the card's layout size or focus behaviour.
+                                 .overlay(alignment: .topTrailing) {
+-                                    if shuffleParentIds.contains(entry.parentMetaId) {
+-                                        Image(systemName: "shuffle")
+-                                            .font(Theme.Font.caption.weight(.semibold))
+-                                            .foregroundStyle(Color.white.opacity(0.92))
+-                                            .padding(.horizontal, Theme.Spacing.xs)
+-                                            .padding(.vertical, Theme.Spacing.xxs)
+-                                            .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: Theme.Radius.chip))
+-                                            .padding(Theme.Spacing.sm)
+-                                            .allowsHitTesting(false)
++                                    let shuffled = shuffleParentIds.contains(entry.parentMetaId)
++                                    // Fork: "N left" (see `RemainingEpisodes`), beside the shuffle badge.
++                                    let remainingLabel = remaining.label(for: entry)
++                                    if shuffled || remainingLabel != nil {
++                                        HStack(spacing: Theme.Spacing.xs) {
++                                            if let remainingLabel {
++                                                Text(remainingLabel)
++                                            }
++                                            if shuffled {
++                                                Image(systemName: "shuffle")
++                                            }
++                                        }
++                                        .font(Theme.Font.caption.weight(.semibold))
++                                        .foregroundStyle(Color.white.opacity(0.92))
++                                        .padding(.horizontal, Theme.Spacing.xs)
++                                        .padding(.vertical, Theme.Spacing.xxs)
++                                        .background(Color.black.opacity(0.55), in: RoundedRectangle(cornerRadius: Theme.Radius.chip))
++                                        .padding(Theme.Spacing.sm)
++                                        .allowsHitTesting(false)
+                                     }
+                                 }
+                                 .padding(.top, cardTopReach)
+@@ -5300,6 +5312,10 @@ struct ContinueWatchingRow: View {
+                 }
+                 // Home Stage & Strip (P1 §3.3): see `restoreStripMemory`. Inert outside the strip.
+                 .onAppear { restoreStripMemory() }
++                // Fork: work out the "N left" counts for these cards in the background.
++                .task(id: entries.map { RemainingEpisodes.key($0) ?? "" }) {
++                    remaining.request(entries)
++                }
+             }
+         }
+         .focusSection()
+diff --git a/iosApp/NuvioTV/Screens/RemainingEpisodes.swift b/iosApp/NuvioTV/Screens/RemainingEpisodes.swift
+new file mode 100644
+index 00000000..fd4a261c
+--- /dev/null
++++ b/iosApp/NuvioTV/Screens/RemainingEpisodes.swift
+@@ -0,0 +1,112 @@
++import Combine
++import Foundation
++import SharedCore
++
++/// Fork: "N left" on Continue Watching cards — how many aired episodes come after the one on the
++/// card and are not watched yet. Worked out in the background from the series' episode list (the
++/// same metadata the detail page uses), so the row never waits on it; a card shows nothing until
++/// its count is known, and nothing when the count is 0 or the item is a movie.
++///
++/// Counts are cached per card (series + the episode on it) for half an hour. Watching an episode
++/// moves the card to the next one, which is a new key, so the count follows without a refresh.
++/// Off switch: `UserDefaults` key `fork_cw_remaining_episodes` = false.
++@MainActor
++final class RemainingEpisodes: ObservableObject {
++    static let shared = RemainingEpisodes()
++    static let enabledKey = "fork_cw_remaining_episodes"
++    private static let maxAge: TimeInterval = 30 * 60
++
++    @Published private(set) var counts: [String: Int] = [:]
++    private var computedAt: [String: Date] = [:]
++    private var inFlight: Set<String> = []
++    private var queue: [WatchProgressEntry] = []
++    private var worker: Task<Void, Never>?
++
++    static var isEnabled: Bool {
++        UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true
++    }
++
++    static func key(_ entry: WatchProgressEntry) -> String? {
++        guard let s = entry.seasonNumber?.intValue, let e = entry.episodeNumber?.intValue else { return nil }
++        return "\(entry.parentMetaId)|\(s):\(e)"
++    }
++
++    /// The badge text for a card, or nil.
++    func label(for entry: WatchProgressEntry) -> String? {
++        guard Self.isEnabled, let key = Self.key(entry), let n = counts[key], n > 0 else { return nil }
++        return "\(n) left"
++    }
++
++    /// The row's cards changed: work out any counts that are missing or old, one series at a time.
++    func request(_ entries: [WatchProgressEntry]) {
++        guard Self.isEnabled else { return }
++        let now = Date()
++        for entry in entries {
++            guard let key = Self.key(entry), !inFlight.contains(key) else { continue }
++            if let at = computedAt[key], now.timeIntervalSince(at) < Self.maxAge { continue }
++            inFlight.insert(key)
++            queue.append(entry)
++        }
++        guard worker == nil, !queue.isEmpty else { return }
++        worker = Task { @MainActor in
++            while !queue.isEmpty {
++                let entry = queue.removeFirst()
++                await compute(entry)
++            }
++            worker = nil
++        }
++    }
++
++    private func compute(_ entry: WatchProgressEntry) async {
++        guard let key = Self.key(entry),
++              let season = entry.seasonNumber?.intValue,
++              let episode = entry.episodeNumber?.intValue else { return }
++        defer { inFlight.remove(key) }
++        let type = entry.parentMetaType.isEmpty ? entry.contentType : entry.parentMetaType
++        var meta = MetaDetailsRepository.shared.peek(type: type, id: entry.parentMetaId)
++        if meta?.videos.isEmpty ?? true {
++            do {
++                meta = try await MetaDetailsRepository.shared.fetchChecked(
++                    type: type, id: entry.parentMetaId, cacheResult: true
++                )
++            } catch {
++                print("[RemainingEpisodes] episode list fetch failed for \(entry.parentMetaId): \(error)")
++                return
++            }
++        }
++        guard let videos = meta?.videos, !videos.isEmpty else { return }
++
++        let today = CurrentDateProvider.shared.todayIsoDate()
++        let later = videos.filter { video in
++            guard let s = video.season?.value, let e = video.episode?.value else { return false }
++            // Specials only count when the card itself is in the specials season.
++            if s == 0 && season != 0 { return false }
++            return (s, e) > (season, episode)
++        }
++        var watched: Set<String> = []
++        for video in later {
++            guard let s = video.season?.value, let e = video.episode?.value else { continue }
++            let sk = KotlinInt(int: Int32(s))
++            let ek = KotlinInt(int: Int32(e))
++            let marked = WatchedRepository.shared.isWatched(id: entry.parentMetaId, type: type,
++                                                            season: sk, episode: ek)
++            let completed = WatchProgressRepository.shared.progressForVideo(
++                videoId: "\(entry.parentMetaId):\(s):\(e)",
++                parentMetaId: entry.parentMetaId,
++                seasonNumber: sk,
++                episodeNumber: ek
++            )?.isEffectivelyCompleted == true
++            if marked || completed { watched.insert("\(s):\(e)") }
++        }
++        let count = EpisodeSpoilerRules.airedUnwatchedCount(
++            later.map {
++                EpisodeSpoilerRules.EpisodeFacts(season: $0.season?.value, episode: $0.episode?.value,
++                                                 released: $0.released)
++            },
++            watchedKeys: watched,
++            todayIsoDate: today
++        )
++        computedAt[key] = Date()
++        if counts[key] != count { counts[key] = count }
++    }
++}
