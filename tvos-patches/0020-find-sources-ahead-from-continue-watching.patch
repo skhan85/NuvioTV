@@ -1,0 +1,48 @@
+diff --git a/iosApp/NuvioTV/Screens/DetailPreload.swift b/iosApp/NuvioTV/Screens/DetailPreload.swift
+index 8737aab6..36f402bc 100644
+--- a/iosApp/NuvioTV/Screens/DetailPreload.swift
++++ b/iosApp/NuvioTV/Screens/DetailPreload.swift
+@@ -35,13 +35,13 @@ enum DetailPreload {
+ 
+     /// The page's Play/Resume item changed (or the page appeared): search for it after the dwell,
+     /// unless the viewer leaves or opens the picker first.
+-    static func schedule(_ target: Target?) {
++    static func schedule(_ target: Target?, dwell: Double = dwellSeconds) {
+         cancelPending()
+         guard let target else { return }
+         guard UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true else { return }
+         if let at = recent[target.key], Date().timeIntervalSince(at) < repeatAfter { return }
+         pending = Task { @MainActor in
+-            try? await Task.sleep(nanoseconds: UInt64(dwellSeconds * 1_000_000_000))
++            try? await Task.sleep(nanoseconds: UInt64(dwell * 1_000_000_000))
+             guard !Task.isCancelled else { return }
+             pending = nil
+             recent[target.key] = Date()
+diff --git a/iosApp/NuvioTV/Screens/HomeView.swift b/iosApp/NuvioTV/Screens/HomeView.swift
+index d0733c36..22a6e9d7 100644
+--- a/iosApp/NuvioTV/Screens/HomeView.swift
++++ b/iosApp/NuvioTV/Screens/HomeView.swift
+@@ -5333,7 +5333,22 @@ struct ContinueWatchingRow: View {
+                                    firstId: entries.first?.videoId,
+                                    focus: $focusedVideoId)
+         .onChange(of: focusedVideoId) { _, newId in
+-            onItemFocusChange?(newId.flatMap { id in entries.first { $0.videoId == id } })
++            let entry = newId.flatMap { id in entries.first { $0.videoId == id } }
++            onItemFocusChange?(entry)
++            // Fork: pressing a card opens the picker straight from Home (no detail page), so the
++            // focused card starts the source search itself after a 1 s dwell (Home puts focus here
++            // first). Same fields the picker loads with (see `resume`), so the picker reuses it.
++            if let entry {
++                DetailPreload.schedule(DetailPreload.Target(
++                    type: entry.parentMetaType,
++                    videoId: entry.videoId,
++                    parentMetaId: entry.parentMetaId,
++                    season: entry.seasonNumber?.value,
++                    episode: entry.episodeNumber?.value
++                ), dwell: 1)
++            } else {
++                DetailPreload.cancelPending()
++            }
+         }
+     }
+ 
