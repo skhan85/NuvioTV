@@ -1,0 +1,146 @@
+diff --git a/iosApp/NuvioTV/Screens/InlineTrailerCard.swift b/iosApp/NuvioTV/Screens/InlineTrailerCard.swift
+index 9c22840a..dea1f246 100644
+--- a/iosApp/NuvioTV/Screens/InlineTrailerCard.swift
++++ b/iosApp/NuvioTV/Screens/InlineTrailerCard.swift
+@@ -514,6 +514,8 @@ final class InlineTrailerCardModel: ObservableObject {
+     private var listenerRearmTask: Task<Void, Never>?
+     /// The title this card is currently expanded on; a resolution may only attach to its own key.
+     private var activeKey: String?
++    /// Fork (bobsupra-style bloom): whether this card currently holds focus.
++    private var focusedNow = false
+     /// Key of the resolution currently in flight for this card, so a re-focus mid-resolve doesn't
+     /// start a second pipeline (the in-flight one attaches itself when it lands).
+     ///
+@@ -564,6 +566,7 @@ final class InlineTrailerCardModel: ObservableObject {
+     // MARK: Focus
+ 
+     func focusChanged(_ focused: Bool, item: MetaPreview) {
++        focusedNow = focused
+         // BUG-55: everything below `beginExtraction` already logs, but a dwell that never armed was
+         // invisible — the probe has to start at the very first event the card receives.
+         if focused {
+@@ -611,6 +614,7 @@ final class InlineTrailerCardModel: ObservableObject {
+             let delay = TrailerStartDelay.current()
+             let focusAt = InlineTrailerCardModel.now
+             var restBegan: TimeInterval?
++            var bloomed = false
+             while true {
+                 guard !Task.isCancelled, let model = self, model.generation == generationAtStart else { return }
+                 let now = InlineTrailerCardModel.now
+@@ -629,6 +633,13 @@ final class InlineTrailerCardModel: ObservableObject {
+                    TrailerStartGate.shouldStartArtPrefetch(focusAge: now - focusAt, restAge: restAge) {
+                     model.startArtPrefetch()
+                 }
++                // Fork (bobsupra-style bloom): turn the poster into its landscape art + logo shortly
++                // after the rows come to rest, whether or not a trailer exists. The trailer (if any)
++                // still waits for Trailer Start Delay below and plays on top of the art.
++                if ForkBloom.enabled, model.hostsTile, !bloomed, let restAge, restAge >= ForkBloom.delay {
++                    bloomed = true
++                    Task { await model.bloomStatic(item, generation: generationAtStart) }
++                }
+                 switch TrailerStartGate.step(delay: delay, focusAge: now - focusAt, restAge: restAge) {
+                 case .start(let via):
+                     model.noteGateStart(key: key, delay: delay, focusAt: focusAt,
+@@ -824,10 +835,43 @@ final class InlineTrailerCardModel: ObservableObject {
+         dwellTask = nil
+         activeKey = nil
+         InlineTrailerCoordinator.shared.releasePlayback(self)
++        // Fork (bobsupra-style bloom): while focus stays, a card that has nothing (more) to play
++        // keeps its landscape art and logo instead of shrinking back to the poster.
++        if holdsBloom {
++            setPhase(.expandedStatic)
++            return
++        }
+         setPhase(.idle)
+         deferOrCollapseStage(trigger: "collapse")
+     }
+ 
++    // MARK: Fork bloom (bobsupra-style)
++
++    /// A focused catalog card in bloom mode whose tile is already up.
++    private var holdsBloom: Bool {
++        hostsTile && ForkBloom.enabled && focusedNow && morphStage != .none
++    }
++
++    /// Morphs a dwelling card to its still landscape art (no player). Called from the dwell loop
++    /// once the rows rest; a no-op if focus moved on or the card already bloomed.
++    func bloomStatic(_ item: MetaPreview, generation gen: Int) async {
++        guard hostsTile, generation == gen, focusedNow, morphStage == .none, phase == .dwelling else { return }
++        let key = TrailerResolutionCache.key(type: item.type, id: item.id)
++        activeKey = key
++        _ = await beginMorph(key: key)
++    }
++
++    /// The expand() skip branches (no trailer, recently failed, already played): in bloom mode
++    /// stay on (or move to) the still art instead of going back to idle.
++    private func skipToIdleOrBloom(_ item: MetaPreview, key: String) async {
++        guard hostsTile, ForkBloom.enabled, focusedNow else {
++            setPhase(.idle)
++            return
++        }
++        activeKey = key
++        if await beginMorph(key: key) { setPhase(.expandedStatic) }
++    }
++
+     // MARK: R2 staged morph
+ 
+     /// One morph entry point (R2). Every path that used to `setPhase(.expandedStatic)` to morph — the
+@@ -1118,7 +1162,7 @@ final class InlineTrailerCardModel: ObservableObject {
+         // page forever on a title with nothing to play.
+         guard didFinishForKey != key else {
+             if TrailerProbe.enabled { NSLog("[TrailerPipeline] expand skip=alreadyFinished key=%@", key) }
+-            setPhase(.idle)
++            await skipToIdleOrBloom(item, key: key)
+             return
+         }
+ 
+@@ -1214,12 +1258,12 @@ final class InlineTrailerCardModel: ObservableObject {
+             // Already known to have nothing to play: never morph at all, so a row full of
+             // trailer-less titles never twitches under a browsing thumb. Expires in 20 minutes.
+             if TrailerProbe.enabled { NSLog("[TrailerPipeline] expand skip=unavailable key=%@", key) }
+-            setPhase(.idle)
++            await skipToIdleOrBloom(item, key: key)
+             return
+         case .transient:
+             // Nothing that played, moments ago — suppresses a tight refocus retry. Expires in 45s.
+             if TrailerProbe.enabled { NSLog("[TrailerPipeline] expand skip=transient key=%@", key) }
+-            setPhase(.idle)
++            await skipToIdleOrBloom(item, key: key)
+             return
+         case nil:
+             // P-1a: `MetaDetailsRepository.peek()` is usually cold here — `DetailViewModel.stop()`
+@@ -1239,7 +1283,7 @@ final class InlineTrailerCardModel: ObservableObject {
+                     if TrailerProbe.enabled {
+                         NSLog("[TrailerPipeline] expand skip=peekNoTrailer key=%@ listed=%d", key, meta.trailers.count)
+                     }
+-                    setPhase(.idle)
++                    await skipToIdleOrBloom(item, key: key)
+                     return
+                 }
+             }
+@@ -2615,7 +2659,7 @@ struct InlineTrailerCard: View {
+     /// gating on playback would make the title blink in a beat after the morph.
+     /// beta.19-rc1 verdict (R2): `model.tileVisible`, so the logo rides the stage — dissolving with
+     /// the tile, and gone in the same frame on an abort (no ghost logo across the gap, 2:10.6).
+-    private var showsInTileTitle: Bool { model.tileVisible && !posterStyle.showTitle }
++    private var showsInTileTitle: Bool { model.tileVisible && (!posterStyle.showTitle || ForkBloom.enabled) }
+ 
+     /// UX-4a (Christian's spec, 2026-07-30): the poster KEEPS ITS HEIGHT and only grows
+     /// WIDER when the trailer starts — a 16:9 tile at the poster's full height. The old
+@@ -2722,3 +2766,16 @@ struct InlineTrailerTitleOverlay: View {
+ 
+ // MARK: - Mute indicator
+ 
++
++
++// MARK: - Fork: bobsupra-style bloom
++
++/// Fork: a focused poster turns into its landscape art + title logo shortly after the rows rest,
++/// whether or not the title has a trailer, and stays that way while focused; a trailer (Trailer
++/// Start Delay) plays on top when there is one. Needs Trailers on Focus on and Trailer Location:
++/// Poster. UserDefaults `fork_bloom_always` = false restores the stock trailer-only morph.
++enum ForkBloom {
++    static var enabled: Bool { UserDefaults.standard.object(forKey: "fork_bloom_always") as? Bool ?? true }
++    /// Rest time before the bloom, matching bobsupra's ~350 ms preload arm.
++    static let delay: TimeInterval = 0.35
++}
