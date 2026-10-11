@@ -1,0 +1,47 @@
+diff --git a/iosApp/NuvioTV/DesignSystem/CachedAsyncImage.swift b/iosApp/NuvioTV/DesignSystem/CachedAsyncImage.swift
+index 6b4af221..d6ffdf5b 100644
+--- a/iosApp/NuvioTV/DesignSystem/CachedAsyncImage.swift
++++ b/iosApp/NuvioTV/DesignSystem/CachedAsyncImage.swift
+@@ -412,6 +412,15 @@ enum ArtworkStore {
+ 
+     @MainActor static func clearFailedURLs() { failedURLs.removeAll() }
+ 
++    /// Fork: Settings → About → Clear Image Cache. Drops the on-disk artwork cache and the
++    /// failed-URL memory; images already decoded in memory stay until they are evicted or the app
++    /// restarts, so nothing on screen blanks out.
++    @MainActor static func clearDiskCache() {
++        session.configuration.urlCache?.removeAllCachedResponses()
++        failedURLs.removeAll()
++        sourceSizes.removeAllObjects()
++    }
++
+     /// Only outcomes that will not change on a retry count: a 4xx answer, a non-image body, an
+     /// oversized or undecodable payload. Timeouts, connectivity errors, 5xx/408/429 and
+     /// cancellation are transient and never recorded.
+diff --git a/iosApp/NuvioTV/Screens/Settings/AboutSettingsPane.swift b/iosApp/NuvioTV/Screens/Settings/AboutSettingsPane.swift
+index ac9083bb..7b86edc3 100644
+--- a/iosApp/NuvioTV/Screens/Settings/AboutSettingsPane.swift
++++ b/iosApp/NuvioTV/Screens/Settings/AboutSettingsPane.swift
+@@ -54,9 +54,22 @@ struct AboutSettingsPane: View {
+                 descriptionID: .aboutFonts,
+                 focusable: true
+             )
++            // Fork: Clear Image Cache (from ysosrs123's NuvioTV fork).
++            SettingsDestructiveRow(
++                title: String(localized: "Clear Image Cache"),
++                subtitle: imageCacheCleared
++                    ? String(localized: "Cleared. Artwork reloads as you browse.")
++                    : String(localized: "Posters, backdrops and logos. Continue Watching, library and add-ons are kept."),
++                systemImage: "photo.on.rectangle.angled"
++            ) {
++                ArtworkStore.clearDiskCache()
++                imageCacheCleared = true
++            }
+         }
+     }
+ 
++    @State private var imageCacheCleared = false
++
+     private static var marketingVersion: String {
+         (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "0.0"
+     }
