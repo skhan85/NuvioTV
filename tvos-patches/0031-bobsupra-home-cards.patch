@@ -1,0 +1,489 @@
+diff --git a/iosApp/NuvioTV/Screens/BrowseComponents.swift b/iosApp/NuvioTV/Screens/BrowseComponents.swift
+index d3b005f8..8a61a2ec 100644
+--- a/iosApp/NuvioTV/Screens/BrowseComponents.swift
++++ b/iosApp/NuvioTV/Screens/BrowseComponents.swift
+@@ -5384,11 +5384,12 @@ struct CatalogRowView: View {
+                 // follows the caption's focus drop (device pass 2026-10-06: a line laid out here
+                 // collided with the dropped caption on the focused card).
+                 InlineTrailerCard(item: item,
+-                                  enabled: inlineTrailersActive,
++                                  enabled: inlineTrailersActive || ForkBloom.enabled,
+                                   onExpansionChange: { expanded in
+                                       expansionChanged(itemId: item.id, expanded: expanded, proxy: proxy)
+                                   },
+-                                  footnote: focusedItemId == item.id ? cardFootnote(item) : nil)
++                                  footnote: focusedItemId == item.id ? cardFootnote(item) : nil,
++                                  trailersAllowed: inlineTrailersActive)
+                 // Fixed-height sizer (a hidden caption line): the row reserves the footnote's
+                 // line so nothing below moves when focus changes.
+                 Text(" ")
+@@ -5398,9 +5399,9 @@ struct CatalogRowView: View {
+                     .frame(maxWidth: .infinity, alignment: .leading)
+             }
+         } else {
+-            InlineTrailerCard(item: item, enabled: inlineTrailersActive, onExpansionChange: { expanded in
++            InlineTrailerCard(item: item, enabled: inlineTrailersActive || ForkBloom.enabled, onExpansionChange: { expanded in
+                 expansionChanged(itemId: item.id, expanded: expanded, proxy: proxy)
+-            })
++            }, trailersAllowed: inlineTrailersActive)
+         }
+     }
+ 
+diff --git a/iosApp/NuvioTV/Screens/CWBloomCard.swift b/iosApp/NuvioTV/Screens/CWBloomCard.swift
+new file mode 100644
+index 00000000..96d58ac9
+--- /dev/null
++++ b/iosApp/NuvioTV/Screens/CWBloomCard.swift
+@@ -0,0 +1,223 @@
++import SwiftUI
++import SharedCore
++
++// MARK: - Fork: bobsupra-style Continue Watching cards
++
++/// Fork settings for the bobsupra-style Home cards. Local-only, not synced.
++enum ForkCWStyle {
++    /// `fork_cw_posters`: Continue Watching shows portrait posters that open into a wide card on
++    /// focus (default) instead of always-wide landscape cards.
++    static let postersKey = "fork_cw_posters"
++    static var posters: Bool { UserDefaults.standard.object(forKey: postersKey) as? Bool ?? true }
++    /// How long focus has to rest on a card before it opens, so a fast scrub along the row does not
++    /// open every card it passes.
++    static let openDelay: TimeInterval = 0.3
++    static let openAnimation: Animation = .spring(response: 0.3, dampingFraction: 1.0)
++
++    /// The open card: 16:9 at the poster's height.
++    static func wideWidth(_ style: PosterStyle) -> CGFloat { style.height * 16.0 / 9.0 }
++}
++
++/// A Continue Watching card in the bobsupra style: a portrait poster with a "S1 E6 · 35m left" pill;
++/// once focus rests on it, it widens to a 16:9 card with the episode still (or backdrop), the
++/// episode code, title and episode name, and the progress bar. Leaving focus closes it.
++struct CWBloomCard: View {
++    let entry: WatchProgressEntry
++    let posterURL: String?
++    let wideURL: String?
++    let progress: Double?
++    /// "N left" from `RemainingEpisodes`, shown in the open card.
++    var remainingLabel: String? = nil
++    var shuffled: Bool = false
++    /// Fires when the card's width changes edge, so the row can keep the open card on screen.
++    var onOpenChange: ((Bool) -> Void)? = nil
++
++    @Environment(\.isFocused) private var isFocused
++    @Environment(\.posterStyle) private var style
++    @Environment(\.accessibilityReduceMotion) private var reduceMotion
++    @AppStorage("accent_focus_ring") private var accentFocusRing = false
++    @AppStorage("no_zoom_on_focus") private var noZoomOnFocus = false
++    @State private var open = false
++    @State private var openTask: Task<Void, Never>?
++    /// Bumped on every focus change; a pending open only fires if it is still current.
++    @State private var focusGeneration = 0
++
++    private var focusMode: CardFocusMode {
++        .resolve(accentFocusRing: accentFocusRing, noZoomOnFocus: noZoomOnFocus)
++    }
++
++    private var height: CGFloat { style.height }
++    private var narrowWidth: CGFloat { style.width }
++    private var wideWidth: CGFloat { ForkCWStyle.wideWidth(style) }
++    private var width: CGFloat { open ? wideWidth : narrowWidth }
++
++    private var episodeCode: String? {
++        guard let s = entry.seasonNumber?.intValue, let e = entry.episodeNumber?.intValue else { return nil }
++        return "S\(s) E\(e)"
++    }
++
++    private var timeLeft: String? {
++        StageCopy.remainingLabel(positionMs: entry.lastPositionMs, durationMs: entry.durationMs)
++    }
++
++    /// "S1 E6 · 35m left", "2h 20m left", "S1 E6" — whatever is known.
++    private var pillText: String? {
++        let parts = [episodeCode, timeLeft].compactMap { $0 }
++        return parts.isEmpty ? nil : parts.joined(separator: " · ")
++    }
++
++    private var episodeTitle: String? {
++        let t: String? = entry.episodeTitle
++        guard let t, !t.isEmpty else { return nil }
++        return t
++    }
++
++    var body: some View {
++        VStack(alignment: .leading, spacing: Theme.Spacing.md) {
++            ZStack(alignment: .topLeading) {
++                CachedAsyncImage(string: posterURL, fallback: wideURL,
++                                 decodeSize: .points(width: narrowWidth, height: height))
++                    .frame(width: width, height: height)
++                    .clipped()
++                    .opacity(open ? 0 : 1)
++
++                // Loaded once the card has focus, so a row of closed posters fetches no backdrops.
++                CachedAsyncImage(string: (isFocused || open) ? wideURL : nil, fallback: posterURL,
++                                 decodeSize: .points(width: wideWidth, height: height))
++                    .frame(width: width, height: height)
++                    .clipped()
++                    .opacity(open ? 1 : 0)
++
++                if open {
++                    LinearGradient(colors: [.clear, .black.opacity(0.75)],
++                                   startPoint: .center, endPoint: .bottom)
++                        .frame(width: width, height: height)
++                        .transition(.opacity)
++                    openCaption
++                        .frame(width: width, height: height, alignment: .bottomLeading)
++                        .transition(.opacity)
++                }
++
++                pill
++                    .frame(width: width, alignment: open ? .topTrailing : .top)
++                    .padding(.top, Theme.Spacing.sm)
++
++                if let progress {
++                    progressBar(progress)
++                        .frame(width: width, height: height, alignment: .bottom)
++                }
++            }
++            .frame(width: width, height: height)
++            .clipShape(RoundedRectangle(cornerRadius: style.cornerRadius))
++            .overlay {
++                if accentFocusRing && isFocused {
++                    RoundedRectangle(cornerRadius: style.cornerRadius)
++                        .strokeBorder(Theme.Palette.focusRingColor, lineWidth: 4)
++                }
++            }
++            .modifier(CardArtworkFocusLift(mode: focusMode, isFocused: isFocused,
++                                           artworkHeight: height, cornerRadius: style.cornerRadius))
++
++            if style.showTitle {
++                Text(entry.title)
++                    .font(Theme.Font.cardTitle)
++                    .foregroundStyle(isFocused ? Theme.Palette.textPrimary : Theme.Palette.textSecondary)
++                    .lineLimit(1)
++                    .padding(.horizontal, Theme.Spacing.xs)
++                    .frame(width: width, alignment: .leading)
++                    .modifier(CardCaptionFocusDrop(mode: focusMode, isFocused: isFocused, artworkHeight: height))
++                    .opacity(open ? 0 : 1)
++            }
++        }
++        .modifier(CardFocusTreatment(mode: focusMode, isFocused: isFocused, artworkHeight: height,
++                                     cornerRadius: style.cornerRadius, tint: nil))
++        .zIndex(isFocused ? 1 : 0)
++        .onChange(of: isFocused, initial: true) { _, focused in
++            openTask?.cancel()
++            focusGeneration &+= 1
++            let generation = focusGeneration
++            if focused {
++                openTask = Task { @MainActor in
++                    try? await Task.sleep(nanoseconds: UInt64(ForkCWStyle.openDelay * 1_000_000_000))
++                    guard !Task.isCancelled, focusGeneration == generation else { return }
++                    setOpen(true)
++                }
++            } else {
++                setOpen(false)
++            }
++        }
++        .onDisappear {
++            openTask?.cancel()
++            open = false
++        }
++    }
++
++    private func setOpen(_ value: Bool) {
++        guard open != value else { return }
++        if reduceMotion {
++            open = value
++        } else {
++            withAnimation(ForkCWStyle.openAnimation) { open = value }
++        }
++        onOpenChange?(value)
++    }
++
++    @ViewBuilder
++    private var pill: some View {
++        let text = pillText
++        if text != nil || shuffled {
++            HStack(spacing: Theme.Spacing.xs) {
++                if let text { Text(text) }
++                if shuffled { Image(systemName: "shuffle") }
++            }
++            .font(Theme.Font.caption.weight(.semibold))
++            .lineLimit(1)
++            .minimumScaleFactor(0.7)
++            .foregroundStyle(Color.white)
++            .padding(.horizontal, Theme.Spacing.sm)
++            .padding(.vertical, Theme.Spacing.xxs)
++            .background(Color.black.opacity(0.6), in: Capsule())
++            .padding(.horizontal, Theme.Spacing.sm)
++            .allowsHitTesting(false)
++        }
++    }
++
++    private var openCaption: some View {
++        VStack(alignment: .leading, spacing: 2) {
++            if let episodeCode {
++                Text(remainingLabel.map { "\(episodeCode) · \($0)" } ?? episodeCode)
++                    .font(Theme.Font.caption)
++                    .foregroundStyle(Color.white.opacity(0.85))
++            }
++            Text(entry.title)
++                .font(Theme.Font.cardTitle.weight(.bold))
++                .foregroundStyle(Color.white)
++                .lineLimit(1)
++            if let episodeTitle {
++                Text(episodeTitle)
++                    .font(Theme.Font.caption)
++                    .foregroundStyle(Color.white.opacity(0.85))
++                    .lineLimit(1)
++            }
++        }
++        .shadow(color: .black.opacity(0.6), radius: 4, y: 1)
++        .padding(.horizontal, Theme.Spacing.md)
++        .padding(.bottom, progress != nil ? Theme.Spacing.lg : Theme.Spacing.md)
++        .allowsHitTesting(false)
++    }
++
++    private func progressBar(_ value: Double) -> some View {
++        GeometryReader { geo in
++            ZStack(alignment: .leading) {
++                Capsule().fill(Color.white.opacity(0.3))
++                Capsule()
++                    .fill(Theme.Palette.progress)
++                    .frame(width: geo.size.width * min(max(value, 0), 1))
++            }
++        }
++        .frame(height: 5)
++        .padding(.horizontal, Theme.Spacing.md)
++        .padding(.bottom, Theme.Spacing.sm)
++        .allowsHitTesting(false)
++    }
++}
+diff --git a/iosApp/NuvioTV/Screens/HomeView.swift b/iosApp/NuvioTV/Screens/HomeView.swift
+index 2e56ab7a..0c4be54a 100644
+--- a/iosApp/NuvioTV/Screens/HomeView.swift
++++ b/iosApp/NuvioTV/Screens/HomeView.swift
+@@ -2736,7 +2736,8 @@ struct HomeView: View {
+             return Theme.Size.landscapeHeight + fallbackCaption + pinnedUniformShelfChrome
+         }
+         if !model.continueWatching.isEmpty {
+-            return Theme.Size.landscapeHeight + fallbackCaption + pinnedUniformShelfChrome
++            let cwArt = ForkCWStyle.posters ? posterStyle.height : Theme.Size.landscapeHeight
++            return cwArt + fallbackCaption + pinnedUniformShelfChrome
+         }
+         return nil
+     }
+@@ -5159,13 +5160,42 @@ struct ContinueWatchingRow: View {
+     @State private var rowPosition = ScrollPosition()
+     /// Fork: the "N left" counts for the cards (computed in the background, see `RemainingEpisodes`).
+     @ObservedObject private var remaining = RemainingEpisodes.shared
++    /// Fork: bobsupra-style poster cards that open on focus (`CWBloomCard`), or the stock landscape cards.
++    @AppStorage(ForkCWStyle.postersKey) private var cwPosters = true
++
++    /// Fork: the resting card size for the current Continue Watching style.
++    private var cardArtHeight: CGFloat { cwPosters ? posterStyle.height : Theme.Size.landscapeHeight }
++    private var cardRestWidth: CGFloat { cwPosters ? posterStyle.width : Theme.Size.landscapeWidth }
++
++    /// Fork: when a poster card opens, scroll the row just enough to keep the wide card on screen
++    /// (the same plan the catalog rows use for their trailer morph). Horizontal only.
++    private func cwOpenChanged(_ id: String, open: Bool) {
++        guard open else {
++            if hScroll.wideItemId == id { hScroll.wideItemId = nil }
++            return
++        }
++        guard cwPosters, let index = entries.firstIndex(where: { $0.videoId == id }),
++              let sample = hScroll.sample else { return }
++        hScroll.wideItemId = id
++        let plan = RowMorphScroll.plan(index: index,
++                                       restingWidth: posterStyle.width,
++                                       expandedWidth: ForkCWStyle.wideWidth(posterStyle),
++                                       gap: Theme.Spacing.rowGap,
++                                       visibleMinX: sample.paddedVisibleMinX,
++                                       viewportWidth: sample.viewportWidth,
++                                       contentWidth: sample.paddedContentWidth,
++                                       insetLeading: sample.insetLeading,
++                                       contentAlreadyGrown: false)
++        guard let target = plan.offset else { return }
++        withAnimation(ForkCWStyle.openAnimation) { rowPosition.scrollTo(x: target - sample.insetLeading) }
++    }
+ 
+     /// rc14 (BUG-122): see `PinnedRowGeometry.shortRowLayoutCompensation`. The natural label is
+     /// what `LandscapeCard` lays out inside the reaches — its fixed height plus the caption when
+     /// titles are shown (`titleVisible` defaults to `posterStyle.showTitle` here).
+     private var shortRowCompensation: CGFloat {
+         let caption = posterStyle.showTitle ? PinnedRowTitle.cardLockupCaptionChrome : 0
+-        let natural = cardTopReach + Theme.Size.landscapeHeight + caption + cardBottomReach
++        let natural = cardTopReach + cardArtHeight + caption + cardBottomReach
+         return PinnedRowGeometry.shortRowLayoutCompensation(floor: cardLinkFrameFloor,
+                                                             naturalLabel: natural,
+                                                             isLastRow: isLastRow)
+@@ -5199,7 +5229,7 @@ struct ContinueWatchingRow: View {
+             }
+             return
+         }
+-        guard let x = StripRowRestore.offset(index: index, cardWidth: Theme.Size.landscapeWidth,
++        guard let x = StripRowRestore.offset(index: index, cardWidth: cardRestWidth,
+                                              gap: Theme.Spacing.rowGap, sample: sample) else { return }
+         var tx = Transaction()
+         tx.disablesAnimations = true
+@@ -5225,6 +5255,16 @@ struct ContinueWatchingRow: View {
+                         ForEach(entries, id: \.videoId) { entry in
+                             let custom = customImageURL(entry)
+                             Button { onSelect(entry) } label: {
++                              Group {
++                                if cwPosters {
++                                    CWBloomCard(entry: entry,
++                                                posterURL: posterURL(entry),
++                                                wideURL: custom ?? wideURL(entry),
++                                                progress: fraction(entry),
++                                                remainingLabel: remaining.label(for: entry),
++                                                shuffled: shuffleParentIds.contains(entry.parentMetaId),
++                                                onOpenChange: { open in cwOpenChanged(entry.videoId, open: open) })
++                                } else {
+                                 LandscapeCard(
+                                     title: entry.title,
+                                     imageURL: custom ?? imageURL(entry),
+@@ -5256,6 +5296,8 @@ struct ContinueWatchingRow: View {
+                                         .allowsHitTesting(false)
+                                     }
+                                 }
++                                }
++                              }
+                                 .padding(.top, cardTopReach)
+                                 .padding(.bottom, cardBottomReach)
+                                 // BUG-87/89 (rc11): transparent floor on the REVEALED frame — 0 for
+@@ -5286,7 +5328,7 @@ struct ContinueWatchingRow: View {
+                 }
+                 .scrollClipDisabled()
+                 // Review r1 (A P2-3): the strip's restore path; absent outside the strip.
+-                .modifier(StripRowScrollRestore(enabled: stripFocusMemory != nil,
++                .modifier(StripRowScrollRestore(enabled: stripFocusMemory != nil || cwPosters,
+                                                 box: hScroll,
+                                                 position: $rowPosition))
+                 // BUG-118: see `RowEdgeEffectStyleModifier`.
+@@ -5315,7 +5357,7 @@ struct ContinueWatchingRow: View {
+                             // Codex r7 P2: `isFocused` picks which clearance the belt judges this
+                             // row by — only a FOCUSED row's cards are raised by the treatment.
+                             .pinnedRowTitleTracking(rowKey: "continue-watching",
+-                                                    artworkHeight: Theme.Size.landscapeHeight,
++                                                    artworkHeight: cardArtHeight,
+                                                     isFocused: focusedVideoId != nil)
+                             .padding(.top, Theme.Size.heroPinnedRowTitleInset)
+                             .allowsHitTesting(false)
+@@ -5396,6 +5438,22 @@ struct ContinueWatchingRow: View {
+         )
+     }
+ 
++    /// Fork: the closed poster card's art (the title's poster, else its backdrop).
++    private func posterURL(_ entry: WatchProgressEntry) -> String? {
++        let poster: String? = entry.poster
++        if let poster, !poster.isEmpty { return poster }
++        let bg: String? = entry.background
++        return bg
++    }
++
++    /// Fork: the open card's art — the episode still for an episode (as bobsupra does), else the
++    /// title's backdrop.
++    private func wideURL(_ entry: WatchProgressEntry) -> String? {
++        let still: String? = entry.episodeThumbnail
++        if let still, !still.isEmpty { return still }
++        return imageURL(entry)
++    }
++
+     private func imageURL(_ entry: WatchProgressEntry) -> String? {
+         let bg: String? = entry.background
+         if let bg, !bg.isEmpty { return bg }
+diff --git a/iosApp/NuvioTV/Screens/InlineTrailerCard.swift b/iosApp/NuvioTV/Screens/InlineTrailerCard.swift
+index dea1f246..1698c825 100644
+--- a/iosApp/NuvioTV/Screens/InlineTrailerCard.swift
++++ b/iosApp/NuvioTV/Screens/InlineTrailerCard.swift
+@@ -398,6 +398,9 @@ final class InlineTrailerCardModel: ObservableObject {
+     /// R2: true for a catalog card (set in the card's `.onAppear`, BEFORE any `focusChanged(true…)`),
+     /// which owns a tile and runs the staged morph. False on the hero model: no art, no stages.
+     var hostsTile = false
++    /// Fork: false when the card runs only for the bobsupra-style bloom (Trailers on Focus off, or
++    /// trailers set to play in the hero): the card opens to its still art and never starts a trailer.
++    var trailersAllowed = true
+     /// R2: the tile art's candidates (banner, then poster) and the tile's resting size, set by the
+     /// catalog card in `.onAppear`. nil on the hero model.
+     var tileArtSource: InlineTileArtSource?
+@@ -640,6 +643,12 @@ final class InlineTrailerCardModel: ObservableObject {
+                     bloomed = true
+                     Task { await model.bloomStatic(item, generation: generationAtStart) }
+                 }
++                // Fork: bloom-only card — nothing more to wait for once it has opened.
++                if !model.trailersAllowed {
++                    if bloomed { return }
++                    try? await Task.sleep(nanoseconds: 50_000_000)
++                    continue
++                }
+                 switch TrailerStartGate.step(delay: delay, focusAge: now - focusAt, restAge: restAge) {
+                 case .start(let via):
+                     model.noteGateStart(key: key, delay: delay, focusAt: focusAt,
+@@ -2161,6 +2170,8 @@ struct InlineTrailerCard: View {
+     /// Search & Discover batch 2026-10-06: Search's "Found in …" line, handed to the card so it
+     /// hangs under the caption and rides the focus drop (see `PosterCard.footnote`).
+     var footnote: String? = nil
++    /// Fork: false = bloom only (see `InlineTrailerCardModel.trailersAllowed`).
++    var trailersAllowed: Bool = true
+ 
+     @Environment(\.isFocused) private var isFocused
+     @Environment(\.posterStyle) private var posterStyle
+@@ -2379,6 +2390,7 @@ struct InlineTrailerCard: View {
+     private func configureModel() {
+         model.prefersReducedMotion = reduceMotion
+         model.hostsTile = true
++        model.trailersAllowed = trailersAllowed
+         let poster: String? = item.poster
+         // I1 (critique #3): the tile's resting size, so the loader decodes the banner at the size the
+         // tile is drawn at. Same numbers as `artworkWidth` / `artworkHeight` at `.wide`.
+@@ -2772,8 +2784,9 @@ struct InlineTrailerTitleOverlay: View {
+ 
+ /// Fork: a focused poster turns into its landscape art + title logo shortly after the rows rest,
+ /// whether or not the title has a trailer, and stays that way while focused; a trailer (Trailer
+-/// Start Delay) plays on top when there is one. Needs Trailers on Focus on and Trailer Location:
+-/// Poster. UserDefaults `fork_bloom_always` = false restores the stock trailer-only morph.
++/// Start Delay) plays on top when there is one (Trailers on Focus on, Trailer Location: Poster).
++/// With trailers off, or playing in the hero, the cards still bloom (still art only).
++/// UserDefaults `fork_bloom_always` = false restores the stock trailer-only morph.
+ enum ForkBloom {
+     static var enabled: Bool { UserDefaults.standard.object(forKey: "fork_bloom_always") as? Bool ?? true }
+     /// Rest time before the bloom, matching bobsupra's ~350 ms preload arm.
+diff --git a/iosApp/NuvioTV/Screens/Settings/HomeScreenSettingsPane.swift b/iosApp/NuvioTV/Screens/Settings/HomeScreenSettingsPane.swift
+index d25952eb..48db2c92 100644
+--- a/iosApp/NuvioTV/Screens/Settings/HomeScreenSettingsPane.swift
++++ b/iosApp/NuvioTV/Screens/Settings/HomeScreenSettingsPane.swift
+@@ -55,6 +55,11 @@ struct HomeScreenSettingsPane: View {
+     /// Default ON. Local-only.
+     @AppStorage("fork_because_rows") private var becauseRowsEnabled = true
+ 
++    /// Fork (bobsupra-style Home): Continue Watching as posters that open on focus, and catalog
++    /// posters that open into their landscape art + logo. Both default ON. Local-only.
++    @AppStorage(ForkCWStyle.postersKey) private var cwPosters = true
++    @AppStorage("fork_bloom_always") private var posterBloom = true
++
+     /// FEAT-25: mirrors HomeView's `hero_trailer_autoplay` key — the hero plays its own trailer
+     /// with no focus required. Default OFF. Local-only, not synced.
+     @AppStorage("hero_trailer_autoplay") private var heroTrailerAutoplay = false
+@@ -114,6 +119,22 @@ struct HomeScreenSettingsPane: View {
+                 isOn: $becauseRowsEnabled
+             )
+ 
++            SettingsToggleRow(
++                title: String(localized: "Continue Watching Posters"),
++                subtitle: cwPosters
++                    ? String(localized: "Posters that open into the episode still when focused")
++                    : String(localized: "Wide landscape cards"),
++                isOn: $cwPosters
++            )
++
++            SettingsToggleRow(
++                title: String(localized: "Expand Focused Posters"),
++                subtitle: posterBloom
++                    ? String(localized: "A focused poster opens into its backdrop and title logo")
++                    : String(localized: "Posters only change when a trailer plays"),
++                isOn: $posterBloom
++            )
++
+             if model.catalogs.isEmpty {
+                 Text("Install add-ons to customize your Home rows.")
+                     .font(Theme.Font.body)
