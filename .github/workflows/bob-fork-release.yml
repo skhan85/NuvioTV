@@ -1,0 +1,208 @@
+name: tvOS Fork Release (bobsupra base)
+
+# Builds an unsigned NuvioTV (Apple TV) IPA from bobsupra/NuvioTVOS's main branch with the patches
+# in /bob-patches applied, and publishes it as a GitHub release (picked up by the Raspberry Pi
+# release watcher). Checks every 6 hours, so a new push to bobsupra's main is rebuilt within about
+# 6 hours. A change to /bob-patches or this file also triggers a rebuild. Branches other than main
+# only build a test IPA (run artifact), never a release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build even if a release for this source/fork commit already exists
+        type: boolean
+        default: false
+  schedule:
+    - cron: "41 */6 * * *"
+  push:
+    paths:
+      - "bob-patches/**"
+      - ".github/workflows/bob-fork-release.yml"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: bob-fork-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPO: bobsupra/NuvioTVOS
+  SOURCE_BRANCH: main
+  # Same bundle ID as the earlier NuvioTV fork, so the Apple TV updates the installed app in place
+  # (no extra App ID against the free-account quota).
+  BUNDLE_ID: com.nuvio.media.NuvioTV
+
+jobs:
+  prepare:
+    name: Check source and decide
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+      source_sha: ${{ steps.decide.outputs.source_sha }}
+      tag: ${{ steps.decide.outputs.tag }}
+      version: ${{ steps.decide.outputs.version }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out this repo
+        uses: actions/checkout@v6
+
+      - name: Check out tvOS source (project file only)
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ env.SOURCE_BRANCH }}
+          path: src
+          sparse-checkout: tvosApp/Project.swift
+          sparse-checkout-cone-mode: false
+
+      - name: Decide whether to build
+        id: decide
+        run: |
+          version="$(sed -n 's/^let marketingVersion = "\(.*\)"/\1/p' src/tvosApp/Project.swift)"
+          source_sha="$(git -C src rev-parse HEAD)"
+          fork_hash="$(cat bob-patches/*.patch bob-patches/BASE .github/workflows/bob-fork-release.yml | sha256sum | cut -c1-7)"
+          tag="tvos-bob-v${version}-fork.$(git -C src rev-parse --short=7 HEAD).${fork_hash}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "source_sha=${source_sha}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_NAME}" == "main" ]] \
+             && gh release view "${tag}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1 \
+             && [[ "${{ inputs.force }}" != "true" ]]; then
+            echo "Release ${tag} already exists; nothing to do."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Will build ${tag}."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build unsigned tvOS IPA
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Check out this repo (patches)
+        uses: actions/checkout@v6
+        with:
+          path: fork
+
+      - name: Check out tvOS source
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.SOURCE_REPO }}
+          ref: ${{ needs.prepare.outputs.source_sha }}
+          path: src
+          fetch-depth: 0
+
+      # Same scheme as the old fork: each patch is committed on top of bob-patches/BASE (where it
+      # always applies), then the stack is rebased onto the commit being built.
+      - name: Apply fork patches
+        working-directory: src
+        run: |
+          set -uo pipefail
+          shopt -s nullglob
+          git config user.name "fork-ci"; git config user.email "fork-ci@users.noreply.github.com"
+          target="$(git rev-parse HEAD)"
+          base="$(tr -d '[:space:]' < "../fork/bob-patches/BASE" 2>/dev/null || true)"
+          if [[ -z "${base}" ]] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            echo "::warning::bob-patches/BASE is missing or unknown; applying the patches directly."
+            base="${target}"
+          fi
+          git checkout -q -B patched "${base}"
+          for patch in ../fork/bob-patches/*.patch; do
+            name="$(basename "${patch}")"
+            if ! git apply --index "${patch}"; then
+              echo "::error::${name} does not apply to its own base ${base::10}; bob-patches/BASE is out of date."
+              exit 1
+            fi
+            git commit -q --allow-empty -m "${name}"
+          done
+          if [[ "${base}" != "${target}" ]]; then
+            if git rebase -q --empty=drop --onto "${target}" "${base}" patched; then
+              echo "Rebased the patches from ${base::10} onto ${target::10}."
+            else
+              conflict="$(git log -1 --format=%s REBASE_HEAD 2>/dev/null || echo unknown)"
+              files="$(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+              git rebase --abort
+              echo "::warning::${conflict} conflicts with the new source (${files}). Waiting for the patch update; cancelling this run."
+              echo "### Patches need updating: \`${conflict}\` conflicts with ${target::10} in ${files}" >> "${GITHUB_STEP_SUMMARY}"
+              gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}"
+              sleep 120
+              exit 1
+            fi
+          fi
+          git reset -q --soft "${target}"
+          # Bundle ID: replace the installed fork in place.
+          sed -i '' "s/^let bundleID = \".*\"/let bundleID = \"${BUNDLE_ID}\"/" tvosApp/Project.swift
+          grep -n '^let bundleID' tvosApp/Project.swift
+
+      - name: Init MPVKit submodule
+        working-directory: src
+        run: git submodule update --init --recursive MPVKit
+
+      - name: Install Tuist
+        uses: jdx/mise-action@v2
+        with:
+          working_directory: src
+
+      - name: Generate Xcode project
+        working-directory: src/tvosApp
+        run: |
+          xcodebuild -version
+          mise exec -- tuist generate --no-open
+
+      - name: Archive NuvioTV (Release, unsigned, tvOS device)
+        working-directory: src
+        run: |
+          set -o pipefail
+          if ! xcodebuild archive \
+            -workspace tvosApp/NuvioTV.xcworkspace \
+            -scheme NuvioTV \
+            -configuration Release \
+            -destination 'generic/platform=tvOS' \
+            -archivePath "${RUNNER_TEMP}/NuvioTV.xcarchive" \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_ENTITLEMENTS="" 2>&1 | tee xcodebuild.log; then
+            grep -E "error: " xcodebuild.log | sort -u | head -40 | sed -e 's/%/%25/g' -e 's/^/::error::/' || true
+            exit 1
+          fi
+
+      - name: Package IPA
+        run: |
+          app="${RUNNER_TEMP}/NuvioTV.xcarchive/Products/Applications/NuvioTV.app"
+          [[ -d "${app}" ]] || { echo "::error::NuvioTV.app was not produced."; exit 1; }
+          rm -rf Payload && mkdir Payload
+          cp -R "${app}" Payload/
+          # Free-Apple-ID re-signers (atvloadly) break the Top Shelf extension's signature.
+          rm -rf Payload/NuvioTV.app/PlugIns
+          zip -qry "NuvioTV-${VERSION}-fork.ipa" Payload
+          ls -la "NuvioTV-${VERSION}-fork.ipa"
+
+      - name: Keep test build as an artifact
+        if: github.ref_name != 'main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-ipa
+          path: NuvioTV-*-fork.ipa
+          retention-days: 7
+
+      - name: Publish release
+        if: github.ref_name == 'main'
+        run: |
+          notes="NuvioTV built from ${SOURCE_REPO}@${{ needs.prepare.outputs.source_sha }} (${SOURCE_BRANCH}) with fork patches:"
+          for patch in fork/bob-patches/*.patch; do notes+=$'\n'"- $(basename "${patch}")"; done
+          gh release create "${TAG}" "NuvioTV-${VERSION}-fork.ipa" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${{ github.ref_name }}" \
+            --title "NuvioTV ${VERSION} (fork, bobsupra base)" \
+            --notes "${notes}" \
+            || gh release upload "${TAG}" "NuvioTV-${VERSION}-fork.ipa" --clobber --repo "${GITHUB_REPOSITORY}"
