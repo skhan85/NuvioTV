@@ -149,6 +149,14 @@ jobs:
         working-directory: src
         run: git submodule update --init --recursive MPVKit
 
+      # bobsupra builds with Xcode 27; Xcode 26's compiler gives up on Home's long view body.
+      - name: Select the newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          newest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "${newest}/Contents/Developer"
+          xcodebuild -version
+
       - name: Install Tuist
         uses: jdx/mise-action@v2
         with:
