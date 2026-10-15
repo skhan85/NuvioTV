@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index d59b8d4f..8704ac41 100644
+index e1e294e2..061a8685 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-@@ -205,11 +205,15 @@ enum TmdbDetailsService {
+@@ -207,11 +207,15 @@ enum TmdbDetailsService {
      private static var apiKey: String? {
          let key = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
              .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -550,10 +550,10 @@ index 00000000..fdd4b460
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index 525f60c0..1ab92161 100644
+index db471960..a579cd55 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-@@ -2792,6 +2792,9 @@ struct TitleActionsMenuContent: View {
+@@ -2796,6 +2796,9 @@ struct TitleActionsMenuContent: View {
          } else {
              let inLibrary = LibraryStore.contains(metaId: meta.id, type: meta.type)
              let isItemWatched = WatchedStore.contains(meta: meta)
@@ -563,7 +563,7 @@ index 525f60c0..1ab92161 100644
  
              Button {
                  DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
-@@ -2806,25 +2809,32 @@ struct TitleActionsMenuContent: View {
+@@ -2810,25 +2813,32 @@ struct TitleActionsMenuContent: View {
                      toggleLibrary(currentlyInLibrary: inLibrary)
                  }
              } label: {
@@ -613,7 +613,7 @@ index 525f60c0..1ab92161 100644
  
              if let onRefreshCatalog {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-index 8f957de2..3b7a3ee0 100644
+index 111d794c..9330ead7 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 @@ -568,7 +568,7 @@ struct TVCatalogRow: View {
@@ -683,10 +683,10 @@ index 1f2085ea..fc4d863a 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index af0800a4..85fae202 100644
+index 62417178..61066cdb 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -2983,6 +2983,12 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -2994,6 +2994,12 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.upNextFromFurthestEpisode) private var upNextFromFurthestEpisode = true
      @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -699,7 +699,7 @@ index af0800a4..85fae202 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3310,6 +3316,38 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3321,6 +3327,38 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -739,28 +739,28 @@ index af0800a4..85fae202 100644
                      title: L10n.string(
                          "tvos_layout_full_dates",
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
-index cf4468c8..338e7fb1 100644
+index 3af8d0b6..0cd610a9 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
-@@ -44,7 +44,7 @@ class NetflixSearchViewModel: ObservableObject {
+@@ -50,7 +50,7 @@ class NetflixSearchViewModel: ObservableObject {
  
          $searchText
              .removeDuplicates()
--            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
-+            .debounce(for: .milliseconds(1000), scheduler: DispatchQueue.main) // Fork: 1 s (was 500 ms) so remote typing does not search every letter
+-            .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
++            .debounce(for: .milliseconds(1000), scheduler: DispatchQueue.main) // Fork: 1 s (was 350 ms) so remote typing does not search every letter
              .sink { [weak self] text in
                  self?.performSearch(query: text)
              }
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
-index 26082312..31120e15 100644
+index 67107995..8fdf2775 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
-@@ -61,7 +61,7 @@ class SearchViewModel: ObservableObject {
+@@ -67,7 +67,7 @@ class SearchViewModel: ObservableObject {
  
          $searchText
              .removeDuplicates()
--            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
-+            .debounce(for: .milliseconds(1000), scheduler: DispatchQueue.main) // Fork: 1 s (was 500 ms) so remote typing does not search every letter
+-            .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
++            .debounce(for: .milliseconds(1000), scheduler: DispatchQueue.main) // Fork: 1 s (was 350 ms) so remote typing does not search every letter
              .sink { [weak self] text in
                  self?.performSearch(query: text)
              }
