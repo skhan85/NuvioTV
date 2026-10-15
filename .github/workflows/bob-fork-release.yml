@@ -107,6 +107,8 @@ jobs:
       # always applies), then the stack is rebased onto the commit being built.
       - name: Apply fork patches
         working-directory: src
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
         run: |
           set -uo pipefail
           shopt -s nullglob
@@ -141,6 +143,13 @@ jobs:
             fi
           fi
           git reset -q --soft "${target}"
+          # Built-in TMDB key (repository secret), so no key has to be typed on the remote.
+          if [[ -n "${TMDB_API_KEY}" && -f tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift ]]; then
+            printf 'enum ForkSecrets {\n    static let tmdbApiKey = "%s"\n}\n' "${TMDB_API_KEY}" > tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
+            echo "Built-in TMDB key set."
+          else
+            echo "::warning::No TMDB_API_KEY secret; TMDB features need a key entered in Settings."
+          fi
           # Bundle ID: replace the installed fork in place.
           sed -i '' "s/^let bundleID = \".*\"/let bundleID = \"${BUNDLE_ID}\"/" tvosApp/Project.swift
           grep -n '^let bundleID' tvosApp/Project.swift

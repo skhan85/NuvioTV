@@ -1,0 +1,32 @@
+diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
+index e407c8a6..ef0b3c0f 100644
+--- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
++++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
+@@ -2250,15 +2250,25 @@ final class CinemetaCatalogRepository: CatalogRepository {
+                 contentType: source.type,
+                 catalogId: source.catalogId
+             ) else { continue }
++            // Fork: older collection payloads (and the web/mobile editor) can store the catalog's
++            // label ("All Movies on Netflix") as its type. The add-on needs the manifest type
++            // (`movie` / `series`), so take it from the manifest's catalog with this id.
++            var sourceType = source.type
++            if let manifest = await manifest(for: base.appendingPathComponent("manifest.json")),
++               let catalogs = manifest.catalogs,
++               !catalogs.contains(where: { $0.id == source.catalogId && $0.type == source.type }),
++               let match = catalogs.first(where: { $0.id == source.catalogId }) {
++                sourceType = match.type
++            }
+             do {
+                 let url = try StremioCatalogURLBuilder.url(
+                     baseURL: base,
+-                    type: source.type,
++                    type: sourceType,
+                     catalogId: source.catalogId,
+                     genre: source.genre
+                 )
+                 let response: CinemetaCatalogResponse = try await fetch(url)
+-                for meta in response.metas.map({ $0.toMeta(fallbackType: source.type) }) {
++                for meta in response.metas.map({ $0.toMeta(fallbackType: sourceType) }) {
+                     guard items.count < limit else { break }
+                     guard seen.insert(meta.id).inserted else { continue }
+                     cacheCatalogMetadata(meta)

@@ -1,0 +1,766 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
+index d59b8d4f..8704ac41 100644
+--- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
++++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
+@@ -205,11 +205,15 @@ enum TmdbDetailsService {
+     private static var apiKey: String? {
+         let key = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
+             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+-        return key.isEmpty ? nil : key
++        // Fork: fall back to the TMDB key built into this fork (repository secret), so no key
++        // has to be typed on the remote.
++        if key.isEmpty { return ForkSecrets.tmdbApiKey.isEmpty ? nil : ForkSecrets.tmdbApiKey }
++        return key
+     }
+ 
+     private static var isEnabled: Bool {
+-        (ProfileSettings.current.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? false
++        // Fork: TMDB is on by default when a built-in key exists.
++        (ProfileSettings.current.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? !ForkSecrets.tmdbApiKey.isEmpty
+     }
+ 
+     static var preferredLanguage: String {
+diff --git a/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
+new file mode 100644
+index 00000000..4e34e39a
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
+@@ -0,0 +1,5 @@
++// Fork: build-time values. The release workflow rewrites this file from repository secrets; the
++// checked-in copy is empty so the project builds without them.
++enum ForkSecrets {
++    static let tmdbApiKey = ""
++}
+diff --git a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
+new file mode 100644
+index 00000000..4623b933
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
+@@ -0,0 +1,111 @@
++import SwiftUI
++
++// MARK: - Fork: Top 10 numerals
++
++/// Fork: rows whose title says "Top 10" (FlixPatrol rows and the like) get a big outlined rank
++/// numeral on each of their first ten posters. `fork_top10_numerals` = false turns it off.
++enum ForkTop10 {
++    static func isTop10(_ title: String) -> Bool {
++        guard UserDefaults.standard.object(forKey: "fork_top10_numerals") as? Bool ?? true else { return false }
++        let t = title.lowercased()
++        return t.contains("top 10") || t.contains("top ten") || t.contains("top10")
++    }
++}
++
++struct ForkTop10Numeral: View {
++    let rank: Int
++    let cardWidth: CGFloat
++
++    var body: some View {
++        let size = cardWidth * 0.62
++        ZStack {
++            // Outline: the numeral drawn light and offset in eight directions, a dark fill on top.
++            ForEach(0..<8, id: \.self) { i in
++                let a = Double(i) * .pi / 4
++                Text("\(rank)")
++                    .foregroundStyle(Color.white.opacity(0.9))
++                    .offset(x: cos(a) * 3, y: sin(a) * 3)
++            }
++            Text("\(rank)").foregroundStyle(Color.black)
++        }
++        .font(.system(size: size, weight: .black, design: .rounded))
++        .monospacedDigit()
++        .tracking(rank == 10 ? -size * 0.08 : 0)
++        .lineLimit(1)
++        .fixedSize()
++        .shadow(color: .black.opacity(0.6), radius: 6, y: 2)
++        .offset(x: -cardWidth * 0.12, y: size * 0.18)
++        .accessibilityHidden(true)
++        .allowsHitTesting(false)
++    }
++}
++
++// MARK: - Fork: Because you watched
++
++/// Fork: up to two "Because you watched X" rows on Home, built from TMDB recommendations for the two
++/// titles watched most recently (Continue Watching order), under Continue Watching / Upcoming.
++/// Titles already in Continue Watching are left out. `fork_because_rows` = false turns them off
++/// (Settings → Layout → Because You Watched).
++enum ForkBecauseYouWatched {
++    static let enabledKey = "fork_because_rows"
++    static let maxRows = 2
++    static let idPrefix = "fork_because_"
++
++    private static func seeds(_ items: [ContinueWatchingItem]) -> [ContinueWatchingItem] {
++        var seen = Set<String>()
++        return items.sorted { $0.lastWatchedAt > $1.lastWatchedAt }
++            .filter { seen.insert($0.meta.id).inserted }
++            .prefix(maxRows)
++            .map { $0 }
++    }
++
++    static func seedKey(_ items: [ContinueWatchingItem]) -> String {
++        seeds(items).map(\.meta.id).joined(separator: ",")
++    }
++
++    static func sections(seeds items: [ContinueWatchingItem]) async -> [TVHomeSection] {
++        let seeds = seeds(items)
++        let exclude = Set(items.map(\.meta.id))
++        var sections: [TVHomeSection] = []
++        var used = Set<String>()
++        for seed in seeds {
++            let related = await TmdbDetailsService.fetchMoreLikeThis(for: seed.meta, limit: 20)
++            let metas = related.map(\.asMeta).filter { meta in
++                !exclude.contains(meta.id) && used.insert(meta.id).inserted
++            }
++            guard metas.count >= 4 else { continue }
++            sections.append(TVHomeSection(
++                id: idPrefix + seed.meta.id,
++                title: "Because you watched \(seed.meta.name)",
++                items: metas
++            ))
++        }
++        return sections
++    }
++}
++
++// MARK: - Fork: episodes left on Continue Watching
++
++extension ContinueWatchingItem {
++    /// Aired episodes still to watch after this card's episode (including it for a Next Up card),
++    /// from the episode guide the card carries. nil for movies or without a guide.
++    var forkEpisodesLeft: Int? {
++        guard meta.isSeries, let season, let episode,
++              let videos = meta.videos, !videos.isEmpty else { return nil }
++        let count = videos.filter { video in
++            guard video.season > 0, video.episode > 0,
++                  EpisodeReleasePolicy.hasAired(video.released) else { return false }
++            if isUpNextEntry { return (video.season, video.episode) >= (season, episode) }
++            return (video.season, video.episode) > (season, episode)
++        }.count
++        return count
++    }
++
++    /// The card's own remaining text plus "N eps left" (fork). `fork_cw_episodes_left` = false hides it.
++    var forkRemainingText: String {
++        guard UserDefaults.standard.object(forKey: "fork_cw_episodes_left") as? Bool ?? true,
++              let left = forkEpisodesLeft, left > 0 else { return remainingText }
++        let eps = left == 1 ? "1 ep left" : "\(left) eps left"
++        return remainingText.isEmpty ? eps : "\(remainingText) · \(eps)"
++    }
++}
+diff --git a/tvosApp/NuvioTV/Sources/Fork/InsightsFork.swift b/tvosApp/NuvioTV/Sources/Fork/InsightsFork.swift
+new file mode 100644
+index 00000000..fdd4b460
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/InsightsFork.swift
+@@ -0,0 +1,395 @@
++import SwiftUI
++
++// MARK: - Fork: Stats, Diary and Calendar
++
++/// Fork: Stats and Diary (from NuvioPro) and a release Calendar (from Nuvio Enhanced / NuvioPro),
++/// opened from the Library tab. Everything comes from what is already on the device: the watched
++/// history, the library and the add-on metadata.
++enum ForkInsightsPage: String, CaseIterable, Identifiable {
++    case stats, diary, calendar
++    var id: String { rawValue }
++    var title: String {
++        switch self {
++        case .stats: return "Stats"
++        case .diary: return "Diary"
++        case .calendar: return "Calendar"
++        }
++    }
++    var icon: String {
++        switch self {
++        case .stats: return "chart.bar.fill"
++        case .diary: return "book.closed.fill"
++        case .calendar: return "calendar"
++        }
++    }
++}
++
++struct ForkWatchStats {
++    struct Achievement: Identifiable {
++        let id = UUID()
++        let title: String
++        let detail: String
++        let progress: Double
++        let tier: Int
++    }
++    struct DiaryEntry: Identifiable {
++        let id = UUID()
++        let name: String
++        let poster: String?
++        let detail: String
++    }
++    struct DiaryDay: Identifiable {
++        var id: String { date }
++        let date: String
++        let entries: [DiaryEntry]
++    }
++
++    var movies = 0
++    var episodes = 0
++    var showsStarted = 0
++    var showsFinished = 0
++    var estimatedHours = 0
++    var thisMonth = 0
++    var thisYear = 0
++    var longestStreak = 0
++    var topGenres: [String] = []
++    var days: [DiaryDay] = []
++    var achievements: [Achievement] = []
++
++    static func compute(now: Date = Date()) -> ForkWatchStats {
++        let items = WatchedStore.visibleItems()
++        var stats = ForkWatchStats()
++        let calendar = Calendar.current
++        let dayFormatter = DateFormatter()
++        dayFormatter.dateFormat = "yyyy-MM-dd"
++
++        var showIds = Set<String>()
++        var finished = Set<String>()
++        var minutes = 0
++        var genreCounts: [String: Int] = [:]
++        var byDay: [String: [WatchedStoreItem]] = [:]
++        for item in items {
++            let isEpisode = item.season != nil && item.episode != nil
++            if isEpisode {
++                stats.episodes += 1
++                showIds.insert(item.meta.id)
++                minutes += 45
++            } else if item.meta.isSeries {
++                showIds.insert(item.meta.id)
++                finished.insert(item.meta.id)
++            } else {
++                stats.movies += 1
++                minutes += 110
++            }
++            if calendar.isDate(item.watchedAt, equalTo: now, toGranularity: .month) { stats.thisMonth += 1 }
++            if calendar.isDate(item.watchedAt, equalTo: now, toGranularity: .year) { stats.thisYear += 1 }
++            for genre in item.meta.genres ?? [] { genreCounts[genre, default: 0] += 1 }
++            byDay[dayFormatter.string(from: item.watchedAt), default: []].append(item)
++        }
++        for id in showIds where !finished.contains(id) {
++            if let meta = items.first(where: { $0.meta.id == id })?.meta,
++               CatalogWatchedPolicy.hasWatchedAllAiredEpisodes(
++                   videos: meta.videos, watchedEpisodeKeys: WatchedStore.watchedEpisodeKeys(metaId: id)) {
++                finished.insert(id)
++            }
++        }
++        stats.showsStarted = showIds.count
++        stats.showsFinished = finished.count
++        stats.estimatedHours = minutes / 60
++        stats.topGenres = genreCounts.sorted { $0.value > $1.value }.prefix(5).map(\.key)
++
++        // Longest run of consecutive days with something watched.
++        let dates = byDay.keys.compactMap { dayFormatter.date(from: $0) }.sorted()
++        var best = 0, run = 0
++        var previous: Date?
++        for date in dates {
++            if let previous, calendar.dateComponents([.day], from: previous, to: date).day == 1 {
++                run += 1
++            } else {
++                run = 1
++            }
++            best = max(best, run)
++            previous = date
++        }
++        stats.longestStreak = best
++
++        stats.days = byDay.keys.sorted(by: >).prefix(120).map { day in
++            var grouped: [String: (WatchedStoreItem, [String])] = [:]
++            var order: [String] = []
++            for item in byDay[day] ?? [] {
++                if grouped[item.meta.id] == nil { order.append(item.meta.id); grouped[item.meta.id] = (item, []) }
++                if let s = item.season, let e = item.episode { grouped[item.meta.id]?.1.append("S\(s) E\(e)") }
++            }
++            let entries = order.compactMap { id -> DiaryEntry? in
++                guard let (item, eps) = grouped[id] else { return nil }
++                let detail = eps.isEmpty ? (item.meta.isSeries ? "Series" : "Movie") : eps.joined(separator: ", ")
++                return DiaryEntry(name: item.meta.name, poster: item.meta.posterUrl, detail: detail)
++            }
++            return DiaryDay(date: day, entries: entries)
++        }
++
++        func tier(_ value: Int, _ steps: [Int]) -> (Int, Double, Int) {
++            let reached = steps.filter { value >= $0 }.count
++            let next = reached < steps.count ? steps[reached] : steps.last!
++            return (reached, min(1, Double(value) / Double(next)), next)
++        }
++        let m = tier(stats.movies, [10, 50, 200])
++        let e = tier(stats.episodes, [50, 250, 1000])
++        let s = tier(stats.longestStreak, [3, 7, 30])
++        let f = tier(stats.showsFinished, [1, 10, 50])
++        stats.achievements = [
++            Achievement(title: "Film Buff", detail: "\(stats.movies) / \(m.2) movies", progress: m.1, tier: m.0),
++            Achievement(title: "Binger", detail: "\(stats.episodes) / \(e.2) episodes", progress: e.1, tier: e.0),
++            Achievement(title: "On a Roll", detail: "\(stats.longestStreak) / \(s.2) days in a row", progress: s.1, tier: s.0),
++            Achievement(title: "Finisher", detail: "\(stats.showsFinished) / \(f.2) shows finished", progress: f.1, tier: f.0),
++        ]
++        return stats
++    }
++}
++
++/// Upcoming releases for the library: series episodes from -7 to +60 days, and movies with a date.
++enum ForkReleaseCalendar {
++    struct Entry: Identifiable {
++        let id = UUID()
++        let date: String
++        let name: String
++        let poster: String?
++        let label: String
++    }
++
++    static func load(now: Date = Date()) async -> [Entry] {
++        let formatter = DateFormatter()
++        formatter.dateFormat = "yyyy-MM-dd"
++        formatter.timeZone = TimeZone(identifier: "UTC")
++        let from = formatter.string(from: now.addingTimeInterval(-7 * 86_400))
++        let to = formatter.string(from: now.addingTimeInterval(60 * 86_400))
++        let library = LibraryStore.items().map(\.meta)
++        let repository = CinemetaCatalogRepository()
++
++        return await withTaskGroup(of: [Entry].self) { group in
++            for meta in library.prefix(80) {
++                group.addTask {
++                    if meta.isSeries {
++                        var videos = meta.videos ?? []
++                        if videos.isEmpty, let full = try? await repository.getMetadata(id: meta.id, type: meta.type) {
++                            videos = full.videos ?? []
++                        }
++                        return videos.compactMap { video in
++                            guard video.season > 0, let released = video.released, released.count >= 10 else { return nil }
++                            let day = String(released.prefix(10))
++                            guard day >= from, day <= to else { return nil }
++                            let title = video.title.isEmpty ? "" : " · \(video.title)"
++                            return Entry(date: day, name: meta.name, poster: meta.posterUrl,
++                                         label: "S\(video.season) E\(video.episode)\(title)")
++                        }
++                    }
++                    guard let released = meta.released, released.count >= 10 else { return [] }
++                    let day = String(released.prefix(10))
++                    guard day >= from, day <= to else { return [] }
++                    return [Entry(date: day, name: meta.name, poster: meta.posterUrl, label: "Movie")]
++                }
++            }
++            var all: [Entry] = []
++            for await entries in group { all += entries }
++            return all.sorted { ($0.date, $0.name) < ($1.date, $1.name) }
++        }
++    }
++}
++
++struct ForkInsightsView: View {
++    @State var page: ForkInsightsPage
++    let onClose: () -> Void
++    @State private var stats: ForkWatchStats?
++    @State private var calendar: [ForkReleaseCalendar.Entry]?
++
++    private static let parser: DateFormatter = {
++        let f = DateFormatter()
++        f.dateFormat = "yyyy-MM-dd"
++        return f
++    }()
++
++    private static func dayTitle(_ iso: String) -> String {
++        guard let date = parser.date(from: iso) else { return iso }
++        return date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day())
++    }
++
++    private static func monthTitle(_ iso: String) -> String {
++        guard let date = parser.date(from: iso) else { return String(iso.prefix(7)) }
++        return date.formatted(.dateTime.month(.wide).year())
++    }
++
++    var body: some View {
++        ZStack {
++            Color.black.ignoresSafeArea()
++            ScrollView(.vertical) {
++                VStack(alignment: .leading, spacing: 32) {
++                    HStack(spacing: 16) {
++                        ForEach(ForkInsightsPage.allCases) { item in
++                            SourceModeChip(title: item.title, isSelected: page == item) { page = item }
++                        }
++                    }
++                    .focusSection()
++
++                    switch page {
++                    case .stats: statsPage
++                    case .diary: diaryPage
++                    case .calendar: calendarPage
++                    }
++                }
++                .padding(80)
++                .frame(maxWidth: .infinity, alignment: .leading)
++            }
++        }
++        .onAppear { stats = ForkWatchStats.compute() }
++        .task(id: page) {
++            guard page == .calendar, calendar == nil else { return }
++            calendar = await ForkReleaseCalendar.load()
++        }
++        .onExitCommand(perform: onClose)
++    }
++
++    @ViewBuilder
++    private var statsPage: some View {
++        if let s = stats {
++            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 24), count: 4),
++                      alignment: .leading, spacing: 24) {
++                tile("\(s.estimatedHours)", "hours watched (est.)")
++                tile("\(s.movies)", "movies")
++                tile("\(s.episodes)", "episodes")
++                tile("\(s.showsFinished) / \(s.showsStarted)", "shows finished")
++                tile("\(s.thisMonth)", "this month")
++                tile("\(s.thisYear)", "this year")
++                tile("\(s.longestStreak)", "best streak (days)")
++                tile("\(s.movies + s.episodes)", "titles and episodes")
++            }
++            if !s.topGenres.isEmpty {
++                section("Taste")
++                Text(s.topGenres.joined(separator: "  ·  "))
++                    .font(.system(size: 28)).foregroundColor(.white)
++            }
++            section("Achievements")
++            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 24), count: 4),
++                      alignment: .leading, spacing: 24) {
++                ForEach(s.achievements) { achievement($0) }
++            }
++        } else {
++            ProgressView()
++        }
++    }
++
++    private func tile(_ value: String, _ label: String) -> some View {
++        Button {} label: {
++            VStack(alignment: .leading, spacing: 6) {
++                Text(value)
++                    .font(.system(size: 52, weight: .bold, design: .rounded))
++                    .foregroundColor(.white)
++                    .minimumScaleFactor(0.5)
++                    .lineLimit(1)
++                Text(label).font(.system(size: 22)).foregroundColor(.white.opacity(0.6))
++            }
++            .padding(24)
++            .frame(maxWidth: .infinity, alignment: .leading)
++            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 20))
++        }
++        .buttonStyle(.card)
++    }
++
++    private func achievement(_ a: ForkWatchStats.Achievement) -> some View {
++        let colors: [Color] = [.gray, .brown, Color(white: 0.8), .yellow]
++        let color = colors[min(a.tier, 3)]
++        return Button {} label: {
++            VStack(spacing: 12) {
++                ZStack {
++                    Circle().stroke(Color.white.opacity(0.15), lineWidth: 10)
++                    Circle()
++                        .trim(from: 0, to: CGFloat(a.progress))
++                        .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
++                        .rotationEffect(.degrees(-90))
++                    Image(systemName: a.tier > 0 ? "medal.fill" : "medal")
++                        .font(.system(size: 40)).foregroundColor(color)
++                }
++                .frame(width: 110, height: 110)
++                Text(a.title).font(.system(size: 26, weight: .semibold)).foregroundColor(.white)
++                Text(a.detail).font(.system(size: 20)).foregroundColor(.white.opacity(0.6))
++            }
++            .padding(20)
++            .frame(maxWidth: .infinity)
++        }
++        .buttonStyle(.card)
++    }
++
++    @ViewBuilder
++    private var diaryPage: some View {
++        if let s = stats {
++            if s.days.isEmpty {
++                empty("Nothing watched yet. Finished titles show up here, day by day.")
++            }
++            LazyVStack(alignment: .leading, spacing: 16) {
++                ForEach(Array(s.days.enumerated()), id: \.element.id) { index, day in
++                    if index == 0 || s.days[index - 1].date.prefix(7) != day.date.prefix(7) {
++                        section(Self.monthTitle(day.date))
++                    }
++                    Text(Self.dayTitle(day.date)).font(.system(size: 22)).foregroundColor(.white.opacity(0.6))
++                    ForEach(day.entries) { row(poster: $0.poster, title: $0.name, detail: $0.detail) }
++                }
++            }
++        } else {
++            ProgressView()
++        }
++    }
++
++    @ViewBuilder
++    private var calendarPage: some View {
++        if let calendar {
++            if calendar.isEmpty {
++                empty("Nothing coming up in the next 60 days for the titles in your Library.")
++            }
++            let today = Self.parser.string(from: Date())
++            LazyVStack(alignment: .leading, spacing: 16) {
++                ForEach(Array(calendar.enumerated()), id: \.element.id) { index, entry in
++                    if index == 0 || calendar[index - 1].date != entry.date {
++                        section(entry.date == today ? "Today" : Self.dayTitle(entry.date))
++                    }
++                    row(poster: entry.poster, title: entry.name, detail: entry.label, dimmed: entry.date < today)
++                }
++            }
++        } else {
++            HStack(spacing: 16) {
++                ProgressView()
++                Text("Checking your library…").foregroundColor(.white.opacity(0.6))
++            }
++        }
++    }
++
++    private func row(poster: String?, title: String, detail: String, dimmed: Bool = false) -> some View {
++        Button {} label: {
++            HStack(spacing: 20) {
++                AsyncImage(url: poster.flatMap(URL.init(string:))) { image in
++                    image.resizable().scaledToFill()
++                } placeholder: {
++                    Color.white.opacity(0.08)
++                }
++                .frame(width: 60, height: 90)
++                .clipShape(RoundedRectangle(cornerRadius: 8))
++                VStack(alignment: .leading, spacing: 4) {
++                    Text(title).font(.system(size: 28, weight: .semibold)).foregroundColor(.white).lineLimit(1)
++                    Text(detail).font(.system(size: 22)).foregroundColor(.white.opacity(0.6)).lineLimit(2)
++                }
++                Spacer()
++            }
++            .padding(.vertical, 6)
++            .padding(.horizontal, 12)
++            .opacity(dimmed ? 0.55 : 1)
++        }
++        .buttonStyle(.card)
++        .frame(maxWidth: 1100, alignment: .leading)
++    }
++
++    private func section(_ text: String) -> some View {
++        Text(text).font(.system(size: 34, weight: .bold)).foregroundColor(.white).padding(.top, 16)
++    }
++
++    private func empty(_ text: String) -> some View {
++        Text(text).font(.system(size: 26)).foregroundColor(.white.opacity(0.6))
++    }
++}
+diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
+index 525f60c0..1ab92161 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
+@@ -2792,6 +2792,9 @@ struct TitleActionsMenuContent: View {
+         } else {
+             let inLibrary = LibraryStore.contains(metaId: meta.id, type: meta.type)
+             let isItemWatched = WatchedStore.contains(meta: meta)
++            // Fork: a title that isn't out yet offers "Remind Me" (it saves to the library, where it
++            // waits, and series land in Upcoming) and no watched action.
++            let unreleased = ContentReleasePolicy.isUnreleased(meta, today: ContentReleasePolicy.todayIsoDay())
+ 
+             Button {
+                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
+@@ -2806,25 +2809,32 @@ struct TitleActionsMenuContent: View {
+                     toggleLibrary(currentlyInLibrary: inLibrary)
+                 }
+             } label: {
+-                Label(
+-                    inLibrary
+-                        ? L10n.string("action_remove_from_library", fallback: "Remove from library")
+-                        : L10n.string("action_add_to_library", fallback: "Add to library"),
+-                    systemImage: inLibrary ? "checkmark" : "plus"
+-                )
++                if unreleased {
++                    Label(inLibrary ? "Cancel Reminder" : "Remind Me",
++                          systemImage: inLibrary ? "bell.slash" : "bell")
++                } else {
++                    Label(
++                        inLibrary
++                            ? L10n.string("action_remove_from_library", fallback: "Remove from library")
++                            : L10n.string("action_add_to_library", fallback: "Add to library"),
++                        systemImage: inLibrary ? "checkmark" : "plus"
++                    )
++                }
+             }
+ 
+-            Button {
+-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
+-                    toggleWatched()
++            if !unreleased {
++                Button {
++                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
++                        toggleWatched()
++                    }
++                } label: {
++                    Label(
++                        isItemWatched
++                            ? L10n.string("details_mark_as_unwatched", fallback: "Mark as unwatched")
++                            : L10n.string("details_mark_as_watched", fallback: "Mark as watched"),
++                        systemImage: isItemWatched ? "eye.slash" : "eye"
++                    )
+                 }
+-            } label: {
+-                Label(
+-                    isItemWatched
+-                        ? L10n.string("details_mark_as_unwatched", fallback: "Mark as unwatched")
+-                        : L10n.string("details_mark_as_watched", fallback: "Mark as watched"),
+-                    systemImage: isItemWatched ? "eye.slash" : "eye"
+-                )
+             }
+ 
+             if let onRefreshCatalog {
+diff --git a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
+index 8f957de2..3b7a3ee0 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
+@@ -568,7 +568,7 @@ struct TVCatalogRow: View {
+                     isAlwaysLandscape: rowTileShape == .landscape || item.tileShape == .landscape,
+                     tileShape: item.tileShape != .poster ? item.tileShape : rowTileShape,
+                     continueProgress: progressItem?.progress,
+-                    continueRemainingText: progressItem?.remainingText,
++                    continueRemainingText: progressItem?.forkRemainingText,
+                     continueEpisodeText: progressItem?.episodeLabel,
+                     continueEpisodeTitleText: progressItem?.episodeDisplayTitle,
+                     continueEpisodeArtworkURL: progressItem?.episodeArtworkURL,
+@@ -604,6 +604,12 @@ struct TVCatalogRow: View {
+                 ) {
+                     onSelect(item)
+                 }
++                // Fork: Netflix-style rank numeral on the first ten cards of a "Top 10" row.
++                .overlay(alignment: .bottomLeading) {
++                    if itemIndex < 10, rowTileShape != .landscape, ForkTop10.isTop10(title) {
++                        ForkTop10Numeral(rank: itemIndex + 1, cardWidth: rowPosterWidth)
++                    }
++                }
+                 .disabled(
+                     restrictFocusToCardKey != nil && restrictFocusToCardKey != cardKey
+                 )
+diff --git a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
+index 1f2085ea..fc4d863a 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
+@@ -38,6 +38,8 @@ public struct LibraryView: View {
+     var onPlayCloudFile: ((URL, NuvioMeta) -> Void)? = nil
+ 
+     @State private var sourceMode: LibrarySourceMode = .saved
++    /// Fork: the open Stats / Diary / Calendar page, if any.
++    @State private var forkInsightsPage: ForkInsightsPage?
+     @State private var openCloudItem: CloudItem? = nil
+     @FocusState private var cloudFocusedKey: String?
+     @State private var lastFocusedCloudItemID: String?
+@@ -89,13 +91,27 @@ public struct LibraryView: View {
+     }
+     
+     public var body: some View {
++        forkBody
++            .fullScreenCover(item: $forkInsightsPage) { page in
++                ForkInsightsView(page: page) { forkInsightsPage = nil }
++            }
++    }
++
++    private var forkBody: some View {
+         ZStack(alignment: .top) {
+             Color.nuvioBackground(amoled: amoled, body: bodyColor).ignoresSafeArea()
+ 
+             VStack(alignment: .leading, spacing: 24) {
+-                Text(L10n.string("library_title", fallback: "Library"))
+-                    .font(.system(size: 46, weight: .bold))
+-                    .foregroundColor(.white)
++                // Fork: Stats & Diary and the release Calendar (see ForkInsightsView).
++                HStack(spacing: 16) {
++                    Text(L10n.string("library_title", fallback: "Library"))
++                        .font(.system(size: 46, weight: .bold))
++                        .foregroundColor(.white)
++                    Spacer()
++                    SourceModeChip(title: "Stats & Diary", isSelected: false) { forkInsightsPage = .stats }
++                    SourceModeChip(title: "Calendar", isSelected: false) { forkInsightsPage = .calendar }
++                }
++                .focusSection()
+ 
+                 // Source switch: Saved | Cloud
+                 if cloudLibraryAvailable {
+diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+index af0800a4..85fae202 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+@@ -2983,6 +2983,12 @@ private struct LayoutDiscoverySettingsView: View {
+     @AppStorage(SettingsKey.upNextFromFurthestEpisode) private var upNextFromFurthestEpisode = true
+     @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
+     @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
++    // Fork switches (device-local).
++    @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
++    @AppStorage("fork_top10_numerals") private var forkTop10 = true
++    @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
++    @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
++    @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
+     @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
+     @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
+     @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
+@@ -3310,6 +3316,38 @@ private struct LayoutDiscoverySettingsView: View {
+                     accentColor: accentColor
+                 )
+ 
++                // Fork
++                SettingsToggleRow(
++                    title: "Because You Watched",
++                    subtitle: "Rows of titles like the ones you watched last, under Continue Watching",
++                    isOn: $forkBecauseRows,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Top 10 Numbers",
++                    subtitle: "Big rank numbers on rows whose name says Top 10",
++                    isOn: $forkTop10,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Episodes Left",
++                    subtitle: "Show how many aired episodes are left on Continue Watching cards",
++                    isOn: $forkEpisodesLeft,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Find Sources Ahead",
++                    subtitle: "Start searching sources when a show page or Continue Watching card is focused",
++                    isOn: $forkPrefetch,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Warm Up Links",
++                    subtitle: "Open the focused source link ahead and mark dead links",
++                    isOn: $forkWarmup,
++                    accentColor: accentColor
++                )
++
+                 SettingsToggleRow(
+                     title: L10n.string(
+                         "tvos_layout_full_dates",
+diff --git a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
+index cf4468c8..338e7fb1 100644
+--- a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
++++ b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
+@@ -44,7 +44,7 @@ class NetflixSearchViewModel: ObservableObject {
+ 
+         $searchText
+             .removeDuplicates()
+-            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
++            .debounce(for: .milliseconds(1000), scheduler: DispatchQueue.main) // Fork: 1 s (was 500 ms) so remote typing does not search every letter
+             .sink { [weak self] text in
+                 self?.performSearch(query: text)
+             }
+diff --git a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
+index 26082312..31120e15 100644
+--- a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
++++ b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
+@@ -61,7 +61,7 @@ class SearchViewModel: ObservableObject {
+ 
+         $searchText
+             .removeDuplicates()
+-            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
++            .debounce(for: .milliseconds(1000), scheduler: DispatchQueue.main) // Fork: 1 s (was 500 ms) so remote typing does not search every letter
+             .sink { [weak self] text in
+                 self?.performSearch(query: text)
+             }
