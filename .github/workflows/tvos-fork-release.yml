@@ -6,6 +6,8 @@ name: tvOS Fork Release
 # push to that branch is rebuilt within about 6 hours. A change to /tvos-patches or this file
 # also triggers a rebuild.
 
+# Retired 2026-10-15: the Apple TV fork now builds from bobsupra/NuvioTVOS
+# (bob-fork-release.yml). Kept for manual runs only.
 on:
   workflow_dispatch:
     inputs:
@@ -13,12 +15,6 @@ on:
         description: Build even if a release for this source/fork commit already exists
         type: boolean
         default: false
-  schedule:
-    - cron: "53 */6 * * *" # every 6 hours (hourly runs got Actions disabled on this fork)
-  push:
-    paths:
-      - "tvos-patches/**"
-      - ".github/workflows/tvos-fork-release.yml"
 
 permissions:
   contents: write
