@@ -1,10 +1,11 @@
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
 new file mode 100644
-index 00000000..7bf9ad4f
+index 00000000..e3c1e745
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
-@@ -0,0 +1,416 @@
+@@ -0,0 +1,417 @@
 +import Foundation
++import SwiftUI
 +
 +// MARK: - Fork: Infuse subtitles
 +
