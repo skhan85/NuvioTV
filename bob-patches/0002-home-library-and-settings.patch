@@ -33,10 +33,10 @@ index 00000000..4e34e39a
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
 new file mode 100644
-index 00000000..4623b933
+index 00000000..e88ba85b
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,175 @@
 +import SwiftUI
 +
 +// MARK: - Fork: Top 10 numerals
@@ -146,6 +146,70 @@ index 00000000..4623b933
 +              let left = forkEpisodesLeft, left > 0 else { return remainingText }
 +        let eps = left == 1 ? "1 ep left" : "\(left) eps left"
 +        return remainingText.isEmpty ? eps : "\(remainingText) · \(eps)"
++    }
++}
++
++// MARK: - Fork: full stream details
++
++/// Fork: shows all of a source's description in the picker. The first line (usually the title)
++/// spans the card; the rest flow into two columns, so a long AIOStreams format (quality, HDR,
++/// audio, languages, size, cache state…) fits without being cut off.
++struct ForkStreamCardDetails: View {
++    let description: String
++
++    private var lines: [String] {
++        description.components(separatedBy: .newlines)
++            .map { $0.trimmingCharacters(in: .whitespaces) }
++            .filter { !$0.isEmpty }
++    }
++
++    var body: some View {
++        let lines = lines
++        VStack(alignment: .leading, spacing: 8) {
++            if let first = lines.first {
++                Text(first)
++                    .font(.system(size: 26, weight: .medium))
++                    .foregroundColor(.white.opacity(0.78))
++                    .lineLimit(2)
++                    .fixedSize(horizontal: false, vertical: true)
++            }
++            if lines.count > 1 {
++                LazyVGrid(columns: [GridItem(.flexible(), spacing: 28, alignment: .topLeading),
++                                    GridItem(.flexible(), spacing: 28, alignment: .topLeading)],
++                          alignment: .leading, spacing: 6) {
++                    ForEach(Array(lines.dropFirst().enumerated()), id: \.offset) { _, line in
++                        Text(line)
++                            .font(.system(size: 24, weight: .regular))
++                            .foregroundColor(.white.opacity(0.62))
++                            .lineLimit(2)
++                            .fixedSize(horizontal: false, vertical: true)
++                            .frame(maxWidth: .infinity, alignment: .leading)
++                    }
++                }
++            }
++        }
++    }
++
++    /// "12.4 GB" from the add-on's size or a size in the stream's text, nil when unknown.
++    static func sizeText(for stream: NuvioStream) -> String? {
++        guard let bytes = StreamBadgeSizing.fileSizeBytes(for: stream) else { return nil }
++        let gib = Double(bytes) / 1_073_741_824
++        if gib >= 1 { return String(format: "%.1f GB", gib) }
++        return "\(Int((Double(bytes) / 1_048_576).rounded())) MB"
++    }
++}
++
++struct ForkStreamSizePill: View {
++    let text: String
++
++    var body: some View {
++        Text(text)
++            .font(.system(size: 24, weight: .bold))
++            .foregroundColor(.black)
++            .padding(.horizontal, 14)
++            .padding(.vertical, 4)
++            .background(Color.white.opacity(0.9), in: Capsule())
++            .fixedSize()
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InsightsFork.swift b/tvosApp/NuvioTV/Sources/Fork/InsightsFork.swift

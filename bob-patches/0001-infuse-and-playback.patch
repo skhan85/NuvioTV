@@ -555,7 +555,7 @@ index 312aa38e..c68a1698 100644
          guard let focusedMeta, isVisible(focusedMeta) else { return nil }
          return focusedMeta
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index d547368e..e30b1d90 100644
+index d547368e..6716aa00 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 @@ -397,6 +397,14 @@ struct DetailsScreen: View {
@@ -638,6 +638,46 @@ index d547368e..e30b1d90 100644
                              .onAppear {
                                  if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
                                     index >= streamsToShow.count - 4,
+@@ -7985,11 +8030,18 @@ private struct TvStreamCard: View {
+                         )
+                     }
+ 
+-                    Text(primaryName)
+-                        .font(.system(size: 34, weight: .bold))
+-                        .foregroundColor(.white)
+-                        .lineLimit(2)
+-                        .fixedSize(horizontal: false, vertical: true)
++                    // Fork: the file size sits next to the source name, always (from the add-on's
++                    // size, or a size written in its text), unless the size badge already shows it.
++                    HStack(alignment: .firstTextBaseline, spacing: 16) {
++                        Text(primaryName)
++                            .font(.system(size: 34, weight: .bold))
++                            .foregroundColor(.white)
++                            .lineLimit(2)
++                            .fixedSize(horizontal: false, vertical: true)
++                        if fileSizeLabel == nil, let size = ForkStreamCardDetails.sizeText(for: stream) {
++                            ForkStreamSizePill(text: size)
++                        }
++                    }
+ 
+                     if let secondaryName {
+                         Text(secondaryName)
+@@ -8000,12 +8052,9 @@ private struct TvStreamCard: View {
+                     }
+ 
+                     if let description = stream.description, !description.isEmpty {
+-                        Text(description)
+-                            .font(.system(size: 26, weight: .regular))
+-                            .foregroundColor(.white.opacity(0.62))
+-                            .lineSpacing(5)
+-                            .lineLimit(6)
+-                            .fixedSize(horizontal: false, vertical: true)
++                        // Fork: every line of the add-on's text, laid out in two columns so the
++                        // card stays compact (was cut off after six lines).
++                        ForkStreamCardDetails(description: description)
+                     }
+ 
+                     if showImportedBadges && badgePlacement == .bottom {
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
 index 04c4b244..92d5a1f1 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
