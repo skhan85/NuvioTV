@@ -1,9 +1,9 @@
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
 new file mode 100644
-index 00000000..83368ca6
+index 00000000..7bf9ad4f
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
-@@ -0,0 +1,303 @@
+@@ -0,0 +1,416 @@
 +import Foundation
 +
 +// MARK: - Fork: Infuse subtitles
@@ -189,6 +189,8 @@ index 00000000..83368ca6
 +/// Home offers the next aired episode and opens its sources after ten seconds unless cancelled.
 +enum InfuseUpNext {
 +    static let countdownSeconds = 10
++    /// `fork_upnext_same_source` = false: Up Next opens the source list instead of playing.
++    static let sameSourceKey = "fork_upnext_same_source"
 +
 +    struct Offer: Identifiable {
 +        let id = UUID()
@@ -218,6 +220,117 @@ index 00000000..83368ca6
 +        formatter.dateFormat = "yyyy-MM-dd"
 +        formatter.timeZone = TimeZone(identifier: "UTC")
 +        return String(released.prefix(10)) <= formatter.string(from: today)
++    }
++}
++
++// MARK: - Fork: More like this after an Infuse movie
++
++/// Fork: when Infuse hands back a movie at its end, Home shows a row of TMDB recommendations for it.
++/// Picking one opens its Details page. Off switch: `UserDefaults` key `fork_more_like_this_after_movie`.
++enum InfuseMoreLikeThis {
++    static let enabledKey = "fork_more_like_this_after_movie"
++    static var enabled: Bool { UserDefaults.standard.object(forKey: enabledKey) as? Bool ?? true }
++
++    struct Offer: Identifiable {
++        let id = UUID()
++        let finished: NuvioMeta
++        let titles: [RelatedTitle]
++    }
++}
++
++struct InfuseMoreLikeThisView: View {
++    let offer: InfuseMoreLikeThis.Offer
++    let onOpen: (RelatedTitle) -> Void
++    let onClose: () -> Void
++
++    @FocusState private var focused: String?
++
++    private var backdrop: String? {
++        let id = focused ?? offer.titles.first?.id
++        let title = offer.titles.first { $0.id == id }
++        return title?.backdropURL ?? title?.posterURL
++    }
++
++    private var focusedTitle: RelatedTitle? {
++        let id = focused ?? offer.titles.first?.id
++        return offer.titles.first { $0.id == id }
++    }
++
++    var body: some View {
++        ZStack(alignment: .bottomLeading) {
++            Color.black.ignoresSafeArea()
++            if let backdrop, let url = URL(string: backdrop) {
++                AsyncImage(url: url) { image in
++                    image.resizable().aspectRatio(contentMode: .fill)
++                } placeholder: { Color.black }
++                .frame(maxWidth: .infinity, maxHeight: .infinity)
++                .clipped()
++                .ignoresSafeArea()
++                .animation(.easeInOut(duration: 0.3), value: backdrop)
++            }
++            LinearGradient(colors: [.black.opacity(0.35), .black.opacity(0.75), .black.opacity(0.95)],
++                           startPoint: .top, endPoint: .bottom)
++                .ignoresSafeArea()
++
++            VStack(alignment: .leading, spacing: 24) {
++                Text("Because you watched \(offer.finished.name)")
++                    .font(.headline)
++                    .foregroundStyle(.white.opacity(0.75))
++                if let title = focusedTitle {
++                    VStack(alignment: .leading, spacing: 10) {
++                        Text(title.name)
++                            .font(.system(size: 52, weight: .bold))
++                            .foregroundStyle(.white)
++                            .lineLimit(1)
++                        HStack(spacing: 16) {
++                            if let year = title.year, !year.isEmpty { Text(year) }
++                            if let rating = title.rating, rating > 0 {
++                                Label(String(format: "%.1f", rating), systemImage: "star.fill")
++                            }
++                        }
++                        .font(.callout)
++                        .foregroundStyle(.white.opacity(0.8))
++                        if let overview = title.overview, !overview.isEmpty {
++                            Text(overview)
++                                .font(.callout)
++                                .foregroundStyle(.white.opacity(0.85))
++                                .lineLimit(3)
++                                .frame(maxWidth: 1100, alignment: .leading)
++                        }
++                    }
++                }
++                ScrollView(.horizontal, showsIndicators: false) {
++                    LazyHStack(spacing: 32) {
++                        ForEach(offer.titles) { title in
++                            Button { onOpen(title) } label: {
++                                AsyncImage(url: title.posterURL.flatMap(URL.init(string:))) { image in
++                                    image.resizable().aspectRatio(contentMode: .fill)
++                                } placeholder: {
++                                    ZStack {
++                                        Color.white.opacity(0.08)
++                                        Text(title.name).font(.caption).multilineTextAlignment(.center).padding(8)
++                                    }
++                                }
++                                .frame(width: 200, height: 300)
++                                .clipShape(RoundedRectangle(cornerRadius: 14))
++                            }
++                            .buttonStyle(.card)
++                            .focused($focused, equals: title.id)
++                        }
++                    }
++                    .padding(.vertical, 40)
++                    .padding(.horizontal, 4)
++                }
++                .scrollClipDisabled()
++                Text("Press Menu to close")
++                    .font(.caption)
++                    .foregroundStyle(.white.opacity(0.55))
++            }
++            .padding(.horizontal, 80)
++            .padding(.bottom, 50)
++        }
++        .onExitCommand { onClose() }
++        .onAppear { focused = offer.titles.first?.id }
 +    }
 +}
 +
@@ -308,20 +421,21 @@ index 00000000..83368ca6
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 312aa38e..d31742ae 100644
+index 312aa38e..9beb3523 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -352,6 +352,9 @@ struct ContentView: View {
+@@ -352,6 +352,10 @@ struct ContentView: View {
      @State private var playbackDidStart = false
      @State private var reopenStreamPickerOnDetails = false
      @State private var reopenStreamPickerEpisode: NuvioVideo?
 +    /// Fork: the next episode offered after Infuse handed back an episode at its end.
 +    @State private var infuseUpNext: InfuseUpNext.Offer?
 +    @State private var infuseUpNextTask: Task<Void, Never>?
++    @State private var infuseMoreLikeThis: InfuseMoreLikeThis.Offer?
      /// Title whose liquid-glass quick-actions menu is showing (long-press on a
      /// card). Presented as an overlay over the tab view, like Details/Player.
      @State private var cardMenuMeta: NuvioMeta?
-@@ -405,6 +408,24 @@ struct ContentView: View {
+@@ -405,6 +409,42 @@ struct ContentView: View {
          ZStack {
              ProfileScopedRootBackground()
  
@@ -340,13 +454,31 @@ index 312aa38e..d31742ae 100644
 +                        infuseUpNext = nil
 +                    }
 +                } message: {
-+                    Text("Opens automatically in \(InfuseUpNext.countdownSeconds) seconds.")
++                    Text("Starts automatically in \(InfuseUpNext.countdownSeconds) seconds.")
++                }
++
++            // Fork: More like this after an Infuse movie (see `offerInfuseMoreLikeThis`).
++            Color.clear
++                .frame(width: 0, height: 0)
++                .fullScreenCover(item: $infuseMoreLikeThis) { offer in
++                    InfuseMoreLikeThisView(
++                        offer: offer,
++                        onOpen: { title in
++                            infuseMoreLikeThis = nil
++                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
++                                withAnimation(.easeInOut(duration: 0.28)) {
++                                    openDetailsRoot(id: title.id, type: title.type)
++                                }
++                            }
++                        },
++                        onClose: { infuseMoreLikeThis = nil }
++                    )
 +                }
 +
              switch activeScreen {
              case .login:
                  // `.login` is also the value this state starts at, before
-@@ -938,6 +959,11 @@ struct ContentView: View {
+@@ -938,6 +978,14 @@ struct ContentView: View {
          let isEpisode = session.meta.isSeries && session.season != nil && session.episode != nil
          guard !session.meta.isSeries || isEpisode else { return }
  
@@ -354,11 +486,14 @@ index 312aa38e..d31742ae 100644
 +           let season = session.season, let episode = session.episode {
 +            offerInfuseUpNext(meta: session.meta, season: season, episode: episode)
 +        }
++        if !session.meta.isSeries, progress >= WatchProgressLedger.completionFraction {
++            offerInfuseMoreLikeThis(meta: session.meta)
++        }
 +
          if RemoteTrackingState.isProgressSourceAuthenticated {
              // Keep the provider-backed path aligned with built-in playback:
              // optimistic local state plus one pause/stop report. A zero
-@@ -984,6 +1010,10 @@ struct ContentView: View {
+@@ -984,6 +1032,10 @@ struct ContentView: View {
              return
          }
  
@@ -369,11 +504,23 @@ index 312aa38e..d31742ae 100644
          if progress >= WatchProgressLedger.completionFraction {
              if let duration {
                  ContinueWatchingStore.markPlaybackCompleted(
-@@ -1010,6 +1040,50 @@ struct ContentView: View {
+@@ -1010,6 +1062,129 @@ struct ContentView: View {
          }
      }
  
 +    /// Fork: finds the next aired episode and offers it; it opens by itself after the countdown.
++    private func offerInfuseMoreLikeThis(meta: NuvioMeta) {
++        guard InfuseMoreLikeThis.enabled else { return }
++        Task { @MainActor in
++            let titles = await TmdbDetailsService.fetchMoreLikeThis(for: meta, limit: 16)
++                .filter { $0.id != meta.id }
++            guard !titles.isEmpty else { return }
++            // Let Home settle after Infuse hands back before the row appears.
++            try? await Task.sleep(nanoseconds: 700_000_000)
++            infuseMoreLikeThis = InfuseMoreLikeThis.Offer(finished: meta, titles: titles)
++        }
++    }
++
 +    private func offerInfuseUpNext(meta: NuvioMeta, season: Int, episode: Int) {
 +        infuseUpNextTask?.cancel()
 +        infuseUpNextTask = Task { @MainActor in
@@ -395,11 +542,78 @@ index 312aa38e..d31742ae 100644
 +        }
 +    }
 +
-+    /// Opens the offered episode's sources, the same way a Continue Watching card does.
++    /// Plays the offered episode on the same kind of source as the last one (release group /
++    /// binge group, quality, debrid), the way the iPhone fork's Up Next does. If no source is
++    /// found automatically, or `fork_upnext_same_source` is off, its source list opens instead.
 +    private func startInfuseUpNext(_ offer: InfuseUpNext.Offer) {
 +        infuseUpNextTask?.cancel()
 +        infuseUpNextTask = nil
 +        infuseUpNext = nil
++        guard UserDefaults.standard.object(forKey: InfuseUpNext.sameSourceKey) as? Bool ?? true else {
++            openInfuseUpNextPicker(offer)
++            return
++        }
++        let item = ContinueWatchingItem(
++            meta: offer.meta,
++            streamUrl: "",
++            position: 1,
++            duration: 120,
++            lastWatchedAt: Date(),
++            season: offer.video.season,
++            episode: offer.video.episode,
++            released: offer.video.released,
++            isUpNext: true
++        )
++        let profileId = profileViewModel.activeProfile?.id
++        resolvingContinueWatchingItem = item
++        continueWatchingLoadingMessage = L10n.string("player_searching_sources", fallback: "Searching sources…")
++        let startupToken = PlaybackStartupTiming.start(title: offer.meta.name)
++        continueWatchingStartupBenchmarkToken = startupToken
++        isResolvingContinueWatchingStream = true
++        continueWatchingPlaybackTask = Task {
++            let prepared = await Self.resolveNextEpisodeStream(
++                episode: offer.video,
++                seriesMeta: offer.meta,
++                profileId: profileId,
++                startupToken: startupToken
++            )
++            guard !Task.isCancelled, PlaybackStartupTiming.isActive(token: startupToken) else {
++                PlaybackStartupTiming.cancel(token: startupToken)
++                if continueWatchingStartupBenchmarkToken == startupToken { continueWatchingStartupBenchmarkToken = nil }
++                return
++            }
++            continueWatchingPlaybackTask = nil
++            if let prepared {
++                continueWatchingLoadingMessage = L10n.string("player_loading_building", fallback: "Building player…")
++                playbackEpisodes = offer.meta.videos ?? []
++                playbackCurrentEpisode = offer.video
++                presentPlayback(
++                    url: prepared.url,
++                    meta: offer.meta,
++                    subtitle: prepared.subtitleLine,
++                    externalSubtitles: prepared.subtitles,
++                    resumeFrom: nil,
++                    httpHeaders: prepared.httpHeaders,
++                    filename: prepared.filename,
++                    videoSize: prepared.videoSize,
++                    videoHash: prepared.videoHash,
++                    startupBenchmarkToken: startupToken
++                )
++                if continueWatchingStartupBenchmarkToken == startupToken { continueWatchingStartupBenchmarkToken = nil }
++                isResolvingContinueWatchingStream = false
++                resolvingContinueWatchingItem = nil
++            } else {
++                PlaybackStartupTiming.cancel(token: startupToken)
++                if continueWatchingStartupBenchmarkToken == startupToken { continueWatchingStartupBenchmarkToken = nil }
++                isResolvingContinueWatchingStream = false
++                resolvingContinueWatchingItem = nil
++                openInfuseUpNextPicker(offer)
++            }
++        }
++    }
++
++    /// Opens the offered episode's sources, the same way a Continue Watching card does.
++    private func openInfuseUpNextPicker(_ offer: InfuseUpNext.Offer) {
 +        if case .details(let id, _) = activeScreen, id == offer.meta.id {
 +            // Same title already open: leave Details first so it reopens on the new episode.
 +            activeScreen = .main
@@ -420,7 +634,7 @@ index 312aa38e..d31742ae 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1450,19 +1524,50 @@ struct ContentView: View {
+@@ -1450,19 +1625,50 @@ struct ContentView: View {
          filename: String? = nil,
          videoSize: Int64? = nil,
          videoHash: String? = nil,
@@ -473,7 +687,7 @@ index 312aa38e..d31742ae 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -1528,6 +1633,22 @@ struct ContentView: View {
+@@ -1528,6 +1734,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -496,7 +710,7 @@ index 312aa38e..d31742ae 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -3387,6 +3508,7 @@ enum ProfileDisplayName {
+@@ -3387,6 +3609,7 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -504,7 +718,7 @@ index 312aa38e..d31742ae 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -3702,6 +3824,10 @@ struct TVHomeView: View {
+@@ -3702,6 +3925,10 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -515,7 +729,7 @@ index 312aa38e..d31742ae 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      /// Derived once when Continue Watching changes. Recomputing these from the
      /// entire history inside `body` made every focus update scale with the
-@@ -3776,6 +3902,26 @@ struct TVHomeView: View {
+@@ -3776,6 +4003,26 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -542,7 +756,7 @@ index 312aa38e..d31742ae 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -6042,6 +6188,7 @@ struct TVHomeView: View {
+@@ -6042,6 +6289,7 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -550,7 +764,7 @@ index 312aa38e..d31742ae 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -6074,7 +6221,7 @@ struct TVHomeView: View {
+@@ -6074,7 +6322,7 @@ struct TVHomeView: View {
          let pinnedSections = ((continueWatching.isEmpty || !continueWatchingVisible) ? [] : [resumeSection])
              + ((upcomingMetas.isEmpty || !continueWatchingVisible) ? [] : [upcomingSection])
              + [localTitlesSection, jellyfinSection].compactMap { $0 }
@@ -559,7 +773,7 @@ index 312aa38e..d31742ae 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -6178,6 +6325,15 @@ struct TVHomeView: View {
+@@ -6178,6 +6426,15 @@ struct TVHomeView: View {
          })
      }
  

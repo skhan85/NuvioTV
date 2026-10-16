@@ -756,10 +756,10 @@ index 1f2085ea..fc4d863a 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 62417178..37c105b0 100644
+index 62417178..5da59cda 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -2994,6 +2994,12 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -2994,6 +2994,14 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.upNextFromFurthestEpisode) private var upNextFromFurthestEpisode = true
      @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -769,10 +769,12 @@ index 62417178..37c105b0 100644
 +    @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
 +    @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
 +    @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
++    @AppStorage("fork_upnext_same_source") private var forkUpNextSameSource = true
++    @AppStorage("fork_more_like_this_after_movie") private var forkMoreLikeThis = true
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3321,6 +3327,38 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3321,6 +3329,50 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -807,11 +809,23 @@ index 62417178..37c105b0 100644
 +                    isOn: $forkWarmup,
 +                    accentColor: accentColor
 +                )
++                SettingsToggleRow(
++                    title: "Up Next on Same Source",
++                    subtitle: "After Infuse, play the next episode from the same kind of source instead of opening the source list",
++                    isOn: $forkUpNextSameSource,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "More Like This After Movies",
++                    subtitle: "When a movie finishes in Infuse, show recommendations",
++                    isOn: $forkMoreLikeThis,
++                    accentColor: accentColor
++                )
 +
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -4215,7 +4253,7 @@ private struct IntegrationSettingsView: View {
+@@ -4215,7 +4267,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -820,7 +834,7 @@ index 62417178..37c105b0 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -4526,7 +4564,7 @@ private struct TmdbOptionsSheet: View {
+@@ -4526,7 +4578,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -829,7 +843,7 @@ index 62417178..37c105b0 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -11789,8 +11827,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -11789,8 +11841,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs
