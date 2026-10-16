@@ -1,9 +1,9 @@
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
 new file mode 100644
-index 00000000..6666ab3f
+index 00000000..83368ca6
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
-@@ -0,0 +1,292 @@
+@@ -0,0 +1,303 @@
 +import Foundation
 +
 +// MARK: - Fork: Infuse subtitles
@@ -24,23 +24,34 @@ index 00000000..6666ab3f
 +    static let maxAddonSubtitles = 1
 +
 +    /// The subtitles to hand Infuse: the stream's own, then the best add-on match, relayed.
++    /// Most subtitles Infuse is handed (the external-player link carries at most 8).
++    static let maxSubtitles = 8
++
 +    static func subtitles(streamSubtitles: [NuvioSubtitle], addonSubtitles: [NuvioSubtitle],
 +                          videoURL: String) -> [NuvioSubtitle] {
-+        let own = streamSubtitles
-+        var seen = Set(own.map(\.url))
-+        var picked: [NuvioSubtitle] = []
++        // Infuse turns on the first subtitle it is given, and the link holds only 8, so the
++        // viewer's languages go first: for each language, the stream's own subtitles in it, then
++        // the best add-on match. Other languages follow only if there is room.
++        var seen = Set<String>()
++        var ordered: [NuvioSubtitle] = []
++        var addonPicked = 0
++        func matches(_ sub: NuvioSubtitle, _ language: String) -> Bool {
++            SubtitleLanguagePreferences.matches(sub.language, target: language) ||
++                SubtitleLanguagePreferences.matches(sub.label, target: language)
++        }
 +        for language in preferredLanguages() {
-+            guard picked.count < maxAddonSubtitles else { break }
-+            if let match = addonSubtitles.first(where: { sub in
-+                !seen.contains(sub.url) &&
-+                    (SubtitleLanguagePreferences.matches(sub.language, target: language) ||
-+                     SubtitleLanguagePreferences.matches(sub.label, target: language))
-+            }) {
++            for sub in streamSubtitles where matches(sub, language) && seen.insert(sub.url).inserted {
++                ordered.append(sub)
++            }
++            if addonPicked < maxAddonSubtitles,
++               let match = addonSubtitles.first(where: { matches($0, language) && !seen.contains($0.url) }) {
 +                seen.insert(match.url)
-+                picked.append(match)
++                ordered.append(match)
++                addonPicked += 1
 +            }
 +        }
-+        return (own + picked).enumerated().map { index, sub in
++        for sub in streamSubtitles where seen.insert(sub.url).inserted { ordered.append(sub) }
++        return ordered.prefix(maxSubtitles).enumerated().map { index, sub in
 +            NuvioSubtitle(
 +                url: relayURL(sub.url, language: sub.language,
 +                              name: sub.label ?? sub.source ?? SubtitleLanguagePreferences.humanLanguageName(from: sub.language),
@@ -297,7 +308,7 @@ index 00000000..6666ab3f
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 312aa38e..c68a1698 100644
+index 312aa38e..d31742ae 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -352,6 +352,9 @@ struct ContentView: View {
@@ -409,7 +420,7 @@ index 312aa38e..c68a1698 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1450,13 +1524,41 @@ struct ContentView: View {
+@@ -1450,19 +1524,50 @@ struct ContentView: View {
          filename: String? = nil,
          videoSize: Int64? = nil,
          videoHash: String? = nil,
@@ -452,7 +463,17 @@ index 312aa38e..c68a1698 100644
          // Put the best complete (non-forced) preferred-language subtitle first: players
          // that read only the first `sub=` then get the full dialogue track, not a forced one.
          let subtitleURLs = forwardSubtitles
-@@ -1528,6 +1630,22 @@ struct ContentView: View {
+             ? SubtitleLanguagePreferences.bestCompleteFirst(
+                 externalSubtitles,
+-                preferredLanguages: SubtitleLanguagePreferences.orderedFromDefaults(defaults: store)
++                // Fork: with "System", the Apple TV's language (as the Infuse hand-off picks it).
++                preferredLanguages: player == .infuse
++                    ? InfuseForkSubtitles.preferredLanguages()
++                    : SubtitleLanguagePreferences.orderedFromDefaults(defaults: store)
+               ).compactMap { URL(string: $0.url) }
+             : []
+ 
+@@ -1528,6 +1633,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -475,7 +496,7 @@ index 312aa38e..c68a1698 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -3387,6 +3505,7 @@ enum ProfileDisplayName {
+@@ -3387,6 +3508,7 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -483,7 +504,7 @@ index 312aa38e..c68a1698 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -3702,6 +3821,10 @@ struct TVHomeView: View {
+@@ -3702,6 +3824,10 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -494,7 +515,7 @@ index 312aa38e..c68a1698 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      /// Derived once when Continue Watching changes. Recomputing these from the
      /// entire history inside `body` made every focus update scale with the
-@@ -3776,6 +3899,26 @@ struct TVHomeView: View {
+@@ -3776,6 +3902,26 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -521,7 +542,7 @@ index 312aa38e..c68a1698 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -6042,6 +6185,7 @@ struct TVHomeView: View {
+@@ -6042,6 +6188,7 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -529,7 +550,7 @@ index 312aa38e..c68a1698 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -6074,7 +6218,7 @@ struct TVHomeView: View {
+@@ -6074,7 +6221,7 @@ struct TVHomeView: View {
          let pinnedSections = ((continueWatching.isEmpty || !continueWatchingVisible) ? [] : [resumeSection])
              + ((upcomingMetas.isEmpty || !continueWatchingVisible) ? [] : [upcomingSection])
              + [localTitlesSection, jellyfinSection].compactMap { $0 }
@@ -538,7 +559,7 @@ index 312aa38e..c68a1698 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -6178,6 +6322,15 @@ struct TVHomeView: View {
+@@ -6178,6 +6325,15 @@ struct TVHomeView: View {
          })
      }
  
