@@ -1,0 +1,43 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
+index 60d5e22c..ae8ef3d6 100644
+--- a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
++++ b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
+@@ -4326,8 +4326,7 @@ enum EpisodeMetadataEnrichment {
+             return nil
+         }
+ 
+-        let apiKey = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
+-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
++        let apiKey = ForkSecrets.tmdbKey(ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey))
+         guard !apiKey.isEmpty else { return nil }
+ 
+         let preferredLang = TmdbDetailsService.preferredLanguage
+diff --git a/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift b/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
+index 7a99befa..2df3f5bf 100644
+--- a/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
++++ b/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
+@@ -588,9 +588,8 @@ enum RemoteTrackingState {
+             return ProfileSettings.isActiveStore(store)
+                 && SimklRuntimeSession.authenticatedState(store: store) != nil
+         case .tmdb:
+-            let apiKey = store.string(forKey: SettingsKey.tmdbApiKey)?
+-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+-            let enabled = (store.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? false
++            let apiKey = ForkSecrets.tmdbKey(store.string(forKey: SettingsKey.tmdbApiKey))
++            let enabled = (store.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? !ForkSecrets.tmdbApiKey.isEmpty
+             let useMoreLikeThis = (store.object(forKey: SettingsKey.tmdbUseMoreLikeThis) as? Bool) ?? true
+             return enabled && !apiKey.isEmpty && useMoreLikeThis
+         }
+diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift
+index fa9063c4..ee5574aa 100644
+--- a/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift
++++ b/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift
+@@ -103,7 +103,7 @@ struct CollectionSourceResolver {
+     // MARK: - TMDB
+ 
+     private func browseTmdb(_ source: NuvioCollectionSource, page: Int) async throws -> CatalogPage {
+-        guard let apiKey = nonEmpty(settings.string(forKey: SettingsKey.tmdbApiKey)) else {
++        guard let apiKey = nonEmpty(ForkSecrets.tmdbKey(settings.string(forKey: SettingsKey.tmdbApiKey))) else {
+             throw CollectionSourceError.missingTmdbAPIKey
+         }
+ 

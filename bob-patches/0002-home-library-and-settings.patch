@@ -1,16 +1,17 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index e1e294e2..061a8685 100644
+index e1e294e2..678da3f0 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-@@ -207,11 +207,15 @@ enum TmdbDetailsService {
+@@ -205,13 +205,15 @@ enum TmdbDetailsService {
+ 
+     static var currentApiKey: String? { apiKey }
      private static var apiKey: String? {
-         let key = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
-             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
--        return key.isEmpty ? nil : key
-+        // Fork: fall back to the TMDB key built into this fork (repository secret), so no key
+-        let key = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
+-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
++        // Fork: falls back to the TMDB key built into this fork (repository secret), so no key
 +        // has to be typed on the remote.
-+        if key.isEmpty { return ForkSecrets.tmdbApiKey.isEmpty ? nil : ForkSecrets.tmdbApiKey }
-+        return key
++        let key = ForkSecrets.tmdbKey(ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey))
+         return key.isEmpty ? nil : key
      }
  
      private static var isEnabled: Bool {
@@ -22,21 +23,21 @@ index e1e294e2..061a8685 100644
      static var preferredLanguage: String {
 diff --git a/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
 new file mode 100644
-index 00000000..4e34e39a
+index 00000000..4e8c1b71
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
 @@ -0,0 +1,5 @@
-+// Fork: build-time values. The release workflow rewrites this file from repository secrets; the
-+// checked-in copy is empty so the project builds without them.
++// Fork: build-time values. The release workflow rewrites `tmdbApiKey` from the repository secret;
++// the checked-in copy is empty so the project builds without it.
 +enum ForkSecrets {
 +    static let tmdbApiKey = ""
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
 new file mode 100644
-index 00000000..e88ba85b
+index 00000000..b9fda58a
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,183 @@
 +import SwiftUI
 +
 +// MARK: - Fork: Top 10 numerals
@@ -210,6 +211,14 @@ index 00000000..e88ba85b
 +            .padding(.vertical, 4)
 +            .background(Color.white.opacity(0.9), in: Capsule())
 +            .fixedSize()
++    }
++}
++
++extension ForkSecrets {
++    /// The TMDB key to use: the one saved in Settings, else the one built into this fork.
++    static func tmdbKey(_ stored: String?) -> String {
++        let key = stored?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
++        return key.isEmpty ? tmdbApiKey : key
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InsightsFork.swift b/tvosApp/NuvioTV/Sources/Fork/InsightsFork.swift
@@ -747,7 +756,7 @@ index 1f2085ea..fc4d863a 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 62417178..61066cdb 100644
+index 62417178..37c105b0 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 @@ -2994,6 +2994,12 @@ private struct LayoutDiscoverySettingsView: View {
@@ -802,6 +811,34 @@ index 62417178..61066cdb 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
+@@ -4215,7 +4253,7 @@ private struct IntegrationSettingsView: View {
+     }
+ 
+     private var tmdbHasApiKey: Bool {
+-        !tmdbApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
++        !ForkSecrets.tmdbKey(tmdbApiKey).isEmpty // Fork: the built-in key counts
+     }
+ 
+     private var mdbListHasApiKey: Bool {
+@@ -4526,7 +4564,7 @@ private struct TmdbOptionsSheet: View {
+     }
+ 
+     private var tmdbHasApiKey: Bool {
+-        !tmdbApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
++        !ForkSecrets.tmdbKey(tmdbApiKey).isEmpty // Fork: the built-in key counts
+     }
+ 
+     private var tmdbControlsEnabled: Bool {
+@@ -11789,8 +11827,7 @@ private enum StreamingServicesCollectionTemplate {
+ 
+     static func resolveLogoURLs() async -> [Int: String] {
+         var resolved = fallbackLogoURLs
+-        let key = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
+-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
++        let key = ForkSecrets.tmdbKey(ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey))
+         guard !key.isEmpty else { return resolved }
+ 
+         if let providers = await fetchWatchProviders(apiKey: key) {
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
 index 3af8d0b6..0cd610a9 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift

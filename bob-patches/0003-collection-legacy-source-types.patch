@@ -1,8 +1,18 @@
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-index 6a9f1cc8..9e4c3f98 100644
+index 6a9f1cc8..26829f72 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-@@ -2346,15 +2346,25 @@ final class CinemetaCatalogRepository: CatalogRepository {
+@@ -1159,8 +1159,7 @@ final class CinemetaCatalogRepository: CatalogRepository {
+         if let cached = cachedImdb(forTmdbId: tmdbId, type: primaryMedia) {
+             return cached
+         }
+-        let apiKey = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
+-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
++        let apiKey = ForkSecrets.tmdbKey(ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey))
+         // A TMDB-backed collection is an explicit source choice, independent
+         // of whether optional Details enrichment is enabled.
+         guard !apiKey.isEmpty else { return nil }
+@@ -2346,15 +2345,25 @@ final class CinemetaCatalogRepository: CatalogRepository {
                  contentType: source.type,
                  catalogId: source.catalogId
              ) else { continue }
