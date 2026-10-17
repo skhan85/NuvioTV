@@ -1052,7 +1052,7 @@ index bd849d27..3e977c3e 100644
          if streamDiscoveryMode == .shared {
              prepareSharedStreams(forId: streamId, type: type, forceRefresh: forceRefresh)
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index e91abf29..f7ab0979 100644
+index e91abf29..61c6280a 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 @@ -526,7 +526,8 @@ class PlayerViewModel: ObservableObject {
@@ -1065,7 +1065,7 @@ index e91abf29..f7ab0979 100644
  
      init(
          sessionCoordinator suppliedCoordinator: PlaybackSessionCoordinator? = nil,
-@@ -2107,7 +2108,17 @@ class PlayerViewModel: ObservableObject {
+@@ -2107,7 +2108,24 @@ class PlayerViewModel: ObservableObject {
          let targetURL = activeStreamURL
          let timeout = loadTimeoutSeconds
          loadWatchdogTask = Task { [weak self] in
@@ -1078,9 +1078,25 @@ index e91abf29..f7ab0979 100644
 +                try? await Task.sleep(nanoseconds: 1_000_000_000)
 +                if Task.isCancelled { return }
 +                let now = Date()
-+                let lastProgress = max(began, PlaybackStartupBenchmark.shared.lastEngineProgressAt ?? began)
-+                if now.timeIntervalSince(lastProgress) >= Double(timeout) || now.timeIntervalSince(began) >= 45 { break }
++                let reported = PlaybackStartupBenchmark.shared.lastEngineProgressAt.map { $0 > began } ?? false
++                if reported {
++                    // Engine reports startup steps (AetherEngine): fail over on a stall.
++                    let lastProgress = PlaybackStartupBenchmark.shared.lastEngineProgressAt ?? began
++                    if now.timeIntervalSince(lastProgress) >= Double(timeout) || now.timeIntervalSince(began) >= 45 { break }
++                } else if now.timeIntervalSince(began) >= 30 {
++                    // No step reports (MPV, or a source that never opened): plain 30 s limit.
++                    break
++                }
 +            }
              guard !Task.isCancelled, let self,
                    self.sessionCoordinator.lastLoadError == nil,
                    !self.currentLoadStarted,
+@@ -2125,7 +2143,7 @@ class PlayerViewModel: ObservableObject {
+                 LastPlaybackStreamStore.remove(metaId: meta.id, season: numbers?.season, episode: numbers?.episode)
+             }
+             self.attemptFailover(
+-                reason: "The source didn't start within \(self.loadTimeoutSeconds) seconds. Every available source was tried.",
++                reason: "The source didn't start in time. Every available source was tried.",
+                 toast: nil
+             )
+         }
