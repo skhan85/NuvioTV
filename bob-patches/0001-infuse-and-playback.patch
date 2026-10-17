@@ -1,3 +1,29 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
+index afc9092e..94bb5b93 100644
+--- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
++++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
+@@ -17,7 +17,7 @@ final class PlaybackDiagnosticExportServer: @unchecked Sendable {
+             self.stopOnQueue()
+             self.callback = changed
+             changed(.starting)
+-            guard report.count <= PlaybackDiagnosticTimeline.maximumBytes,
++            guard report.count <= 1_048_576, // fork: room for the engine log
+                   let host = Self.localIPv4Address() else {
+                 changed(.failed)
+                 return
+diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticLogStore.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticLogStore.swift
+index 3ce8bd2e..a5788891 100644
+--- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticLogStore.swift
++++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticLogStore.swift
+@@ -10,7 +10,7 @@ struct PlaybackDiagnosticLogEntry: Identifiable, Equatable, Sendable {
+ 
+ /// Recent playback diagnostics retained only in memory for the lifetime of the app.
+ final class PlaybackDiagnosticLogStore: @unchecked Sendable {
+-    static let shared = PlaybackDiagnosticLogStore()
++    static let shared = PlaybackDiagnosticLogStore(maxEntries: 3000, maxStoredBytes: 900 * 1024) // fork: keep a whole startup
+ 
+     private let lock = NSLock()
+     private let maxEntries: Int
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
 index e38dcf93..2de1b282 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
@@ -1038,6 +1064,47 @@ index b4a2abd1..f60c27b9 100644
          default:
              break
          }
+diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
+index 7040a4a8..793acf39 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
+@@ -31,7 +31,8 @@ private final class PlaybackDiagnosticHistoryModel: ObservableObject {
+         let request = requestID
+         message = "Preparing local download…"
+         PlaybackDiagnosticTimelineStore.shared.snapshot { [weak self] snapshot in
+-            guard let data = snapshot.timeline.encoded() else {
++            guard let timelineData = snapshot.timeline.encoded(),
++                  let data = Self.withEngineLog(timelineData) else {
+                 Task { @MainActor in
+                     guard let self, self.requestID == request else { return }
+                     self.message = "The diagnostic report could not be prepared."
+@@ -65,6 +66,26 @@ private final class PlaybackDiagnosticHistoryModel: ObservableObject {
+         }
+     }
+ 
++    /// Fork: append the in-memory player/engine log (already URL- and header-
++    /// sanitized by PlaybackDiagnosticLogStore) so an export shows what the
++    /// engine decided (display criteria, HDR routing, decoder), not just timings.
++    nonisolated static func withEngineLog(_ timeline: Data) -> Data? {
++        guard var object = (try? JSONSerialization.jsonObject(with: timeline)) as? [String: Any] else {
++            return timeline
++        }
++        let formatter = ISO8601DateFormatter()
++        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
++        var lines = PlaybackDiagnosticLogStore.shared.snapshot().map {
++            "\(formatter.string(from: $0.timestamp)) [\($0.source)] \($0.message)"
++        }
++        while true {
++            object["engineLog"] = lines
++            guard let data = try? JSONSerialization.data(withJSONObject: object) else { return timeline }
++            if data.count <= 1_000_000 || lines.isEmpty { return data }
++            lines.removeFirst(min(50, lines.count))
++        }
++    }
++
+     func stopExport() {
+         requestID = UUID()
+         server.stop()
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
 index bd849d27..3e977c3e 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
