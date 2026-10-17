@@ -1,3 +1,16 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
+index e38dcf93..2de1b282 100644
+--- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
++++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
+@@ -10,6 +10,8 @@ struct PlaybackDiagnosticTimeline: Codable, Sendable, Equatable {
+         case subtitleSelectionRequested, subtitleSelectionReturned, externalSubtitleRequested
+         case controlsShown, controlsHidden, settingsOpened, settingsClosed
+         case sidePanelOpened, sidePanelClosed, backPressed, sourceSelectionRequested
++        // Fork: the engine's startup steps, so the export shows where a slow start spends its time.
++        case engineDispatched, engineSourceOpened, engineStreamsProbed, engineDisplayPrepared, engineSessionConstructed
+     }
+ 
+     enum Engine: String, Codable, Sendable { case aether, mpv }
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
 new file mode 100644
 index 00000000..ccdd468e
@@ -990,6 +1003,31 @@ index 7324d93c..3c5b84ab 100644
                      }
  
                      if showImportedBadges && badgePlacement == .bottom {
+diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
+index b4a2abd1..d8662a99 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
+@@ -81,15 +81,15 @@ final class PlaybackStartupBenchmark {
+         let now = dateProvider()
+         switch name {
+         case "dispatched":
+-            if t_engineDispatched == nil { t_engineDispatched = now }
++            if t_engineDispatched == nil { t_engineDispatched = now; PlaybackTimelineRecorder.record(.engineDispatched) }
+         case "sourceOpened":
+-            if t_sourceOpened == nil { t_sourceOpened = now }
++            if t_sourceOpened == nil { t_sourceOpened = now; PlaybackTimelineRecorder.record(.engineSourceOpened) }
+         case "streamsProbed":
+-            if t_streamsProbed == nil { t_streamsProbed = now }
++            if t_streamsProbed == nil { t_streamsProbed = now; PlaybackTimelineRecorder.record(.engineStreamsProbed) }
+         case "displayPrepared":
+-            if t_displayPrepared == nil { t_displayPrepared = now }
++            if t_displayPrepared == nil { t_displayPrepared = now; PlaybackTimelineRecorder.record(.engineDisplayPrepared) }
+         case "sessionConstructed":
+-            if t_sessionConstructed == nil { t_sessionConstructed = now }
++            if t_sessionConstructed == nil { t_sessionConstructed = now; PlaybackTimelineRecorder.record(.engineSessionConstructed) }
+         default:
+             break
+         }
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
 index bd849d27..3e977c3e 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
