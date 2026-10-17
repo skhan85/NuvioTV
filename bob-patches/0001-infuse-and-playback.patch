@@ -1,9 +1,9 @@
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
 new file mode 100644
-index 00000000..aeff6051
+index 00000000..d4803946
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
-@@ -0,0 +1,413 @@
+@@ -0,0 +1,423 @@
 +import Foundation
 +import SwiftUI
 +
@@ -199,6 +199,16 @@ index 00000000..aeff6051
 +            let code = "S\(video.season) E\(video.episode)"
 +            return name.isEmpty ? "Up Next: \(code)" : "Up Next: \(code) · \(name)"
 +        }
++    }
++
++    /// Infuse stopped at (or near) the end: 90% in, or within the last 5 minutes (end credits; the
++    /// runtime is the metadata's, so the file can run past it).
++    static func reachedEnd(progress: Double?, position: Double?, duration: Double?) -> Bool {
++        if let position, let duration, position.isFinite, duration > 0, position > 0 {
++            return position >= duration * 0.9 || position >= duration - 300
++        }
++        if let progress, progress.isFinite { return progress >= 0.9 }
++        return false
 +    }
 +
 +    /// The episode after (season, episode) in air order, skipping specials and ones not aired yet.
@@ -418,7 +428,7 @@ index 00000000..aeff6051
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index e65a6389..de1d728d 100644
+index e65a6389..63bd02b1 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -356,6 +356,10 @@ struct ContentView: View {
@@ -475,22 +485,30 @@ index e65a6389..de1d728d 100644
              switch activeScreen {
              case .login:
                  // `.login` is also the value this state starts at, before
-@@ -942,6 +982,14 @@ struct ContentView: View {
+@@ -937,11 +977,22 @@ struct ContentView: View {
+             guard let duration, position.isFinite, position >= 0 else { return nil }
+             return position / duration
+         }
++        // Fork: Up Next / More like this. Infuse reports only the position it stopped at, and the
++        // runtime here comes from metadata, so a title watched to its end often lands past "100%"
++        // and fails the check below. Decide "finished" first: 90% in, or into the last 5 minutes.
++        if InfuseUpNext.reachedEnd(progress: progress, position: callback.position, duration: duration) {
++            if session.meta.isSeries, let season = session.season, let episode = session.episode {
++                offerInfuseUpNext(meta: session.meta, season: season, episode: episode)
++            } else if !session.meta.isSeries {
++                offerInfuseMoreLikeThis(meta: session.meta)
++            }
++        }
+         guard let progress, progress.isFinite, (0...1).contains(progress) else { return }
+ 
          let isEpisode = session.meta.isSeries && session.season != nil && session.episode != nil
          guard !session.meta.isSeries || isEpisode else { return }
  
-+        if isEpisode, progress >= WatchProgressLedger.completionFraction,
-+           let season = session.season, let episode = session.episode {
-+            offerInfuseUpNext(meta: session.meta, season: season, episode: episode)
-+        }
-+        if !session.meta.isSeries, progress >= WatchProgressLedger.completionFraction {
-+            offerInfuseMoreLikeThis(meta: session.meta)
-+        }
 +
          if RemoteTrackingState.isProgressSourceAuthenticated {
              // Keep the provider-backed path aligned with built-in playback:
              // optimistic local state plus one pause/stop report. A zero
-@@ -988,6 +1036,10 @@ struct ContentView: View {
+@@ -988,6 +1039,10 @@ struct ContentView: View {
              return
          }
  
@@ -501,7 +519,7 @@ index e65a6389..de1d728d 100644
          if progress >= WatchProgressLedger.completionFraction {
              if let duration {
                  ContinueWatchingStore.markPlaybackCompleted(
-@@ -1018,6 +1070,129 @@ struct ContentView: View {
+@@ -1018,6 +1073,129 @@ struct ContentView: View {
          }
      }
  
@@ -631,7 +649,7 @@ index e65a6389..de1d728d 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1464,19 +1639,50 @@ struct ContentView: View {
+@@ -1464,19 +1642,50 @@ struct ContentView: View {
          videoSize: Int64? = nil,
          videoHash: String? = nil,
          startupBenchmarkToken: UUID? = nil,
@@ -684,7 +702,7 @@ index e65a6389..de1d728d 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -1542,6 +1748,22 @@ struct ContentView: View {
+@@ -1542,6 +1751,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -707,7 +725,7 @@ index e65a6389..de1d728d 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -3410,6 +3632,7 @@ enum ProfileDisplayName {
+@@ -3410,6 +3635,7 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -715,7 +733,7 @@ index e65a6389..de1d728d 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -3727,6 +3950,10 @@ struct TVHomeView: View {
+@@ -3727,6 +3953,10 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -726,7 +744,7 @@ index e65a6389..de1d728d 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      /// Derived once when Continue Watching changes. Recomputing these from the
      /// entire history inside `body` made every focus update scale with the
-@@ -3801,6 +4028,26 @@ struct TVHomeView: View {
+@@ -3801,6 +4031,26 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -753,7 +771,7 @@ index e65a6389..de1d728d 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -6131,6 +6378,7 @@ struct TVHomeView: View {
+@@ -6131,6 +6381,7 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -761,7 +779,7 @@ index e65a6389..de1d728d 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -6163,7 +6411,7 @@ struct TVHomeView: View {
+@@ -6163,7 +6414,7 @@ struct TVHomeView: View {
          let pinnedSections = ((continueWatching.isEmpty || !continueWatchingVisible) ? [] : [resumeSection])
              + ((upcomingMetas.isEmpty || !continueWatchingVisible) ? [] : [upcomingSection])
              + [localTitlesSection, jellyfinSection].compactMap { $0 }
@@ -770,7 +788,7 @@ index e65a6389..de1d728d 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -6267,6 +6515,15 @@ struct TVHomeView: View {
+@@ -6267,6 +6518,15 @@ struct TVHomeView: View {
          })
      }
  
