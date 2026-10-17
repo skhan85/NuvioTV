@@ -428,10 +428,10 @@ index 00000000..d4803946
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index e65a6389..5e4d96d8 100644
+index 0cb80fe7..44224d69 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -356,6 +356,10 @@ struct ContentView: View {
+@@ -358,6 +358,10 @@ struct ContentView: View {
      @State private var playbackDidStart = false
      @State private var reopenStreamPickerOnDetails = false
      @State private var reopenStreamPickerEpisode: NuvioVideo?
@@ -442,7 +442,7 @@ index e65a6389..5e4d96d8 100644
      /// Title whose liquid-glass quick-actions menu is showing (long-press on a
      /// card). Presented as an overlay over the tab view, like Details/Player.
      @State private var cardMenuMeta: NuvioMeta?
-@@ -409,6 +413,42 @@ struct ContentView: View {
+@@ -411,6 +415,42 @@ struct ContentView: View {
          ZStack {
              ProfileScopedRootBackground()
  
@@ -485,7 +485,7 @@ index e65a6389..5e4d96d8 100644
              switch activeScreen {
              case .login:
                  // `.login` is also the value this state starts at, before
-@@ -933,15 +973,30 @@ struct ContentView: View {
+@@ -935,15 +975,30 @@ struct ContentView: View {
          guard !callback.isError else { return }
  
          let duration = session.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
@@ -517,7 +517,7 @@ index e65a6389..5e4d96d8 100644
          if RemoteTrackingState.isProgressSourceAuthenticated {
              // Keep the provider-backed path aligned with built-in playback:
              // optimistic local state plus one pause/stop report. A zero
-@@ -988,6 +1043,10 @@ struct ContentView: View {
+@@ -990,6 +1045,10 @@ struct ContentView: View {
              return
          }
  
@@ -528,7 +528,7 @@ index e65a6389..5e4d96d8 100644
          if progress >= WatchProgressLedger.completionFraction {
              if let duration {
                  ContinueWatchingStore.markPlaybackCompleted(
-@@ -1018,6 +1077,129 @@ struct ContentView: View {
+@@ -1020,6 +1079,129 @@ struct ContentView: View {
          }
      }
  
@@ -658,7 +658,7 @@ index e65a6389..5e4d96d8 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1464,19 +1646,50 @@ struct ContentView: View {
+@@ -1466,19 +1648,50 @@ struct ContentView: View {
          videoSize: Int64? = nil,
          videoHash: String? = nil,
          startupBenchmarkToken: UUID? = nil,
@@ -711,7 +711,7 @@ index e65a6389..5e4d96d8 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -1542,6 +1755,22 @@ struct ContentView: View {
+@@ -1544,6 +1757,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -734,7 +734,7 @@ index e65a6389..5e4d96d8 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -3410,6 +3639,7 @@ enum ProfileDisplayName {
+@@ -3510,6 +3739,7 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -742,7 +742,7 @@ index e65a6389..5e4d96d8 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -3727,6 +3957,10 @@ struct TVHomeView: View {
+@@ -3829,6 +4059,10 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -753,7 +753,7 @@ index e65a6389..5e4d96d8 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      /// Derived once when Continue Watching changes. Recomputing these from the
      /// entire history inside `body` made every focus update scale with the
-@@ -3801,6 +4035,26 @@ struct TVHomeView: View {
+@@ -3903,6 +4137,26 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -780,7 +780,7 @@ index e65a6389..5e4d96d8 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -6131,6 +6385,7 @@ struct TVHomeView: View {
+@@ -6257,6 +6511,7 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -788,16 +788,18 @@ index e65a6389..5e4d96d8 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -6163,7 +6418,7 @@ struct TVHomeView: View {
+@@ -6289,7 +6544,9 @@ struct TVHomeView: View {
          let pinnedSections = ((continueWatching.isEmpty || !continueWatchingVisible) ? [] : [resumeSection])
              + ((upcomingMetas.isEmpty || !continueWatchingVisible) ? [] : [upcomingSection])
              + [localTitlesSection, jellyfinSection].compactMap { $0 }
--        let allSections = pinnedSections + store.sections
-+        let allSections = pinnedSections + (forkBecauseEnabled ? forkBecauseSections : []) + store.sections
+-        let allSections = collectionHome == nil ? pinnedSections + store.sections : store.sections
++        let allSections = collectionHome == nil
++            ? pinnedSections + (forkBecauseEnabled ? forkBecauseSections : []) + store.sections
++            : store.sections
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -6267,6 +6522,15 @@ struct TVHomeView: View {
+@@ -6393,6 +6650,15 @@ struct TVHomeView: View {
          })
      }
  

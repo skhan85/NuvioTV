@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 9ffaf6c2..86320d58 100644
+index 711042aa..1b2242e8 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 @@ -190,8 +190,8 @@ enum TmdbDetailsService {
@@ -20,7 +20,7 @@ index 9ffaf6c2..86320d58 100644
 -            isEnabled: (store.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? false,
 +            // Fork: TMDB is on by default when a built-in key exists.
 +            isEnabled: (store.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? !ForkSecrets.tmdbApiKey.isEmpty,
-             language: normalizedLanguage(store.string(forKey: SettingsKey.tmdbLanguage)),
+             language: TmdbMetadataLanguage.resolvedLanguage(in: store),
              flags: flags
          )
 @@ -245,14 +246,16 @@ enum TmdbDetailsService {
@@ -708,7 +708,7 @@ index be08db2c..f5314dd7 100644
  
              if let onRefreshCatalog {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-index f781b75a..089a6268 100644
+index 82561819..412188ca 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 @@ -595,7 +595,7 @@ struct TVCatalogRow: View {
@@ -778,10 +778,10 @@ index 675390ca..68af4bd7 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index eac9d379..a41dd944 100644
+index 8fae8981..d8c4885c 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3057,6 +3057,14 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3058,6 +3058,14 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.upNextFromFurthestEpisode) private var upNextFromFurthestEpisode = true
      @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -796,7 +796,7 @@ index eac9d379..a41dd944 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3385,6 +3393,50 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3386,6 +3394,50 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -847,7 +847,7 @@ index eac9d379..a41dd944 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -4280,7 +4332,7 @@ private struct IntegrationSettingsView: View {
+@@ -4281,7 +4333,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -856,7 +856,7 @@ index eac9d379..a41dd944 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -4591,7 +4643,7 @@ private struct TmdbOptionsSheet: View {
+@@ -4594,7 +4646,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -865,7 +865,7 @@ index eac9d379..a41dd944 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -12003,8 +12055,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -12066,8 +12118,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs
