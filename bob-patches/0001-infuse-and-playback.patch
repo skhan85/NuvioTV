@@ -1,9 +1,9 @@
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
 new file mode 100644
-index 00000000..e3c1e745
+index 00000000..aeff6051
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
-@@ -0,0 +1,417 @@
+@@ -0,0 +1,413 @@
 +import Foundation
 +import SwiftUI
 +
@@ -12,8 +12,8 @@ index 00000000..e3c1e745
 +/// Fork: subtitles from the installed subtitle add-ons (OpenSubtitles and the like) go to Infuse along
 +/// with the stream's own ones.
 +///
-+/// Infuse uses only one subtitle it is given, so just the best add-on match for the viewer's first
-+/// subtitle language goes, after the stream's own subtitles. Add-on links have no file ending, often
++/// Infuse uses only one subtitle it is given (the last), so it gets just the best match for the
++/// viewer's first subtitle language. Add-on links have no file ending, often
 +/// redirect and can be gzipped or WebVTT, which Infuse cannot show, so each goes through Kuiper's
 +/// `/subs/` relay as a plain `.srt`. The link also names the video (`/v/<video>`), so the relay lines
 +/// the subtitle up with the video's audio (Kuiper's subsync); Infuse opens at once and gets the synced
@@ -22,46 +22,42 @@ index 00000000..e3c1e745
 +    static let relayBase = "https://kuiper.khanofmilton.ca/subs/"
 +    /// Seconds Kuiper may hold the warm-up request for the first synced copy.
 +    static let syncWarmUpSeconds = 35
-+    static let maxAddonSubtitles = 1
-+
-+    /// The subtitles to hand Infuse: the stream's own, then the best add-on match, relayed.
-+    /// Most subtitles Infuse is handed (the external-player link carries at most 8).
-+    static let maxSubtitles = 8
++    /// Infuse uses only the LAST `sub=` it is given (the iPhone fork found the same: of three it took
++    /// the add-on's lowest-ranked), so it gets exactly one: the best match for the viewer's first
++    /// subtitle language that has one. Sending several put a Portuguese file last and English never
++    /// showed.
++    static let maxSubtitles = 1
 +
 +    static func subtitles(streamSubtitles: [NuvioSubtitle], addonSubtitles: [NuvioSubtitle],
 +                          videoURL: String) -> [NuvioSubtitle] {
-+        // Infuse turns on the first subtitle it is given, and the link holds only 8, so the
-+        // viewer's languages go first: for each language, the stream's own subtitles in it, then
-+        // the best add-on match. Other languages follow only if there is room.
-+        var seen = Set<String>()
-+        var ordered: [NuvioSubtitle] = []
-+        var addonPicked = 0
 +        func matches(_ sub: NuvioSubtitle, _ language: String) -> Bool {
 +            SubtitleLanguagePreferences.matches(sub.language, target: language) ||
 +                SubtitleLanguagePreferences.matches(sub.label, target: language)
 +        }
++        func isForced(_ sub: NuvioSubtitle) -> Bool {
++            let text = [sub.label ?? "", sub.url].joined(separator: " ").lowercased()
++            return text.contains("forced") || text.contains("foreign part")
++        }
++        var pick: NuvioSubtitle?
 +        for language in preferredLanguages() {
-+            for sub in streamSubtitles where matches(sub, language) && seen.insert(sub.url).inserted {
-+                ordered.append(sub)
-+            }
-+            if addonPicked < maxAddonSubtitles,
-+               let match = addonSubtitles.first(where: { matches($0, language) && !seen.contains($0.url) }) {
-+                seen.insert(match.url)
-+                ordered.append(match)
-+                addonPicked += 1
++            // The add-on's best match first (the same pick as the iPhone fork), then the stream's own;
++            // forced-only tracks only when nothing complete exists in that language.
++            let candidates = addonSubtitles.filter { matches($0, language) } +
++                streamSubtitles.filter { matches($0, language) }
++            if let best = candidates.first(where: { !isForced($0) }) ?? candidates.first {
++                pick = best
++                break
 +            }
 +        }
-+        for sub in streamSubtitles where seen.insert(sub.url).inserted { ordered.append(sub) }
-+        return ordered.prefix(maxSubtitles).enumerated().map { index, sub in
-+            NuvioSubtitle(
-+                url: relayURL(sub.url, language: sub.language,
-+                              name: sub.label ?? sub.source ?? SubtitleLanguagePreferences.humanLanguageName(from: sub.language),
-+                              number: index + 1, videoURL: videoURL),
-+                language: sub.language,
-+                label: sub.label,
-+                source: sub.source
-+            )
-+        }
++        guard let sub = pick else { return [] }
++        return [NuvioSubtitle(
++            url: relayURL(sub.url, language: sub.language,
++                          name: SubtitleLanguagePreferences.humanLanguageName(from: sub.language),
++                          number: 1, videoURL: videoURL),
++            language: sub.language,
++            label: sub.label,
++            source: sub.source
++        )]
 +    }
 +
 +    /// The viewer's subtitle languages in order; with System, the Apple TV's own language.
