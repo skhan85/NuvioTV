@@ -1,9 +1,9 @@
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
 new file mode 100644
-index 00000000..d4803946
+index 00000000..ccdd468e
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
-@@ -0,0 +1,423 @@
+@@ -0,0 +1,484 @@
 +import Foundation
 +import SwiftUI
 +
@@ -27,6 +27,10 @@ index 00000000..d4803946
 +    /// subtitle language that has one. Sending several put a Portuguese file last and English never
 +    /// showed.
 +    static let maxSubtitles = 1
++    /// `fork_infuse_send_subtitle` (default off): hand Infuse the relayed add-on subtitle. Off, Infuse
++    /// uses the file's own tracks or its own downloads; on a test the relayed one drifted out of sync.
++    static let sendKey = "fork_infuse_send_subtitle"
++    static var sendEnabled: Bool { UserDefaults.standard.object(forKey: sendKey) as? Bool ?? false }
 +
 +    static func subtitles(streamSubtitles: [NuvioSubtitle], addonSubtitles: [NuvioSubtitle],
 +                          videoURL: String) -> [NuvioSubtitle] {
@@ -383,6 +387,7 @@ index 00000000..d4803946
 +        guard shouldRun(key: "\(meta.id)|\(videoId)") else { return }
 +        let se = StreamsRepository.seasonEpisode(fromVideoId: videoId)
 +        StreamsRepository.shared.load(type: type, videoId: videoId, season: se.season, episode: se.episode)
++        ForkStreamWarmup.shared.warmTopStreams()
 +        ForkSubtitlePrefetch.shared.prefetch(contentId: videoId, type: type)
 +    }
 +}
@@ -416,19 +421,75 @@ index 00000000..d4803946
 +        request.setValue("bytes=0-0", forHTTPHeaderField: "Range")
 +        headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
 +        let session = self.session
++        let originalHost = url.host
 +        Task { @MainActor [weak self] in
 +            guard let result = try? await session.bytes(for: request) else { return }
 +            let (bytes, response) = result
 +            bytes.task.cancel()
-+            guard let status = (response as? HTTPURLResponse)?.statusCode else { return }
++            guard let http = response as? HTTPURLResponse else { return }
++            let status = http.statusCode
 +            if status >= 400, status != 416 {
 +                self?.dead.insert(urlString)
++                return
++            }
++            // Fork: also read the start and the end of the file from the final download address, so the
++            // host has the file's header and index ready (a cold open of a very large file took about
++            // 7 s, a warm one about 3 s) and the player starts from a hot cache.
++            guard let finalURL = http.url, let total = Self.totalSize(from: http) else { return }
++            await Self.readRange(finalURL, headers: headers, originalHost: originalHost,
++                                 range: "bytes=0-4194303", session: session)
++            if total > 16_777_216 {
++                await Self.readRange(finalURL, headers: headers, originalHost: originalHost,
++                                     range: "bytes=\(total - 4_194_304)-\(total - 1)", session: session)
++            }
++        }
++    }
++
++    /// The file's size from a `Content-Range: bytes 0-0/<size>` answer.
++    nonisolated private static func totalSize(from response: HTTPURLResponse) -> Int64? {
++        guard let range = response.value(forHTTPHeaderField: "Content-Range"),
++              let slash = range.lastIndex(of: "/") else { return nil }
++        return Int64(range[range.index(after: slash)...].trimmingCharacters(in: .whitespaces))
++    }
++
++    nonisolated private static func readRange(_ url: URL, headers: [String: String], originalHost: String?,
++                                              range: String, session: URLSession) async {
++        var request = URLRequest(url: url)
++        request.setValue(range, forHTTPHeaderField: "Range")
++        // The stream's own headers go only to the host the link started at, never to a redirect target.
++        if url.host == originalHost {
++            headers.forEach { request.setValue($0.value, forHTTPHeaderField: $0.key) }
++        }
++        _ = try? await session.data(for: request)
++    }
++
++    /// Fork: right after a stream search starts for a title (a focused show page or Continue Watching
++    /// card), waits for its first results, then warms the first two direct links so Play starts sooner.
++    private var topTask: Task<Void, Never>?
++
++    func warmTopStreams(limit: Int = 2) {
++        guard UserDefaults.standard.object(forKey: Self.enabledKey) as? Bool ?? true else { return }
++        topTask?.cancel()
++        topTask = Task { @MainActor [weak self] in
++            let deadline = Date().addingTimeInterval(25)
++            while !Task.isCancelled, Date() < deadline {
++                if StreamsRepository.shared.state.allStreams.contains(where: { $0.directURL != nil }) {
++                    // Let a few more add-ons answer before taking the first ones.
++                    try? await Task.sleep(nanoseconds: 2_000_000_000)
++                    guard !Task.isCancelled else { return }
++                    let streams = StreamsRepository.shared.state.allStreams.filter { $0.directURL != nil }
++                    for stream in streams.prefix(limit) {
++                        if let url = stream.directURL { self?.warm(url, headers: stream.httpHeaders ?? [:]) }
++                    }
++                    return
++                }
++                try? await Task.sleep(nanoseconds: 250_000_000)
 +            }
 +        }
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 0cb80fe7..44224d69 100644
+index 0cb80fe7..9ea72f7f 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -358,6 +358,10 @@ struct ContentView: View {
@@ -658,7 +719,7 @@ index 0cb80fe7..44224d69 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1466,19 +1648,50 @@ struct ContentView: View {
+@@ -1466,19 +1648,53 @@ struct ContentView: View {
          videoSize: Int64? = nil,
          videoHash: String? = nil,
          startupBenchmarkToken: UUID? = nil,
@@ -670,7 +731,11 @@ index 0cb80fe7..44224d69 100644
          let store = ProfileSettings.store(for: profileViewModel.activeProfile?.id)
          let defaultPlayer = ExternalPlayer.from(store.string(forKey: SettingsKey.externalPlayer))
          let player = customPlayer ?? defaultPlayer
-         let forwardSubtitles = (store.object(forKey: SettingsKey.externalPlayerForwardSubtitles) as? Bool) ?? true
+-        let forwardSubtitles = (store.object(forKey: SettingsKey.externalPlayerForwardSubtitles) as? Bool) ?? true
++        // Fork: Infuse gets no subtitle from us unless "Send Subtitle to Infuse" is on, so it uses the file's
++        // own tracks (in sync) or its own downloads.
++        let forwardSubtitles = ((store.object(forKey: SettingsKey.externalPlayerForwardSubtitles) as? Bool) ?? true)
++            && (player != .infuse || InfuseForkSubtitles.sendEnabled)
 +
 +        // Fork: Infuse also gets the best add-on subtitle (OpenSubtitles and the like) through
 +        // Kuiper's relay, synced to this video. The add-on results were usually fetched when the
@@ -711,7 +776,7 @@ index 0cb80fe7..44224d69 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -1544,6 +1757,22 @@ struct ContentView: View {
+@@ -1544,6 +1760,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -734,7 +799,7 @@ index 0cb80fe7..44224d69 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -3510,6 +3739,7 @@ enum ProfileDisplayName {
+@@ -3510,6 +3742,7 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -742,7 +807,7 @@ index 0cb80fe7..44224d69 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -3829,6 +4059,10 @@ struct TVHomeView: View {
+@@ -3829,6 +4062,10 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -753,7 +818,7 @@ index 0cb80fe7..44224d69 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      /// Derived once when Continue Watching changes. Recomputing these from the
      /// entire history inside `body` made every focus update scale with the
-@@ -3903,6 +4137,26 @@ struct TVHomeView: View {
+@@ -3903,6 +4140,26 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -780,7 +845,7 @@ index 0cb80fe7..44224d69 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -6257,6 +6511,7 @@ struct TVHomeView: View {
+@@ -6257,6 +6514,7 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -788,7 +853,7 @@ index 0cb80fe7..44224d69 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -6289,7 +6544,9 @@ struct TVHomeView: View {
+@@ -6289,7 +6547,9 @@ struct TVHomeView: View {
          let pinnedSections = ((continueWatching.isEmpty || !continueWatchingVisible) ? [] : [resumeSection])
              + ((upcomingMetas.isEmpty || !continueWatchingVisible) ? [] : [upcomingSection])
              + [localTitlesSection, jellyfinSection].compactMap { $0 }
@@ -799,7 +864,7 @@ index 0cb80fe7..44224d69 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -6393,6 +6650,15 @@ struct TVHomeView: View {
+@@ -6393,6 +6653,15 @@ struct TVHomeView: View {
          })
      }
  
@@ -816,7 +881,7 @@ index 0cb80fe7..44224d69 100644
          guard let focusedMeta, isVisible(focusedMeta) else { return nil }
          return focusedMeta
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index 7324d93c..33d64584 100644
+index 7324d93c..3c5b84ab 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 @@ -380,6 +380,14 @@ struct DetailsScreen: View {
@@ -871,7 +936,7 @@ index 7324d93c..33d64584 100644
 +                guard let focusedItem, !focusedItem.hasPrefix("filter::"),
 +                      let stream = displayedStreams.first(where: { $0.id == focusedItem }),
 +                      let url = stream.directURL else { return }
-+                try? await Task.sleep(nanoseconds: 500_000_000)
++                try? await Task.sleep(nanoseconds: 150_000_000)
 +                guard !Task.isCancelled else { return }
 +                warmup.warm(url, headers: stream.httpHeaders ?? [:])
 +            }
@@ -899,31 +964,17 @@ index 7324d93c..33d64584 100644
                                  .id(stream.id)
                                  .onAppear {
                                      if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -8407,11 +8452,18 @@ private struct TvStreamCard: View {
+@@ -8407,6 +8452,9 @@ private struct TvStreamCard: View {
                          )
                      }
  
--                    Text(primaryName)
--                        .font(.system(size: 34, weight: .bold))
--                        .foregroundColor(.white)
--                        .lineLimit(2)
--                        .fixedSize(horizontal: false, vertical: true)
-+                    // Fork: the file size sits next to the source name, always (from the add-on's
-+                    // size, or a size written in its text), unless the size badge already shows it.
-+                    HStack(alignment: .firstTextBaseline, spacing: 16) {
-+                        Text(primaryName)
-+                            .font(.system(size: 34, weight: .bold))
-+                            .foregroundColor(.white)
-+                            .lineLimit(2)
-+                            .fixedSize(horizontal: false, vertical: true)
-+                        if fileSizeLabel == nil, let size = ForkStreamCardDetails.sizeText(for: stream) {
-+                            ForkStreamSizePill(text: size)
-+                        }
-+                    }
- 
-                     if let secondaryName {
-                         Text(secondaryName)
-@@ -8422,12 +8474,9 @@ private struct TvStreamCard: View {
++                    // Fork: no size pill next to the source name. It counted in binary units (28.2 GB for a
++                    // 30.3 GB file) and showed even with the size badges turned off. The size is in the
++                    // add-on's own text and in the size badge when that is on.
+                     Text(primaryName)
+                         .font(.system(size: 34, weight: .bold))
+                         .foregroundColor(.white)
+@@ -8422,12 +8470,9 @@ private struct TvStreamCard: View {
                      }
  
                      if let description = stream.description, !description.isEmpty {
@@ -952,3 +1003,17 @@ index bd849d27..3e977c3e 100644
  
          if streamDiscoveryMode == .shared {
              prepareSharedStreams(forId: streamId, type: type, forceRefresh: forceRefresh)
+diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
+index e91abf29..3c641a80 100644
+--- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
++++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
+@@ -526,7 +526,8 @@ class PlayerViewModel: ObservableObject {
+     private var isFailingOver = false
+     private var toastClearTask: Task<Void, Never>?
+     /// A source that hasn't started within this long is treated as dead.
+-    private let loadTimeoutSeconds: UInt64 = 30
++    // Fork: 12 s, not 30. A dead source then costs 12 s; a cold open of a very large file takes up to about 9 s.
++    private let loadTimeoutSeconds: UInt64 = 12
+ 
+     init(
+         sessionCoordinator suppliedCoordinator: PlaybackSessionCoordinator? = nil,

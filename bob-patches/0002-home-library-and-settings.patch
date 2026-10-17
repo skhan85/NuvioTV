@@ -56,10 +56,10 @@ index 00000000..4e8c1b71
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
 new file mode 100644
-index 00000000..b9fda58a
+index 00000000..917a74c1
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,184 @@
 +import SwiftUI
 +
 +// MARK: - Fork: Top 10 numerals
@@ -216,9 +216,10 @@ index 00000000..b9fda58a
 +    /// "12.4 GB" from the add-on's size or a size in the stream's text, nil when unknown.
 +    static func sizeText(for stream: NuvioStream) -> String? {
 +        guard let bytes = StreamBadgeSizing.fileSizeBytes(for: stream) else { return nil }
-+        let gib = Double(bytes) / 1_073_741_824
-+        if gib >= 1 { return String(format: "%.1f GB", gib) }
-+        return "\(Int((Double(bytes) / 1_048_576).rounded())) MB"
++        // Decimal units, like the add-on's own text (a 30.3 GB file reads 30.3 GB, not 28.2).
++        let gb = Double(bytes) / 1_000_000_000
++        if gb >= 1 { return String(format: "%.1f GB", gb) }
++        return "\(Int((Double(bytes) / 1_000_000).rounded())) MB"
 +    }
 +}
 +
@@ -778,10 +779,10 @@ index 675390ca..68af4bd7 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 8fae8981..d8c4885c 100644
+index 8fae8981..7012d425 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3058,6 +3058,14 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3058,6 +3058,15 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.upNextFromFurthestEpisode) private var upNextFromFurthestEpisode = true
      @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -792,11 +793,12 @@ index 8fae8981..d8c4885c 100644
 +    @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
 +    @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
 +    @AppStorage("fork_upnext_same_source") private var forkUpNextSameSource = true
++    @AppStorage(InfuseForkSubtitles.sendKey) private var forkInfuseSendSubtitle = false
 +    @AppStorage("fork_more_like_this_after_movie") private var forkMoreLikeThis = true
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3386,6 +3394,50 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3386,6 +3395,56 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -838,6 +840,12 @@ index 8fae8981..d8c4885c 100644
 +                    accentColor: accentColor
 +                )
 +                SettingsToggleRow(
++                    title: "Send Subtitle to Infuse",
++                    subtitle: "Off: Infuse uses the file's own subtitles. On: also send the best add-on subtitle",
++                    isOn: $forkInfuseSendSubtitle,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
 +                    title: "More Like This After Movies",
 +                    subtitle: "When a movie finishes in Infuse, show recommendations",
 +                    isOn: $forkMoreLikeThis,
@@ -847,7 +855,7 @@ index 8fae8981..d8c4885c 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -4281,7 +4333,7 @@ private struct IntegrationSettingsView: View {
+@@ -4281,7 +4340,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -856,7 +864,7 @@ index 8fae8981..d8c4885c 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -4594,7 +4646,7 @@ private struct TmdbOptionsSheet: View {
+@@ -4594,7 +4653,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -865,7 +873,7 @@ index 8fae8981..d8c4885c 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -12066,8 +12118,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -12066,8 +12125,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs
