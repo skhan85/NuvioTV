@@ -1004,11 +1004,21 @@ index 7324d93c..3c5b84ab 100644
  
                      if showImportedBadges && badgePlacement == .bottom {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
-index b4a2abd1..d8662a99 100644
+index b4a2abd1..f60c27b9 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
-@@ -81,15 +81,15 @@ final class PlaybackStartupBenchmark {
+@@ -76,20 +76,25 @@ final class PlaybackStartupBenchmark {
+         print("[StartupBenchmark] ⚡️ [2/3] Debrid link resolved in \(String(format: "%.3fs", debridDuration)) (elapsed: \(String(format: "%.3fs", totalSoFar)))")
+     }
+ 
++    /// Last time the engine reported a startup step. The load watchdog treats a
++    /// source that keeps advancing as healthy and only fails over on a stall.
++    private(set) var lastEngineProgressAt: Date?
++
+     func markEngineCheckpoint(_ name: String, token: UUID?) {
+         guard owns(token) else { return }
          let now = dateProvider()
++        lastEngineProgressAt = now
          switch name {
          case "dispatched":
 -            if t_engineDispatched == nil { t_engineDispatched = now }
@@ -1042,7 +1052,7 @@ index bd849d27..3e977c3e 100644
          if streamDiscoveryMode == .shared {
              prepareSharedStreams(forId: streamId, type: type, forceRefresh: forceRefresh)
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index e91abf29..3c641a80 100644
+index e91abf29..f7ab0979 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 @@ -526,7 +526,8 @@ class PlayerViewModel: ObservableObject {
@@ -1055,3 +1065,22 @@ index e91abf29..3c641a80 100644
  
      init(
          sessionCoordinator suppliedCoordinator: PlaybackSessionCoordinator? = nil,
+@@ -2107,7 +2108,17 @@ class PlayerViewModel: ObservableObject {
+         let targetURL = activeStreamURL
+         let timeout = loadTimeoutSeconds
+         loadWatchdogTask = Task { [weak self] in
+-            try? await Task.sleep(nanoseconds: timeout * 1_000_000_000)
++            // Stall-based: fail over only when the engine has reported no startup
++            // step for `timeout` seconds (or a hard 45 s cap). A slow-but-advancing
++            // open is left alone instead of being restarted from scratch.
++            let began = Date()
++            while true {
++                try? await Task.sleep(nanoseconds: 1_000_000_000)
++                if Task.isCancelled { return }
++                let now = Date()
++                let lastProgress = max(began, PlaybackStartupBenchmark.shared.lastEngineProgressAt ?? began)
++                if now.timeIntervalSince(lastProgress) >= Double(timeout) || now.timeIntervalSince(began) >= 45 { break }
++            }
+             guard !Task.isCancelled, let self,
+                   self.sessionCoordinator.lastLoadError == nil,
+                   !self.currentLoadStarted,
