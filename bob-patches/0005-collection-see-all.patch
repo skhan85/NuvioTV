@@ -1,7 +1,5 @@
-# From consultoria-deta/NuvioTVOS feat/collection-see-all-pr (2026-10-15): a See All card at the
-# start of each Rows-mode collection strip opens that catalog alone as a poster grid.
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift b/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
-index 7182769c..d6458b4d 100644
+index 3c7c9013..edaeff44 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
 @@ -47,6 +47,9 @@ struct CollectionFolderBrowseView: View {
@@ -180,7 +178,7 @@ index 7182769c..d6458b4d 100644
                  ForEach(items) { item in
                      let cardKey = "\(rowId)\u{1}\(item.id)"
                      PosterCard(
-@@ -901,7 +1011,8 @@ private struct CollectionFolderHomeStyleRow: View {
+@@ -902,7 +1012,8 @@ private struct CollectionFolderHomeStyleRow: View {
                          isAlwaysLandscape: rowTileShape == .landscape || item.tileShape == .landscape,
                          tileShape: item.tileShape != .poster ? item.tileShape : rowTileShape,
                          onFocus: { focused in
@@ -190,7 +188,7 @@ index 7182769c..d6458b4d 100644
                                  if scrollIndex != index {
                                      let updateScroll = { scrollIndex = index }
                                      if rowSmoothFocus && !rowFastNavigation {
-@@ -1004,6 +1115,65 @@ extension CollectionFolderHomeStyleRow: Equatable {
+@@ -1005,6 +1116,65 @@ extension CollectionFolderHomeStyleRow: Equatable {
      }
  }
  
