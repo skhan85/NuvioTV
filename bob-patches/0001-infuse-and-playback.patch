@@ -528,7 +528,7 @@ index 00000000..ccdd468e
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 0cb80fe7..9ea72f7f 100644
+index 2fb66362..3728542d 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -358,6 +358,10 @@ struct ContentView: View {
@@ -884,7 +884,7 @@ index 0cb80fe7..9ea72f7f 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -6257,6 +6514,7 @@ struct TVHomeView: View {
+@@ -6274,6 +6531,7 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -892,7 +892,7 @@ index 0cb80fe7..9ea72f7f 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -6289,7 +6547,9 @@ struct TVHomeView: View {
+@@ -6306,7 +6564,9 @@ struct TVHomeView: View {
          let pinnedSections = ((continueWatching.isEmpty || !continueWatchingVisible) ? [] : [resumeSection])
              + ((upcomingMetas.isEmpty || !continueWatchingVisible) ? [] : [upcomingSection])
              + [localTitlesSection, jellyfinSection].compactMap { $0 }
@@ -903,7 +903,7 @@ index 0cb80fe7..9ea72f7f 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -6393,6 +6653,15 @@ struct TVHomeView: View {
+@@ -6410,6 +6670,15 @@ struct TVHomeView: View {
          })
      }
  
@@ -920,7 +920,7 @@ index 0cb80fe7..9ea72f7f 100644
          guard let focusedMeta, isVisible(focusedMeta) else { return nil }
          return focusedMeta
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index 7324d93c..3c5b84ab 100644
+index 433e865e..819ba548 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 @@ -380,6 +380,14 @@ struct DetailsScreen: View {
@@ -956,16 +956,17 @@ index 7324d93c..3c5b84ab 100644
              // tvOS doesn't re-run default-focus when this content swaps in after
              // the async load finishes, so focus lands nowhere / off the Play
              // button. Move it onto Play explicitly once the content appears
-@@ -7512,6 +7531,8 @@ private struct TvStreamPickerOverlay: View {
-     @State private var refreshToastTask: Task<Void, Never>?
-     @State private var unavailableAlertMessage: String?
+@@ -7633,7 +7652,8 @@ private struct TvStreamPickerOverlay: View {
      @State private var didPresentInitialAvailabilityMessage = false
+     @State private var episodeRatings: [NuvioExternalRating] = []
+     @State private var ratingOrderRevision: UInt64 = 0
+-
 +    /// Fork: link warm-up and dead-link marks for this picker.
 +    @ObservedObject private var warmup = ForkStreamWarmup.shared
  
      private let filterAllKey = "filter::all"
      private let sortKey = "filter::sort"
-@@ -7666,6 +7687,16 @@ private struct TvStreamPickerOverlay: View {
+@@ -7788,6 +7808,16 @@ private struct TvStreamPickerOverlay: View {
              // cards before landing on the next one; re-seeding on that blip
              // snaps focus back to the first stream (the reported bug), so we
              // debounce and bail when focus has already landed somewhere.
@@ -982,7 +983,7 @@ index 7324d93c..3c5b84ab 100644
              .onChange(of: focusedItem) { _, newValue in
                  if let newValue, newValue != filterAllKey, !didSeedStreamFocus {
                      didSeedStreamFocus = true
-@@ -7942,6 +7973,20 @@ private struct TvStreamPickerOverlay: View {
+@@ -8151,6 +8181,20 @@ private struct TvStreamPickerOverlay: View {
                                      action: { select(stream, player: nil) },
                                      onSelectPlayer: { player in select(stream, player: player) }
                                  )
@@ -1003,7 +1004,7 @@ index 7324d93c..3c5b84ab 100644
                                  .id(stream.id)
                                  .onAppear {
                                      if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -8407,6 +8452,9 @@ private struct TvStreamCard: View {
+@@ -8616,6 +8660,9 @@ private struct TvStreamCard: View {
                          )
                      }
  
@@ -1013,7 +1014,7 @@ index 7324d93c..3c5b84ab 100644
                      Text(primaryName)
                          .font(.system(size: 34, weight: .bold))
                          .foregroundColor(.white)
-@@ -8422,12 +8470,9 @@ private struct TvStreamCard: View {
+@@ -8631,12 +8678,9 @@ private struct TvStreamCard: View {
                      }
  
                      if let description = stream.description, !description.isEmpty {
