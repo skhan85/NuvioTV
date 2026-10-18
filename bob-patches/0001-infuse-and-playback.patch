@@ -1,3 +1,28 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
+index 1d35d569..416db9d0 100644
+--- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
++++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
+@@ -195,13 +195,14 @@ enum PlaybackBackendPolicy {
+                     statusMessage: nil
+                 )
+             }
+-            let allowFallback = PlaybackEngineCapabilities.mpv.supportsDirectHTTPS || !isRemoteHTTP(input.urlString)
++            // Fork: movies/shows play on MPVKit first, the same libmpv setup the
++            // official Nuvio iOS player uses (gpu-next, VideoToolbox, tone mapping).
++            // AetherEngine rendered HDR10 remuxes washed out; it stays the fallback,
++            // and keeps HLS and live streams above.
+             return Result(
+-                backend: .aether,
+-                allowAutomaticFallback: allowFallback,
+-                reason: allowFallback
+-                    ? "Auto: AetherEngine primary for movies/shows with MPVKit fallback"
+-                    : "Auto: AetherEngine primary (remote HTTPS disables MPVKit fallback)",
++                backend: .mpv,
++                allowAutomaticFallback: true,
++                reason: "Auto: MPVKit primary for movies/shows with AetherEngine fallback",
+                 statusMessage: nil
+             )
+         }
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
 index afc9092e..94bb5b93 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
