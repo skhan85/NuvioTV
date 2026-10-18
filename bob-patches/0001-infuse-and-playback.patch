@@ -1,3 +1,35 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
+index d6b9f3a8..20dec316 100644
+--- a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
++++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
+@@ -633,6 +633,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         checkError(mpv_set_option_string(mpv, "gpu-api", "vulkan"))
+         checkError(mpv_set_option_string(mpv, "gpu-context", "moltenvk"))
+         checkError(mpv_set_option_string(mpv, "hwdec", "videotoolbox"))
++        // Fork: the Vulkan/MoltenVK settings the official Nuvio iOS player uses;
++        // async compute/transfer queues on MoltenVK cause frame-pacing stutter.
++        checkError(mpv_set_option_string(mpv, "vulkan-swap-mode", "fifo"))
++        checkError(mpv_set_option_string(mpv, "vulkan-queue-count", "1"))
++        checkError(mpv_set_option_string(mpv, "vulkan-async-compute", "no"))
++        checkError(mpv_set_option_string(mpv, "vulkan-async-transfer", "no"))
+         checkError(mpv_set_option_string(mpv, "ao", Self.defaultAudioOutput))
+         // AVSampleBufferAudioRenderer follows tvOS's active output route without
+         // using the failing RemoteIO callback from MPV's AudioUnit backend.
+@@ -711,11 +717,10 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         checkError(mpv_set_option_string(mpv, "keep-open", "yes"))
+         checkError(mpv_set_option_string(mpv, "target-colorspace-hint", "yes"))
+         checkError(mpv_set_option_string(mpv, "tone-mapping", "auto"))
+-        #if targetEnvironment(simulator)
++        // Fork: per-frame HDR peak detection is a 4K compute pass the Apple TV GPU
++        // can't always finish in a frame; it dropped frames on 4K HDR remuxes. The
++        // TV switches to HDR (target-colorspace-hint) and tone-maps itself.
+         checkError(mpv_set_option_string(mpv, "hdr-compute-peak", "no"))
+-        #else
+-        checkError(mpv_set_option_string(mpv, "hdr-compute-peak", "yes"))
+-        #endif
+         checkError(mpv_set_option_string(mpv, "target-prim", "auto"))
+         checkError(mpv_set_option_string(mpv, "target-trc", "auto"))
+ 
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
 index 1d35d569..416db9d0 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
@@ -23,6 +55,37 @@ index 1d35d569..416db9d0 100644
                  statusMessage: nil
              )
          }
+diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
+index b9bb0fca..f971ffe0 100644
+--- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
++++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
+@@ -101,11 +101,23 @@ struct MPVPlaybackCachePolicy: Equatable {
+         let source: Source = isLocal ? .localOrLoopback : (isLiveStream ? .liveRemote : .remote)
+         let useDisk = !isLocal && nativeDiskAvailable
+         let duration = isLocal ? 30 : max(1, Int(ceil(profile.hybridCacheTargetLeadSeconds)))
++        // Fork: a fixed 32 MiB readahead holds about 3 s of a 77 Mbps 4K remux, so
++        // any CDN hiccup froze playback. Remote sources now read ahead much further:
++        // on libmpv's disk packet cache that costs no RAM; without it, use the
++        // memory-aware Network Cache size (Auto picks by device headroom).
++        let buffers: PlaybackCacheSettings
++        if isLocal {
++            buffers = PlaybackCacheSettings(forwardBuffer: "32MiB", backBuffer: "16MiB")
++        } else if useDisk {
++            buffers = PlaybackCacheSettings(forwardBuffer: "1536MiB", backBuffer: "256MiB")
++        } else {
++            buffers = PlaybackCacheSettings.current
++        }
+         return MPVPlaybackCachePolicy(
+             nativeDiskEnabled: useDisk,
+-            forwardBuffer: "32MiB",
+-            backBuffer: "16MiB",
+-            cacheSeconds: duration,
++            forwardBuffer: buffers.forwardBuffer,
++            backBuffer: buffers.backBuffer,
++            cacheSeconds: isLocal ? duration : max(duration, 600),
+             source: source
+         )
+     }
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
 index afc9092e..94bb5b93 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
