@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
-index d6b9f3a8..4689de47 100644
+index d6b9f3a8..e30075b2 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 @@ -633,6 +633,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
@@ -65,7 +65,61 @@ index d6b9f3a8..4689de47 100644
          }
          if reduceLoud {
              filters.append("lavfi=[acompressor=threshold=-20dB:ratio=4:attack=50:release=1000]")
-@@ -2018,6 +2037,8 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -1641,6 +1660,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         let idle = getFlag("core-idle")
+         let seeking = getFlag("seeking")
+         let bufferingCache = getFlag("paused-for-cache")
++        logPlaybackHealth(paused: paused, buffering: bufferingCache, cachedSeconds: cached)
+ 
+         isAtEndOfFile = eofReached
+ 
+@@ -1786,6 +1806,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         refreshTracks()
+     }
+ 
++    // MARK: Fork: playback health log (diagnostics export, source "MPVHealth")
++
++    private var lastHealthLogAt: Date?
++    private var lastLoggedBuffering = false
++    private var lastDroppedFrames = 0
++    private var lastDecoderDroppedFrames = 0
++
++    /// Records every buffering stall and, every 10 s of playback, dropped frames and the read-ahead
++    /// cache, so a stutter in the export shows whether it was the network (buffering, small cache)
++    /// or rendering (dropped frames with a healthy cache).
++    private func logPlaybackHealth(paused: Bool, buffering: Bool, cachedSeconds: Double) {
++        guard mpv != nil else { return }
++        let log = { (message: String) in
++            PlaybackDiagnosticLogStore.shared.append(source: "MPVHealth", message: message)
++        }
++        if buffering != lastLoggedBuffering {
++            lastLoggedBuffering = buffering
++            log(buffering
++                ? String(format: "buffering started (cache %.1fs, net %.1f MB/s)", cachedSeconds, getDouble("cache-speed") / 1_000_000)
++                : String(format: "buffering ended (cache %.1fs)", cachedSeconds))
++        }
++        guard !paused else { return }
++        let now = Date()
++        if let last = lastHealthLogAt, now.timeIntervalSince(last) < 10 { return }
++        lastHealthLogAt = now
++        let dropped = getInt("frame-drop-count")
++        let decoderDropped = getInt("decoder-frame-drop-count")
++        let newDropped = max(0, dropped - lastDroppedFrames)
++        let newDecoderDropped = max(0, decoderDropped - lastDecoderDroppedFrames)
++        lastDroppedFrames = dropped
++        lastDecoderDroppedFrames = decoderDropped
++        log(String(
++            format: "t=%.0fs dropped+%d decoderDropped+%d delayed=%d cache=%.1fs net=%.1fMB/s fps=%.3f display=%.3f avsync=%.3f",
++            getDouble("time-pos"), newDropped, newDecoderDropped, getInt("vo-delayed-frame-count"),
++            cachedSeconds, getDouble("cache-speed") / 1_000_000,
++            getDouble("estimated-vf-fps"), getDouble("display-fps"), getDouble("avsync")
++        ))
++    }
++
+     private func refreshTracks() {
+         guard mpv != nil else { return }
+         var audio = [PlaybackTrackInfo]()
+@@ -2018,6 +2077,8 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
              let shouldPlay = self.pendingAutoplayAfterDisplayGate
              self.pendingAutoplayAfterDisplayGate = false
              if shouldPlay {
@@ -74,7 +128,7 @@ index d6b9f3a8..4689de47 100644
                  self.playPlayback()
              }
              self.updateState()
-@@ -2166,6 +2187,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2166,6 +2227,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          let switchGeneration = displaySwitchGeneration
          setStringProperty("vid", "no")
  
@@ -82,7 +136,7 @@ index d6b9f3a8..4689de47 100644
          let manager = window.avDisplayManager
          manager.preferredDisplayCriteria = AVDisplayCriteria(
              refreshRate: Float(fps),
-@@ -2200,6 +2222,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2200,6 +2262,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
              return
          }
          isDisplaySwitchInFlight = false
@@ -90,7 +144,7 @@ index d6b9f3a8..4689de47 100644
          setStringProperty("vid", "auto")
          if pendingURL != nil {
              attemptStartPendingLoad()
-@@ -2300,6 +2323,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2300,6 +2363,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
  #endif
                          self.clearPlaybackError()
                          guard !self.rejectUnsupportedSimulatorCodecIfNeeded() else { return }
@@ -98,7 +152,7 @@ index d6b9f3a8..4689de47 100644
                          self.isPlayerLoading = false
                          self.attachPendingAudioIfNeeded()
                          self.applyPendingLoadConfiguration()
-@@ -2318,6 +2342,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2318,6 +2382,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
  #if NUVIO_MPV_MEMORY_WATCHDOG && os(tvOS)
                          self.memoryWatchdog.record(event: "video_reconfig")
  #endif
@@ -107,7 +161,7 @@ index d6b9f3a8..4689de47 100644
                      }
                  case MPV_EVENT_END_FILE:
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
-index 6d10e2f6..3c6cf495 100644
+index 6d10e2f6..06abb7de 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
 @@ -89,7 +89,14 @@ final class MPVStreamProtocolBridge: @unchecked Sendable {
@@ -184,6 +238,20 @@ index 6d10e2f6..3c6cf495 100644
          if status == 206 {
              guard let contentRange = httpResponse.value(forHTTPHeaderField: "Content-Range"),
                    let parsedRange = PlaybackStreamCacheContentRange.parse(contentRange),
+@@ -875,6 +903,13 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+                     }
+                 } else {
+                     consecutiveReadFailures = 0
++                    // Fork: ask for the next range as soon as this one finishes instead of
++                    // waiting for mpv to drain the buffer, so there is no idle round trip
++                    // between ranges. Back-pressure still suspends it when the buffer is full.
++                    if !isLiveStream, totalSize >= 0, let end = requestedEnd,
++                       let next = adding(end, 1), next < totalSize, buffer.count < maxBufferSize {
++                        startRangeRequest(from: next)
++                    }
+                 }
+             case .sequential where isLiveStream:
+                 break
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
 index 1d35d569..416db9d0 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
