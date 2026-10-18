@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
-index d6b9f3a8..20dec316 100644
+index d6b9f3a8..4689de47 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 @@ -633,6 +633,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
@@ -30,6 +30,82 @@ index d6b9f3a8..20dec316 100644
          checkError(mpv_set_option_string(mpv, "target-prim", "auto"))
          checkError(mpv_set_option_string(mpv, "target-trc", "auto"))
  
+@@ -951,11 +956,23 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         }
+     }
+ 
++    /// Fork: startup step timings in the diagnostics export (source "MPVStart").
++    private var startupStartedAt: Date?
++    private func logStartupStep(_ step: String) {
++        guard let started = startupStartedAt else { return }
++        PlaybackDiagnosticLogStore.shared.append(
++            source: "MPVStart",
++            message: String(format: "%@ +%.2fs", step, Date().timeIntervalSince(started))
++        )
++    }
++
+     private func attemptStartPendingLoad() {
+         guard let url = pendingURL, mpv != nil else { return }
+         // The active display wait will start the latest queued load once safe.
+         guard !isDisplaySwitchInFlight else { return }
+         guard isViewLoaded, view.bounds.width > 1, view.bounds.height > 1 else { return }
++        startupStartedAt = Date()
++        logStartupStep("loadfile")
+ #if NUVIO_MPV_MEMORY_WATCHDOG && os(tvOS)
+         memoryDiagnosticSessionID = UUID().uuidString
+         memoryDiagnosticCacheMode = "pending"
+@@ -1474,7 +1491,9 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         case .enhance:
+             filters.append("lavfi=[dynaudnorm=f=150:g=15:m=10.0]")
+         case .boost:
+-            filters.append("lavfi=[dynaudnorm=f=100:g=21:m=20.0],equalizer=f=1500:width_type=o:width=1.5:g=8")
++            // Fork: equalizer belongs inside the lavfi graph; outside it mpv rejected the
++            // whole filter chain ("equalizer isn't supported") and Boost did nothing.
++            filters.append("lavfi=[dynaudnorm=f=100:g=21:m=20.0,equalizer=f=1500:width_type=o:width=1.5:g=8]")
+         }
+         if reduceLoud {
+             filters.append("lavfi=[acompressor=threshold=-20dB:ratio=4:attack=50:release=1000]")
+@@ -2018,6 +2037,8 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+             let shouldPlay = self.pendingAutoplayAfterDisplayGate
+             self.pendingAutoplayAfterDisplayGate = false
+             if shouldPlay {
++                self.logStartupStep("play")
++                self.startupStartedAt = nil
+                 self.playPlayback()
+             }
+             self.updateState()
+@@ -2166,6 +2187,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         let switchGeneration = displaySwitchGeneration
+         setStringProperty("vid", "no")
+ 
++        logStartupStep("displaySwitchRequested \(sourceRange) \(width)x\(height)@\(fps)")
+         let manager = window.avDisplayManager
+         manager.preferredDisplayCriteria = AVDisplayCriteria(
+             refreshRate: Float(fps),
+@@ -2200,6 +2222,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+             return
+         }
+         isDisplaySwitchInFlight = false
++        logStartupStep("displaySettled")
+         setStringProperty("vid", "auto")
+         if pendingURL != nil {
+             attemptStartPendingLoad()
+@@ -2300,6 +2323,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+ #endif
+                         self.clearPlaybackError()
+                         guard !self.rejectUnsupportedSimulatorCodecIfNeeded() else { return }
++                        self.logStartupStep("fileLoaded")
+                         self.isPlayerLoading = false
+                         self.attachPendingAudioIfNeeded()
+                         self.applyPendingLoadConfiguration()
+@@ -2318,6 +2342,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+ #if NUVIO_MPV_MEMORY_WATCHDOG && os(tvOS)
+                         self.memoryWatchdog.record(event: "video_reconfig")
+ #endif
++                        self.logStartupStep("videoReconfig")
+                         self.scheduleDisplayCriteriaProbe()
+                     }
+                 case MPV_EVENT_END_FILE:
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
 index 6d10e2f6..3c6cf495 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
