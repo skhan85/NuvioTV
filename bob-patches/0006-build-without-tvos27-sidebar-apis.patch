@@ -1,0 +1,55 @@
+diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+index d547336e..d611245c 100644
+--- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
++++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+@@ -3656,9 +3656,7 @@ private struct TVMainTabView: View {
+     @available(tvOS 18.0, *)
+     private var groupedCollectionTabs: some View {
+         TabView(selection: $selectedTab) {
+-            if #unavailable(tvOS 27.0) {
+-                Tab(value: TVTab.profile) { Color.clear } label: { profileTabLabel }
+-            }
++            Tab(value: TVTab.profile) { Color.clear } label: { profileTabLabel }
+             Tab(TVTab.home.title, systemImage: TVTab.home.symbol, value: TVTab.home) {
+                 homeTabContent
+             }
+@@ -3683,15 +3681,9 @@ private struct TVMainTabView: View {
+                 }
+             }
+             if !genreCollectionDestinations.isEmpty {
+-                if #available(tvOS 27.0, *) {
+-                    // tvOS supports the automatic policy, but not an explicit
+-                    // collapsed default. Keep the system's native behavior;
+-                    // header interaction still needs verification on Apple TV.
+-                    genreTabSection.defaultSectionExpansion(.automatic)
+-                } else {
+-                    // Earlier systems retain a usable, expanded native section.
+-                    genreTabSection
+-                }
++                // Fork: the CI runner's Xcode lacks this tvOS 27 TabSection API, so the
++                // section stays expanded (the pre-27 behaviour).
++                genreTabSection
+             }
+         }
+     }
+@@ -3713,17 +3705,9 @@ private struct TVMainTabView: View {
+ 
+     @ViewBuilder
+     private var tabShell: some View {
+-        if #available(tvOS 27.0, *) {
+-            groupedCollectionTabs
+-                .tabViewSidebarHeader {
+-                    TVSidebarProfileHeader(profile: displayedProfile) {
+-                        guard !isProfileFocusPending else { return }
+-                        if selectedTab == .settings { syncManager.flushPendingPushes() }
+-                        onSwitchProfile()
+-                    }
+-                    .disabled(isProfileFocusPending)
+-                }
+-        } else if #available(tvOS 18.0, *) {
++        // Fork: tabViewSidebarHeader is unavailable in the CI runner's tvOS SDK; the
++        // profile stays a sidebar tab on every tvOS version instead.
++        if #available(tvOS 18.0, *) {
+             groupedCollectionTabs
+         } else {
+             standardTabs
