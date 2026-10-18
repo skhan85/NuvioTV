@@ -770,7 +770,7 @@ index 00000000..ccdd468e
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 2fb66362..3728542d 100644
+index 2fb66362..de849a13 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -358,6 +358,10 @@ struct ContentView: View {
@@ -1000,7 +1000,23 @@ index 2fb66362..3728542d 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1466,19 +1648,53 @@ struct ContentView: View {
+@@ -1452,6 +1634,15 @@ struct ContentView: View {
+         }
+     }
+ 
++    /// Fork: the release file name when it looks real and, for an episode, carries its SxxEyy.
++    static func releaseFilename(_ raw: String, matchesSeason season: Int?, episode: Int?) -> String? {
++        let name = (raw.components(separatedBy: "/").last ?? raw).trimmingCharacters(in: .whitespacesAndNewlines)
++        guard name.count >= 8, name.contains(".") else { return nil }
++        guard let season, let episode else { return name }
++        let pattern = "(?i)S0*\(season)[ ._-]?E0*\(episode)(\\D|$)"
++        return name.range(of: pattern, options: .regularExpression) != nil ? name : nil
++    }
++
+     private func presentPlayback(
+         url: URL,
+         meta: NuvioMeta,
+@@ -1466,19 +1657,53 @@ struct ContentView: View {
          videoSize: Int64? = nil,
          videoHash: String? = nil,
          startupBenchmarkToken: UUID? = nil,
@@ -1057,7 +1073,22 @@ index 2fb66362..3728542d 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -1544,6 +1760,22 @@ struct ContentView: View {
+@@ -1522,7 +1747,13 @@ struct ContentView: View {
+         // Hand off to the external app only when it is actually installed
+         // (`canOpenURL` needs its scheme in LSApplicationQueriesSchemes); if it
+         // isn't, fall through to the built-in player instead of a dead launch.
+-        let mediaFilename = filename ?? ExternalPlayer.mediaFilename(
++        // Fork: only hand Infuse the release file name when it describes this episode; a season
++        // pack's file name (wrong SxxEyy) would make Infuse label and search the wrong episode.
++        let releaseFilename = filename.flatMap { name in
++            Self.releaseFilename(name, matchesSeason: meta.isSeries ? numbers?.season : nil,
++                                 episode: meta.isSeries ? numbers?.episode : nil)
++        }
++        let mediaFilename = releaseFilename ?? ExternalPlayer.mediaFilename(
+             meta: meta,
+             season: meta.isSeries ? numbers?.season : nil,
+             episode: meta.isSeries ? numbers?.episode : nil,
+@@ -1544,6 +1775,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -1080,7 +1111,7 @@ index 2fb66362..3728542d 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -3510,6 +3742,7 @@ enum ProfileDisplayName {
+@@ -3510,6 +3757,7 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -1088,7 +1119,7 @@ index 2fb66362..3728542d 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -3829,6 +4062,10 @@ struct TVHomeView: View {
+@@ -3829,6 +4077,10 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -1099,7 +1130,7 @@ index 2fb66362..3728542d 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      /// Derived once when Continue Watching changes. Recomputing these from the
      /// entire history inside `body` made every focus update scale with the
-@@ -3903,6 +4140,26 @@ struct TVHomeView: View {
+@@ -3903,6 +4155,26 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -1126,7 +1157,7 @@ index 2fb66362..3728542d 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -6274,6 +6531,7 @@ struct TVHomeView: View {
+@@ -6274,6 +6546,7 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -1134,7 +1165,7 @@ index 2fb66362..3728542d 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -6306,7 +6564,9 @@ struct TVHomeView: View {
+@@ -6306,7 +6579,9 @@ struct TVHomeView: View {
          let pinnedSections = ((continueWatching.isEmpty || !continueWatchingVisible) ? [] : [resumeSection])
              + ((upcomingMetas.isEmpty || !continueWatchingVisible) ? [] : [upcomingSection])
              + [localTitlesSection, jellyfinSection].compactMap { $0 }
@@ -1145,7 +1176,7 @@ index 2fb66362..3728542d 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -6410,6 +6670,15 @@ struct TVHomeView: View {
+@@ -6410,6 +6685,15 @@ struct TVHomeView: View {
          })
      }
  
