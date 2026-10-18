@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-index 5dec8616..1d114ba0 100644
+index 84605553..d17ea849 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-@@ -4623,8 +4623,7 @@ enum EpisodeMetadataEnrichment {
+@@ -4647,8 +4647,7 @@ enum EpisodeMetadataEnrichment {
              return nil
          }
  
