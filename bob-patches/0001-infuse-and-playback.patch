@@ -30,6 +30,84 @@ index d6b9f3a8..20dec316 100644
          checkError(mpv_set_option_string(mpv, "target-prim", "auto"))
          checkError(mpv_set_option_string(mpv, "target-trc", "auto"))
  
+diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
+index 6d10e2f6..3c6cf495 100644
+--- a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
++++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
+@@ -89,7 +89,14 @@ final class MPVStreamProtocolBridge: @unchecked Sendable {
+             let bridge = MPVStreamProtocolBridge.shared
+             let config = bridge.currentConfiguration()
+ 
+-            guard let session = MPVStreamSession(url: url, headers: config.headers, isLiveStream: config.isLiveStream) else {
++            // Fork: 32 MiB ranges instead of 4 MiB. Each range is one HTTP round
++            // trip, and a 4 MiB range is under half a second of a 77 Mbps remux.
++            guard let session = MPVStreamSession(
++                url: url,
++                headers: config.headers,
++                isLiveStream: config.isLiveStream,
++                rangeRequestSize: 32 * 1024 * 1024
++            ) else {
+                 return MPV_ERROR_LOADING_FAILED.rawValue
+             }
+ 
+@@ -149,6 +156,11 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+     private var requestedEnd: Int64?
+     private var requestedByteBudget: Int64?
+     private var requestMode: RequestMode = .finiteRange
++    /// Fork: the final URL after redirects (debrid resolver -> CDN). Later range
++    /// requests go straight to it instead of paying the redirect chain each time;
++    /// cleared on any failure so the next attempt re-resolves from `url`.
++    private var resolvedURL: URL?
++    private var currentRequestUsedResolvedURL = false
+     private var responseByteBudget: Int64?
+     private var responseBytesReceived: Int64 = 0
+     private var responseExpectedContentLength: Int64?
+@@ -349,6 +361,7 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+                     taskError = nil
+                     requestCompleted = false
+                     isEOF = false
++                    resolvedURL = nil
+                     startRangeRequest(from: isLiveStream ? 0 : currentPosition)
+                     continue
+                 }
+@@ -463,7 +476,9 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+         responseExpectedContentLength = nil
+         isEOF = false
+ 
+-        var request = URLRequest(url: url)
++        let requestURL = isLiveStream ? url : (resolvedURL ?? url)
++        currentRequestUsedResolvedURL = requestURL != url
++        var request = URLRequest(url: requestURL)
+         request.httpMethod = "GET"
+         for (k, v) in headers {
+             request.setValue(v, forHTTPHeaderField: k)
+@@ -649,6 +664,14 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+             return
+         }
+ 
++        if status >= 400, currentRequestUsedResolvedURL {
++            // The CDN link may have expired; re-resolve through the original URL.
++            resolvedURL = nil
++            completionHandler(.cancel)
++            startRangeRequest(from: requestedOffset)
++            return
++        }
++
+         if status >= 400 {
+             if taskError == nil {
+                 taskError = NSError(domain: "HTTPError", code: status, userInfo: [NSLocalizedDescriptionKey: "HTTP \(status)"])
+@@ -661,6 +684,11 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+             ? httpResponse.expectedContentLength
+             : nil
+ 
++        if !isLiveStream, (200...299).contains(status), let finalURL = httpResponse.url,
++           finalURL != url, finalURL.host != url.host {
++            resolvedURL = finalURL
++        }
++
+         if status == 206 {
+             guard let contentRange = httpResponse.value(forHTTPHeaderField: "Content-Range"),
+                   let parsedRange = PlaybackStreamCacheContentRange.parse(contentRange),
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
 index 1d35d569..416db9d0 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
