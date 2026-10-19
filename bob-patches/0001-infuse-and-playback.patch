@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
-index d6b9f3a8..e76c1493 100644
+index d6b9f3a8..69d795e9 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 @@ -633,6 +633,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
@@ -30,7 +30,7 @@ index d6b9f3a8..e76c1493 100644
          checkError(mpv_set_option_string(mpv, "target-prim", "auto"))
          checkError(mpv_set_option_string(mpv, "target-trc", "auto"))
  
-@@ -951,11 +956,23 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -951,11 +956,59 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          }
      }
  
@@ -44,6 +44,42 @@ index d6b9f3a8..e76c1493 100644
 +        )
 +    }
 +
++    /// Fork: one "MPVOutput" diagnostics line describing the render surface and
++    /// mpv's source/target colour handling.
++    private func logOutputState() {
++        guard mpv != nil else { return }
++        func prop(_ name: String) -> String {
++            guard let value = mpv_get_property_string(mpv, name) else { return "-" }
++            defer { mpv_free(value) }
++            return String(cString: value)
++        }
++        let layer = metalLayer
++        let colorspace = (layer.colorspace?.name as String?) ?? "nil"
++        var edr = "n/a"
++        if layer.responds(to: NSSelectorFromString("wantsExtendedDynamicRangeContent")),
++           let flag = layer.value(forKey: "wantsExtendedDynamicRangeContent") as? Bool {
++            edr = flag ? "yes" : "no"
++        }
++        let screen = UIScreen.main
++        let parts = [
++            "drawable=\(Int(layer.drawableSize.width))x\(Int(layer.drawableSize.height))",
++            "layerScale=\(layer.contentsScale)",
++            "screen=\(Int(screen.nativeBounds.width))x\(Int(screen.nativeBounds.height))@\(screen.nativeScale)",
++            "pixelFormat=\(layer.pixelFormat.rawValue)",
++            "colorspace=\(colorspace)",
++            "edr=\(edr)",
++            "vo=\(prop("current-vo"))",
++            "hwdec=\(prop("hwdec-current"))",
++            "src=\(prop("video-params/pixelformat"))/\(prop("video-params/primaries"))/\(prop("video-params/gamma"))/peak \(prop("video-params/sig-peak"))",
++            "dst=\(prop("video-target-params/primaries"))/\(prop("video-target-params/gamma"))/peak \(prop("video-target-params/sig-peak"))",
++            "out=\(prop("video-out-params/w"))x\(prop("video-out-params/h"))",
++            "scale=\(prop("scale"))/\(prop("cscale"))",
++            "toneMap=\(prop("tone-mapping"))",
++            "targetPeak=\(prop("target-peak"))",
++        ]
++        PlaybackDiagnosticLogStore.shared.append(source: "MPVOutput", message: parts.joined(separator: " "))
++    }
++
      private func attemptStartPendingLoad() {
          guard let url = pendingURL, mpv != nil else { return }
          // The active display wait will start the latest queued load once safe.
@@ -54,7 +90,7 @@ index d6b9f3a8..e76c1493 100644
  #if NUVIO_MPV_MEMORY_WATCHDOG && os(tvOS)
          memoryDiagnosticSessionID = UUID().uuidString
          memoryDiagnosticCacheMode = "pending"
-@@ -1472,12 +1489,17 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -1472,12 +1525,17 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          case .off:
              break
          case .enhance:
@@ -75,7 +111,7 @@ index d6b9f3a8..e76c1493 100644
          }
          let filterString = filters.joined(separator: ",")
          mpv_set_property_string(mpv, "af", filterString)
-@@ -1641,6 +1663,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -1641,6 +1699,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          let idle = getFlag("core-idle")
          let seeking = getFlag("seeking")
          let bufferingCache = getFlag("paused-for-cache")
@@ -83,7 +119,7 @@ index d6b9f3a8..e76c1493 100644
  
          isAtEndOfFile = eofReached
  
-@@ -1786,6 +1809,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -1786,6 +1845,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          refreshTracks()
      }
  
@@ -129,16 +165,22 @@ index d6b9f3a8..e76c1493 100644
      private func refreshTracks() {
          guard mpv != nil else { return }
          var audio = [PlaybackTrackInfo]()
-@@ -2018,6 +2080,8 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2018,7 +2116,14 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
              let shouldPlay = self.pendingAutoplayAfterDisplayGate
              self.pendingAutoplayAfterDisplayGate = false
              if shouldPlay {
 +                self.logStartupStep("play")
 +                self.startupStartedAt = nil
                  self.playPlayback()
++                // Fork: once frames are flowing, record what the picture is actually
++                // rendered into (softness / dull-colour reports need this).
++                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
++                    self?.logOutputState()
++                }
              }
              self.updateState()
-@@ -2166,6 +2230,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         }
+@@ -2166,6 +2271,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          let switchGeneration = displaySwitchGeneration
          setStringProperty("vid", "no")
  
@@ -146,7 +188,7 @@ index d6b9f3a8..e76c1493 100644
          let manager = window.avDisplayManager
          manager.preferredDisplayCriteria = AVDisplayCriteria(
              refreshRate: Float(fps),
-@@ -2200,6 +2265,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2200,6 +2306,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
              return
          }
          isDisplaySwitchInFlight = false
@@ -154,7 +196,7 @@ index d6b9f3a8..e76c1493 100644
          setStringProperty("vid", "auto")
          if pendingURL != nil {
              attemptStartPendingLoad()
-@@ -2300,6 +2366,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2300,6 +2407,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
  #endif
                          self.clearPlaybackError()
                          guard !self.rejectUnsupportedSimulatorCodecIfNeeded() else { return }
@@ -162,7 +204,7 @@ index d6b9f3a8..e76c1493 100644
                          self.isPlayerLoading = false
                          self.attachPendingAudioIfNeeded()
                          self.applyPendingLoadConfiguration()
-@@ -2318,6 +2385,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2318,6 +2426,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
  #if NUVIO_MPV_MEMORY_WATCHDOG && os(tvOS)
                          self.memoryWatchdog.record(event: "video_reconfig")
  #endif
