@@ -278,10 +278,10 @@ index 1d35d569..416db9d0 100644
              )
          }
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
-index b9bb0fca..f971ffe0 100644
+index b9bb0fca..d4c5e13b 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
-@@ -101,11 +101,23 @@ struct MPVPlaybackCachePolicy: Equatable {
+@@ -101,11 +101,28 @@ struct MPVPlaybackCachePolicy: Equatable {
          let source: Source = isLocal ? .localOrLoopback : (isLiveStream ? .liveRemote : .remote)
          let useDisk = !isLocal && nativeDiskAvailable
          let duration = isLocal ? 30 : max(1, Int(ceil(profile.hybridCacheTargetLeadSeconds)))
@@ -304,7 +304,12 @@ index b9bb0fca..f971ffe0 100644
 -            cacheSeconds: duration,
 +            forwardBuffer: buffers.forwardBuffer,
 +            backBuffer: buffers.backBuffer,
-+            cacheSeconds: isLocal ? duration : max(duration, 600),
++            // Fork: read ahead at most 5 minutes. With no cap the bridge pulled the
++            // whole rest of the file at 30-60 MB/s, and on Apple TV 4K (A10X) that
++            // download cost dropped frames (11 per 10 s) until the file was cached;
++            // once it was, drops fell to zero. Five minutes still rides out any
++            // CDN stall; after that it tops up at the stream's own bitrate.
++            cacheSeconds: isLocal ? duration : 300,
              source: source
          )
      }
