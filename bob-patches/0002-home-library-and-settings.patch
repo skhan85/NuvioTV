@@ -669,10 +669,10 @@ index 00000000..f7933e1b
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index f1270317..c400666a 100644
+index 35f16a02..526c45ac 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-@@ -3056,6 +3056,9 @@ struct TitleActionsMenuContent: View {
+@@ -3060,6 +3060,9 @@ struct TitleActionsMenuContent: View {
          } else {
              let inLibrary = LibraryStore.contains(metaId: meta.id, type: meta.type)
              let isItemWatched = WatchedStore.contains(meta: meta)
@@ -682,7 +682,7 @@ index f1270317..c400666a 100644
  
              Button {
                  DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
-@@ -3070,25 +3073,32 @@ struct TitleActionsMenuContent: View {
+@@ -3074,25 +3077,32 @@ struct TitleActionsMenuContent: View {
                      toggleLibrary(currentlyInLibrary: inLibrary)
                  }
              } label: {
@@ -806,10 +806,10 @@ index 675390ca..958e0734 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 67766896..41fd9150 100644
+index 282ad3c6..01dd2e28 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3067,6 +3067,15 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3073,6 +3073,15 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.upNextFromFurthestEpisode) private var upNextFromFurthestEpisode = true
      @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -825,7 +825,7 @@ index 67766896..41fd9150 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3427,6 +3436,56 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3433,6 +3442,56 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -882,7 +882,7 @@ index 67766896..41fd9150 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -4338,7 +4397,7 @@ private struct IntegrationSettingsView: View {
+@@ -4392,7 +4451,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -891,7 +891,7 @@ index 67766896..41fd9150 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -4651,7 +4710,7 @@ private struct TmdbOptionsSheet: View {
+@@ -4705,7 +4764,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -900,7 +900,7 @@ index 67766896..41fd9150 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -12252,8 +12311,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -12358,8 +12417,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs
