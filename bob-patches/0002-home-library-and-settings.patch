@@ -246,10 +246,10 @@ index 00000000..917a74c1
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InsightsFork.swift b/tvosApp/NuvioTV/Sources/Fork/InsightsFork.swift
 new file mode 100644
-index 00000000..fdd4b460
+index 00000000..f7933e1b
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/InsightsFork.swift
-@@ -0,0 +1,395 @@
+@@ -0,0 +1,418 @@
 +import SwiftUI
 +
 +// MARK: - Fork: Stats, Diary and Calendar
@@ -407,6 +407,9 @@ index 00000000..fdd4b460
 +        let name: String
 +        let poster: String?
 +        let label: String
++        /// Fork: the title to open when the row is pressed.
++        let metaId: String
++        let metaType: String
 +    }
 +
 +    static func load(now: Date = Date()) async -> [Entry] {
@@ -415,11 +418,24 @@ index 00000000..fdd4b460
 +        formatter.timeZone = TimeZone(identifier: "UTC")
 +        let from = formatter.string(from: now.addingTimeInterval(-7 * 86_400))
 +        let to = formatter.string(from: now.addingTimeInterval(60 * 86_400))
-+        let library = LibraryStore.items().map(\.meta)
++        // Fork: shows from the Library plus shows watched in the last 120 days, so the agenda
++        // covers what you are actually following (like Stremio's Calendar), not only saved titles.
++        var seen = Set<String>()
++        var library: [NuvioMeta] = []
++        for meta in LibraryStore.items().map(\.meta) where seen.insert(meta.id).inserted {
++            library.append(meta)
++        }
++        let recentCutoff = now.addingTimeInterval(-120 * 86_400)
++        let following = WatchedStore.visibleItems()
++            .filter { $0.meta.isSeries && $0.watchedAt >= recentCutoff }
++            .sorted { $0.watchedAt > $1.watchedAt }
++        for item in following where seen.insert(item.meta.id).inserted {
++            library.append(item.meta)
++        }
 +        let repository = CinemetaCatalogRepository()
 +
 +        return await withTaskGroup(of: [Entry].self) { group in
-+            for meta in library.prefix(80) {
++            for meta in library.prefix(120) {
 +                group.addTask {
 +                    if meta.isSeries {
 +                        var videos = meta.videos ?? []
@@ -432,13 +448,15 @@ index 00000000..fdd4b460
 +                            guard day >= from, day <= to else { return nil }
 +                            let title = video.title.isEmpty ? "" : " · \(video.title)"
 +                            return Entry(date: day, name: meta.name, poster: meta.posterUrl,
-+                                         label: "S\(video.season) E\(video.episode)\(title)")
++                                         label: "S\(video.season) E\(video.episode)\(title)",
++                                         metaId: meta.id, metaType: meta.type)
 +                        }
 +                    }
 +                    guard let released = meta.released, released.count >= 10 else { return [] }
 +                    let day = String(released.prefix(10))
 +                    guard day >= from, day <= to else { return [] }
-+                    return [Entry(date: day, name: meta.name, poster: meta.posterUrl, label: "Movie")]
++                    return [Entry(date: day, name: meta.name, poster: meta.posterUrl, label: "Movie",
++                                  metaId: meta.id, metaType: meta.type)]
 +                }
 +            }
 +            var all: [Entry] = []
@@ -451,6 +469,8 @@ index 00000000..fdd4b460
 +struct ForkInsightsView: View {
 +    @State var page: ForkInsightsPage
 +    let onClose: () -> Void
++    /// Fork: opens a calendar title's details page (id, type).
++    var onOpen: ((String, String) -> Void)? = nil
 +    @State private var stats: ForkWatchStats?
 +    @State private var calendar: [ForkReleaseCalendar.Entry]?
 +
@@ -594,7 +614,7 @@ index 00000000..fdd4b460
 +    private var calendarPage: some View {
 +        if let calendar {
 +            if calendar.isEmpty {
-+                empty("Nothing coming up in the next 60 days for the titles in your Library.")
++                empty("Nothing coming up in the next 60 days for your Library or the shows you're watching.")
 +            }
 +            let today = Self.parser.string(from: Date())
 +            LazyVStack(alignment: .leading, spacing: 16) {
@@ -602,7 +622,9 @@ index 00000000..fdd4b460
 +                    if index == 0 || calendar[index - 1].date != entry.date {
 +                        section(entry.date == today ? "Today" : Self.dayTitle(entry.date))
 +                    }
-+                    row(poster: entry.poster, title: entry.name, detail: entry.label, dimmed: entry.date < today)
++                    row(poster: entry.poster, title: entry.name, detail: entry.label, dimmed: entry.date < today) {
++                        onOpen?(entry.metaId, entry.metaType)
++                    }
 +                }
 +            }
 +        } else {
@@ -613,8 +635,9 @@ index 00000000..fdd4b460
 +        }
 +    }
 +
-+    private func row(poster: String?, title: String, detail: String, dimmed: Bool = false) -> some View {
-+        Button {} label: {
++    private func row(poster: String?, title: String, detail: String, dimmed: Bool = false,
++                     action: @escaping () -> Void = {}) -> some View {
++        Button(action: action) {
 +            HStack(spacing: 20) {
 +                AsyncImage(url: poster.flatMap(URL.init(string:))) { image in
 +                    image.resizable().scaledToFill()
@@ -735,7 +758,7 @@ index 26509c55..1262d818 100644
          }
          .padding(
 diff --git a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
-index 675390ca..68af4bd7 100644
+index 675390ca..958e0734 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
 @@ -38,6 +38,8 @@ public struct LibraryView: View {
@@ -747,13 +770,17 @@ index 675390ca..68af4bd7 100644
      @State private var openCloudItem: CloudItem? = nil
      @FocusState private var cloudFocusedKey: String?
      @State private var lastFocusedCloudItemID: String?
-@@ -89,13 +91,27 @@ public struct LibraryView: View {
+@@ -89,13 +91,31 @@ public struct LibraryView: View {
      }
      
      public var body: some View {
 +        forkBody
 +            .fullScreenCover(item: $forkInsightsPage) { page in
-+                ForkInsightsView(page: page) { forkInsightsPage = nil }
++                ForkInsightsView(page: page, onClose: { forkInsightsPage = nil }, onOpen: { id, type in
++                    // Fork: close the Calendar, then open the title once the cover is gone.
++                    forkInsightsPage = nil
++                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { onContentClick(id, type) }
++                })
 +            }
 +    }
 +
