@@ -1,0 +1,190 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
+index 8eae7448..35349efb 100644
+--- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
++++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
+@@ -498,6 +498,40 @@ enum TmdbDetailsService {
+         )
+     }
+ 
++    /// Fork: TMDB's trending list for `mediaType` ("movie", "tv" or "all") over `window`
++    /// ("day" or "week"), in TMDB's order, people left out. Empty without a key or on failure.
++    static func fetchTrending(mediaType: String, window: String, limit: Int = 20) async -> [RelatedTitle] {
++        if requestContext == nil {
++            return await withRequestContext {
++                await fetchTrending(mediaType: mediaType, window: window, limit: limit)
++            }
++        }
++        guard let apiKey else { return [] }
++        var components = URLComponents(
++            url: apiBase.appendingPathComponent("trending/\(mediaType)/\(window)"),
++            resolvingAgainstBaseURL: false
++        )!
++        components.queryItems = [
++            URLQueryItem(name: "api_key", value: apiKey),
++            URLQueryItem(name: "language", value: preferredLanguage)
++        ]
++        guard let url = components.url,
++              let (data, response) = try? await data(for: url),
++              let http = response as? HTTPURLResponse,
++              (200...299).contains(http.statusCode),
++              let decoded = try? JSONDecoder().decode(TmdbPagedResults.self, from: data) else {
++            return []
++        }
++        let defaultType = mediaType == "tv" ? "series" : "movie"
++        return decoded.results
++            .filter { item in
++                let type = item.mediaType?.lowercased()
++                return type == nil || type == "movie" || type == "tv"
++            }
++            .prefix(limit)
++            .compactMap { mapDiscoverItemFast($0, defaultType: defaultType) }
++    }
++
+     /// Fetches full season and episode listings from TMDB, enabling unreleased/TBD episodes
+     /// and accurate episode thumbnails/titles for ongoing and announced TV series.
+     static func fetchEpisodes(for meta: NuvioMeta) async -> [NuvioVideo]? {
+diff --git a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
+index 917a74c1..2ec55541 100644
+--- a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
++++ b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
+@@ -84,6 +84,47 @@ enum ForkBecauseYouWatched {
+     }
+ }
+ 
++// MARK: - Fork: Top 10 and Trending rows
++
++/// Fork: Netflix-style "Top 10 Shows Today", "Top 10 Movies Today" and "Trending Now" rows from
++/// TMDB trending. The Top 10 rows get the rank numerals through their names. Home places the
++/// shows row under Continue Watching, before "Because you watched", and the other two after it.
++/// `fork_trending_rows` = false turns them off (Settings → Layout → Top 10 & Trending).
++enum ForkTrendingRows {
++    static let enabledKey = "fork_trending_rows"
++    static let idPrefix = "fork_trending_"
++    /// Refresh at most this often while Home stays mounted.
++    static let refreshSeconds: UInt64 = 3 * 60 * 60
++
++    struct Rows {
++        var topShows: TVHomeSection?
++        var topMovies: TVHomeSection?
++        var trendingNow: TVHomeSection?
++
++        var isEmpty: Bool { topShows == nil && topMovies == nil && trendingNow == nil }
++    }
++
++    static func load() async -> Rows {
++        async let showsList = TmdbDetailsService.fetchTrending(mediaType: "tv", window: "day", limit: 10)
++        async let moviesList = TmdbDetailsService.fetchTrending(mediaType: "movie", window: "day", limit: 10)
++        async let weekList = TmdbDetailsService.fetchTrending(mediaType: "all", window: "week", limit: 20)
++        let shows = await showsList.map(\.asMeta)
++        let movies = await moviesList.map(\.asMeta)
++        let topIds = Set((shows + movies).map(\.id))
++        let week = await weekList.map(\.asMeta).filter { !topIds.contains($0.id) }
++
++        func row(_ name: String, _ title: String, _ items: [NuvioMeta], min: Int) -> TVHomeSection? {
++            guard items.count >= min else { return nil }
++            return TVHomeSection(id: idPrefix + name, title: title, items: items)
++        }
++        return Rows(
++            topShows: row("top_shows", "Top 10 Shows Today", shows, min: 5),
++            topMovies: row("top_movies", "Top 10 Movies Today", movies, min: 5),
++            trendingNow: row("now", "Trending Now", week, min: 6)
++        )
++    }
++}
++
+ // MARK: - Fork: episodes left on Continue Watching
+ 
+ extension ContinueWatchingItem {
+diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+index 19bd259e..8344059c 100644
+--- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
++++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+@@ -4664,6 +4664,7 @@ enum ProfileDisplayName {
+ private final class TVHomeFocusWork {
+     struct VisibleSectionsSignature: Equatable {
+         let forkRevision: Int
++        let forkTrendingRevision: Int
+         let cwVisible: Bool
+         let cwCount: Int
+         let cwFirstId: String?
+@@ -4994,6 +4995,10 @@ struct TVHomeView: View {
+     @State private var forkBecauseSections: [TVHomeSection] = []
+     @State private var forkBecauseRevision = 0
+     @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseEnabled = true
++    // Fork: Netflix-style Top 10 / Trending Now rows (see ForkTrendingRows).
++    @State private var forkTrending = ForkTrendingRows.Rows()
++    @State private var forkTrendingRevision = 0
++    @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingEnabled = true
+     @State private var upcomingItems: [ContinueWatchingItem] = []
+     /// Derived once when Continue Watching changes. Recomputing these from the
+     /// entire history inside `body` made every focus update scale with the
+@@ -5079,6 +5084,23 @@ struct TVHomeView: View {
+                     forkBecauseSections = sections
+                     forkBecauseRevision &+= 1
+                 }
++            // Fork: load the Top 10 / Trending Now rows, then refresh them every few hours.
++            // A failed refresh keeps the rows already shown.
++            Color.clear
++                .frame(width: 0, height: 0)
++                .task(id: forkTrendingEnabled && collectionHome == nil) {
++                    guard forkTrendingEnabled, collectionHome == nil else { return }
++                    while !Task.isCancelled {
++                        let rows = await ForkTrendingRows.load()
++                        guard !Task.isCancelled else { return }
++                        if !rows.isEmpty {
++                            forkTrending = rows
++                            forkTrendingRevision &+= 1
++                        }
++                        let wait = rows.isEmpty ? 60 : ForkTrendingRows.refreshSeconds
++                        try? await Task.sleep(nanoseconds: wait * 1_000_000_000)
++                    }
++                }
+             // Fork: a Continue Watching card that keeps focus for a second starts finding its
+             // sources (and subtitles), so pressing it opens a full picker.
+             Color.clear
+@@ -7513,6 +7535,7 @@ struct TVHomeView: View {
+     private var visibleSections: [TVHomeSection] {
+         let signature = TVHomeFocusWork.VisibleSectionsSignature(
+             forkRevision: forkBecauseEnabled ? forkBecauseRevision : -1,
++            forkTrendingRevision: forkTrendingEnabled ? forkTrendingRevision : -1,
+             cwVisible: continueWatchingVisible,
+             cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
+             cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
+@@ -7547,7 +7570,11 @@ struct TVHomeView: View {
+             + [localTitlesSection].compactMap { $0 }
+             + jellyfinSections
+         let allSections = collectionHome == nil
+-            ? pinnedSections + (forkBecauseEnabled ? forkBecauseSections : []) + store.sections
++            ? pinnedSections
++                + (forkTrendingEnabled ? [forkTrending.topShows].compactMap { $0 } : [])
++                + (forkBecauseEnabled ? forkBecauseSections : [])
++                + (forkTrendingEnabled ? [forkTrending.topMovies, forkTrending.trendingNow].compactMap { $0 } : [])
++                + store.sections
+             : store.sections
+ 
+         let result: [TVHomeSection]
+diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+index b12e17d6..3d0f963b 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+@@ -3077,6 +3077,7 @@ private struct LayoutDiscoverySettingsView: View {
+     @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
+     @AppStorage("fork_top10_numerals") private var forkTop10 = true
+     @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
++    @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
+     @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
+     @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
+     @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
+@@ -3456,6 +3457,12 @@ private struct LayoutDiscoverySettingsView: View {
+                     isOn: $forkBillboard,
+                     accentColor: accentColor
+                 )
++                SettingsToggleRow(
++                    title: "Top 10 & Trending",
++                    subtitle: "Netflix-style Top 10 Shows Today, Top 10 Movies Today and Trending Now rows from TMDB",
++                    isOn: $forkTrendingRows,
++                    accentColor: accentColor
++                )
+                 SettingsToggleRow(
+                     title: "Top 10 Numbers",
+                     subtitle: "Big rank numbers on rows whose name says Top 10",
