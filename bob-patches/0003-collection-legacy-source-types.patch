@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-index b0eb63e7..aad3d8a1 100644
+index 6a20ff50..9cd9e824 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 @@ -1215,8 +1215,7 @@ final class CinemetaCatalogRepository: CatalogRepository {
@@ -12,7 +12,7 @@ index b0eb63e7..aad3d8a1 100644
          // A TMDB-backed collection is an explicit source choice, independent
          // of whether optional Details enrichment is enabled.
          guard !apiKey.isEmpty else { return nil }
-@@ -2418,15 +2417,25 @@ final class CinemetaCatalogRepository: CatalogRepository {
+@@ -2433,15 +2432,25 @@ final class CinemetaCatalogRepository: CatalogRepository {
                  contentType: source.type,
                  catalogId: source.catalogId
              ) else { continue }

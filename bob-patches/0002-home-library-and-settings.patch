@@ -43,6 +43,35 @@ index 050df5be..8eae7448 100644
      }
  
      static var preferredLanguage: String {
+diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
+index b0eb63e7..6a20ff50 100644
+--- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
++++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
+@@ -1798,8 +1798,23 @@ final class CinemetaCatalogRepository: CatalogRepository {
+                 }
+             }
+             var indexed: [(Int, [NuvioMeta])] = []
+-            for await result in group {
++            // Fork: don't hold every result for the slowest source (up to 5 s). Once any
++            // source has answered with titles, wait at most 1.5 s more for the rest, then
++            // show what has arrived. The grace marker is index -1.
++            var graceStarted = false
++            while let result = await group.next() {
++                if result.0 == -1 {
++                    group.cancelAll()
++                    break
++                }
+                 indexed.append(result)
++                if !graceStarted, !result.1.isEmpty {
++                    graceStarted = true
++                    group.addTask {
++                        try? await Task.sleep(nanoseconds: 1_500_000_000)
++                        return (-1, [])
++                    }
++                }
+             }
+             indexed.sort { $0.0 < $1.0 }
+ 
 diff --git a/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
 new file mode 100644
 index 00000000..4e8c1b71
@@ -924,7 +953,7 @@ index 3af8d0b6..0cd610a9 100644
                  self?.performSearch(query: text)
              }
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
-index 67107995..8fdf2775 100644
+index 67107995..0b95a255 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
 @@ -67,7 +67,7 @@ class SearchViewModel: ObservableObject {
@@ -932,7 +961,7 @@ index 67107995..8fdf2775 100644
          $searchText
              .removeDuplicates()
 -            .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
-+            .debounce(for: .milliseconds(1000), scheduler: DispatchQueue.main) // Fork: 1 s (was 350 ms) so remote typing does not search every letter
++            .debounce(for: .milliseconds(700), scheduler: DispatchQueue.main) // Fork: 0.7 s (was 350 ms) so remote typing does not search every letter, without the full second's wait
              .sink { [weak self] text in
                  self?.performSearch(query: text)
              }
