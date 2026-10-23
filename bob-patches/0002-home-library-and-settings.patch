@@ -44,34 +44,157 @@ index 050df5be..8eae7448 100644
  
      static var preferredLanguage: String {
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-index b0eb63e7..6a20ff50 100644
+index b0eb63e7..cf1222d8 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-@@ -1798,8 +1798,23 @@ final class CinemetaCatalogRepository: CatalogRepository {
-                 }
-             }
-             var indexed: [(Int, [NuvioMeta])] = []
--            for await result in group {
-+            // Fork: don't hold every result for the slowest source (up to 5 s). Once any
-+            // source has answered with titles, wait at most 1.5 s more for the rest, then
-+            // show what has arrived. The grace marker is index -1.
-+            var graceStarted = false
-+            while let result = await group.next() {
-+                if result.0 == -1 {
-+                    group.cancelAll()
-+                    break
-+                }
-                 indexed.append(result)
-+                if !graceStarted, !result.1.isEmpty {
-+                    graceStarted = true
+@@ -1725,7 +1725,69 @@ final class CinemetaCatalogRepository: CatalogRepository {
+             )
+         }
+ 
+-        // 2. Discover search-capable targets from configured add-ons in parallel
++        // Fork: query the targets known right now (Cinemeta) straight away instead of first
++        // waiting up to 2.5 s for every add-on manifest; add-on search catalogs found below
++        // are queried as soon as their manifests arrive. Results keep the original order.
++        func runTargets(_ list: [SearchTarget], offset: Int) async -> [(Int, [NuvioMeta])] {
++            guard !list.isEmpty else { return [] }
++            return await withTaskGroup(of: (Int, [NuvioMeta]).self, returning: [(Int, [NuvioMeta])].self) { group in
++                for (index, target) in list.enumerated() {
 +                    group.addTask {
-+                        try? await Task.sleep(nanoseconds: 1_500_000_000)
-+                        return (-1, [])
++                        guard !Task.isCancelled else { return (offset + index, []) }
++                        do {
++                            let items: [NuvioMeta] = try await withThrowingTaskGroup(of: [NuvioMeta].self) { fetchGroup in
++                                fetchGroup.addTask {
++                                    try await self.fetchCatalog(
++                                        sourceBaseURL: target.baseURL,
++                                        type: target.type,
++                                        catalogId: target.catalogId,
++                                        skip: nil,
++                                        search: trimmed,
++                                        genre: nil
++                                    )
++                                }
++                                fetchGroup.addTask {
++                                    try await Task.sleep(nanoseconds: 5_000_000_000)
++                                    try Task.checkCancellation()
++                                    throw URLError(.timedOut)
++                                }
++                                guard let first = try await fetchGroup.next() else { return [] }
++                                fetchGroup.cancelAll()
++                                return first
++                            }
++                            let tagged = target.isAddon ? items.map { $0.withIsFromAddon(true) } : items
++                            return (offset + index, tagged)
++                        } catch {
++                            return (offset + index, [])
++                        }
 +                    }
 +                }
++                var indexed: [(Int, [NuvioMeta])] = []
++                // Once any source has answered with titles, wait at most 1.5 s more for the
++                // rest, then show what has arrived. The grace marker is index -1.
++                var graceStarted = false
++                while let result = await group.next() {
++                    if result.0 == -1 {
++                        group.cancelAll()
++                        break
++                    }
++                    indexed.append(result)
++                    if !graceStarted, !result.1.isEmpty {
++                        graceStarted = true
++                        group.addTask {
++                            try? await Task.sleep(nanoseconds: 1_500_000_000)
++                            return (-1, [])
++                        }
++                    }
++                }
++                return indexed
++            }
++        }
++
++        let immediateTargets = targets
++        let immediateSearch = Task { await runTargets(immediateTargets, offset: 0) }
++
++        // 2. Meanwhile, discover search-capable targets from configured add-ons in parallel
+         // with a short deadline (2.5s) so slow/offline add-on hosts never stall search.
+         let candidateURLs = Self.configuredStreamAddonManifestURLs
+         if !candidateURLs.isEmpty {
+@@ -1755,59 +1817,28 @@ final class CinemetaCatalogRepository: CatalogRepository {
              }
-             indexed.sort { $0.0 < $1.0 }
+         }
  
+-        if targets.isEmpty {
+-            targets = [
++        var addonTargets = Array(targets.dropFirst(immediateTargets.count))
++        if immediateTargets.isEmpty && addonTargets.isEmpty {
++            addonTargets = [
+                 SearchTarget(addonName: "Cinemeta", baseURL: baseURL, type: "movie", catalogId: "top", isAddon: false),
+                 SearchTarget(addonName: "Cinemeta", baseURL: baseURL, type: "series", catalogId: "top", isAddon: false)
+             ]
+         }
++        var addonResults: [(Int, [NuvioMeta])] = []
++        if !Task.isCancelled {
++            addonResults = await runTargets(addonTargets, offset: immediateTargets.count)
++        }
++        let immediateResults = await withTaskCancellationHandler {
++            await immediateSearch.value
++        } onCancel: {
++            immediateSearch.cancel()
++        }
+ 
+-        guard !Task.isCancelled else { return [] }
+-
+-        // 3. Query all targets concurrently with bounded timeout per target (5s)
+-        let rawResults = await withTaskGroup(of: (Int, [NuvioMeta]).self, returning: [NuvioMeta].self) { group in
+-            for (index, target) in targets.enumerated() {
+-                group.addTask {
+-                    guard !Task.isCancelled else { return (index, []) }
+-                    do {
+-                        let items: [NuvioMeta] = try await withThrowingTaskGroup(of: [NuvioMeta].self) { fetchGroup in
+-                            fetchGroup.addTask {
+-                                try await self.fetchCatalog(
+-                                    sourceBaseURL: target.baseURL,
+-                                    type: target.type,
+-                                    catalogId: target.catalogId,
+-                                    skip: nil,
+-                                    search: trimmed,
+-                                    genre: nil
+-                                )
+-                            }
+-                            fetchGroup.addTask {
+-                                try await Task.sleep(nanoseconds: 5_000_000_000)
+-                                try Task.checkCancellation()
+-                                throw URLError(.timedOut)
+-                            }
+-                            guard let first = try await fetchGroup.next() else { return [] }
+-                            fetchGroup.cancelAll()
+-                            return first
+-                        }
+-                        let tagged = target.isAddon ? items.map { $0.withIsFromAddon(true) } : items
+-                        return (index, tagged)
+-                    } catch {
+-                        return (index, [])
+-                    }
+-                }
+-            }
+-            var indexed: [(Int, [NuvioMeta])] = []
+-            for await result in group {
+-                indexed.append(result)
+-            }
+-            indexed.sort { $0.0 < $1.0 }
+-
+-            var merged: [NuvioMeta] = []
+-            for (_, items) in indexed {
+-                merged.append(contentsOf: items)
+-            }
+-            return merged
++        var indexed = immediateResults + addonResults
++        indexed.sort { $0.0 < $1.0 }
++        var rawResults: [NuvioMeta] = []
++        for (_, items) in indexed {
++            rawResults.append(contentsOf: items)
+         }
+ 
+         guard !Task.isCancelled else { return [] }
 diff --git a/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
 new file mode 100644
 index 00000000..4e8c1b71
@@ -940,7 +1063,7 @@ index 282ad3c6..01dd2e28 100644
  
          if let providers = await fetchWatchProviders(apiKey: key) {
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
-index 3af8d0b6..0cd610a9 100644
+index 3af8d0b6..cec57042 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
 @@ -50,7 +50,7 @@ class NetflixSearchViewModel: ObservableObject {
@@ -948,7 +1071,7 @@ index 3af8d0b6..0cd610a9 100644
          $searchText
              .removeDuplicates()
 -            .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
-+            .debounce(for: .milliseconds(1000), scheduler: DispatchQueue.main) // Fork: 1 s (was 350 ms) so remote typing does not search every letter
++            .debounce(for: .milliseconds(700), scheduler: DispatchQueue.main) // Fork: 0.7 s (was 350 ms) so remote typing does not search every letter, without the full second's wait
              .sink { [weak self] text in
                  self?.performSearch(query: text)
              }
