@@ -166,7 +166,7 @@ index 917a74c1..dd6e6fea 100644
  
  extension ContinueWatchingItem {
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 19bd259e..dbde2eff 100644
+index 19bd259e..1d36a5ca 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -4664,6 +4664,7 @@ enum ProfileDisplayName {
@@ -224,7 +224,7 @@ index 19bd259e..dbde2eff 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7547,7 +7574,11 @@ struct TVHomeView: View {
+@@ -7547,7 +7574,12 @@ struct TVHomeView: View {
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
          let allSections = collectionHome == nil
@@ -232,7 +232,8 @@ index 19bd259e..dbde2eff 100644
 +            ? pinnedSections
 +                + (forkTrendingEnabled ? [forkTrending.topShows].compactMap { $0 } : [])
 +                + (forkBecauseEnabled ? forkBecauseSections : [])
-+                + (forkTrendingEnabled ? [forkTrending.topMovies].compactMap { $0 } // Fork: no Trending Now row (Trending / New covers it) : [])
++                // Fork: no Trending Now row (Trending / New covers it).
++                + (forkTrendingEnabled ? [forkTrending.topMovies].compactMap { $0 } : [])
 +                + store.sections
              : store.sections
  
