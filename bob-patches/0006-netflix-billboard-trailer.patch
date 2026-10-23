@@ -1,0 +1,274 @@
+diff --git a/tvosApp/NuvioTV/Sources/Fork/BillboardFork.swift b/tvosApp/NuvioTV/Sources/Fork/BillboardFork.swift
+new file mode 100644
+index 00000000..b03ae552
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/BillboardFork.swift
+@@ -0,0 +1,72 @@
++import SwiftUI
++
++/// Fork: Netflix-style billboard. Once focus rests on a title, its trailer plays
++/// muted across the Home backdrop instead of inside the focused card, and the
++/// hero synopsis fades out so the logo sits over the video. Device-local switch
++/// in Settings → Layout → Billboard Trailer. Follows the existing trailer
++/// settings (Autoplay Trailers, Trailer Delay, Trailer Preview Sound).
++enum ForkBillboard {
++    static let enabledKey = "fork_billboard_trailer"
++}
++
++/// Fork: true inside Home's rows while the billboard owns trailer playback, so
++/// focused cards keep their artwork instead of starting a second trailer.
++private struct ForkBillboardOwnsCardTrailersKey: EnvironmentKey {
++    static let defaultValue = false
++}
++
++extension EnvironmentValues {
++    var forkBillboardOwnsCardTrailers: Bool {
++        get { self[ForkBillboardOwnsCardTrailersKey.self] }
++        set { self[ForkBillboardOwnsCardTrailersKey.self] = newValue }
++    }
++}
++
++/// Fork: the billboard's video layer. Mount it with `.id(meta.id)` so every
++/// title gets a fresh delay and player; it fades in over the still backdrop
++/// once the first frame is ready and fades back out when the trailer ends.
++struct ForkBillboardTrailer: View {
++    let meta: NuvioMeta
++    let delaySeconds: Int
++    let onPlayingChange: (Bool) -> Void
++
++    @State private var isActive = false
++    @State private var isFinished = false
++
++    var body: some View {
++        ZStack {
++            if !isFinished {
++                TrailerPreviewPlayer(
++                    meta: meta,
++                    isActive: isActive,
++                    onPlaybackReady: {
++                        guard isActive else { return }
++                        onPlayingChange(true)
++                    },
++                    onPlaybackFinished: finish,
++                    onPlaybackUnavailable: finish
++                )
++                .transition(.opacity)
++            }
++        }
++        .animation(.easeInOut(duration: 0.6), value: isFinished)
++        .allowsHitTesting(false)
++        .accessibilityHidden(true)
++        .task {
++            let delay = UInt64(min(15, max(0, delaySeconds)))
++            try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
++            guard !Task.isCancelled else { return }
++            isActive = true
++        }
++        .onDisappear {
++            isActive = false
++            onPlayingChange(false)
++        }
++    }
++
++    private func finish() {
++        isActive = false
++        isFinished = true
++        onPlayingChange(false)
++    }
++}
+diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+index f99fb5c4..19bd259e 100644
+--- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
++++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+@@ -4935,6 +4935,11 @@ struct TVHomeView: View {
+     @AppStorage(SettingsKey.bodyColor) private var bodyColor = SettingsBackground.charcoal.rawValue
+     @AppStorage(SettingsKey.heroEnabled) private var heroEnabled = true
+     @AppStorage(SettingsKey.fullscreenHeroBackdrop) private var fullscreenHeroBackdrop = true
++    // Fork: Netflix-style billboard trailer behind the Home hero.
++    @AppStorage(ForkBillboard.enabledKey) private var forkBillboardEnabled = true
++    @AppStorage(SettingsKey.trailersEnabled) private var forkTrailersEnabled = true
++    @AppStorage(SettingsKey.trailerDelay) private var forkTrailerDelay = 7
++    @State private var forkBillboardPlayingId: String?
+     @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
+     @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
+     @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
+@@ -5099,6 +5104,7 @@ struct TVHomeView: View {
+                     )
+                     .equatable()
+                     .frame(width: proxy.size.width, height: proxy.size.height)
++                    .overlay { forkBillboardLayer }
+                     .clipped()
+                 } else {
+                     let backdropWidth = proxy.size.width * 0.65
+@@ -5114,6 +5120,7 @@ struct TVHomeView: View {
+                         )
+                         .equatable()
+                         .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
++                        .overlay { forkBillboardLayer }
+                         .mask(
+                             LinearGradient(
+                                 stops: [
+@@ -5218,7 +5225,8 @@ struct TVHomeView: View {
+                         } else if let heroMeta = visibleFocusedMeta ?? visibleHero {
+                             TVHeroView(
+                                 meta: heroMeta,
+-                                continueItem: heroContinueItem(for: heroMeta)
++                                continueItem: heroContinueItem(for: heroMeta),
++                                forkTrailerPlaying: forkBillboardPlayingId == heroMeta.id
+                             ) {
+                                 navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
+                             }
+@@ -5287,6 +5295,8 @@ struct TVHomeView: View {
+                                     .frame(maxWidth: .infinity, alignment: .leading)
+                                     .padding(.top, TVHomeLayout.rowsTopPadding)
+                                     .padding(.bottom, 80)
++                                    // Fork: the billboard plays trailers, so cards keep their artwork.
++                                    .environment(\.forkBillboardOwnsCardTrailers, forkBillboardOwnsTrailers)
+                                     #if os(tvOS)
+                                     // Place the configurator inside the scroll content so its
+                                     // ancestor is the UIScrollView that owns the row offset.
+@@ -7616,6 +7626,39 @@ struct TVHomeView: View {
+         return focusedMeta
+     }
+ 
++    /// Fork: whether the Netflix-style billboard handles trailers on this Home.
++    private var forkBillboardOwnsTrailers: Bool {
++        forkBillboardEnabled && forkTrailersEnabled && heroEnabled && homeLayout != "Grid View"
++    }
++
++    /// Fork: the title whose trailer plays across the backdrop — the same title
++    /// the backdrop and hero show. Nothing for folders or Continue Watching /
++    /// Upcoming (their cards never had trailers), while loading, while the
++    /// remote is held for fast scrolling, or while this tab is covered or not
++    /// on screen (Details picks the trailer up from where it was).
++    private var forkBillboardMeta: NuvioMeta? {
++        guard forkBillboardOwnsTrailers, isActive, isEnabled, !isFullScreenOverlayPresented,
++              !showsLoading, !isFastScrolling,
++              focusedCollectionFolder == nil,
++              focusedSectionId != TVHomeSection.continueWatchingId,
++              focusedSectionId != TVHomeSection.upcomingId
++        else { return nil }
++        return visibleFocusedMeta ?? visibleHero
++    }
++
++    @ViewBuilder private var forkBillboardLayer: some View {
++        if let meta = forkBillboardMeta {
++            ForkBillboardTrailer(meta: meta, delaySeconds: forkTrailerDelay) { playing in
++                if playing {
++                    forkBillboardPlayingId = meta.id
++                } else if forkBillboardPlayingId == meta.id {
++                    forkBillboardPlayingId = nil
++                }
++            }
++            .id(meta.id)
++        }
++    }
++
+     /// Featured titles for Grid View's automatic hero. Start with one item from
+     /// each catalog for variety, then fill any remaining carousel slots from
+     /// the catalog order without duplicates.
+@@ -10653,6 +10696,8 @@ private struct TVHeroView: View {
+     /// say which episode is in progress, how much is left, and show the
+     /// episode's own overview instead of the series blurb.
+     var continueItem: ContinueWatchingItem? = nil
++    /// Fork: the billboard trailer is playing; fade the synopsis like Netflix.
++    var forkTrailerPlaying: Bool = false
+     let onSelect: () -> Void
+     @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
+ 
+@@ -10687,6 +10732,8 @@ private struct TVHeroView: View {
+                     .lineLimit(4)
+                     .frame(maxWidth: 900, alignment: .leading)
+                     .padding(.top, 4)
++                    .opacity(forkTrailerPlaying ? 0 : 1)
++                    .animation(.easeInOut(duration: 0.8), value: forkTrailerPlaying)
+             }
+         }
+         .foregroundColor(.white)
+@@ -10725,6 +10772,7 @@ extension TVHeroView: Equatable {
+             && lhs.continueItem?.meta.id == rhs.continueItem?.meta.id
+             && lhs.continueItem?.episodeLabel == rhs.continueItem?.episodeLabel
+             && lhs.continueItem?.remainingText == rhs.continueItem?.remainingText
++            && lhs.forkTrailerPlaying == rhs.forkTrailerPlaying
+     }
+ }
+ 
+diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
+index 526c45ac..abe01f5e 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
+@@ -240,6 +240,8 @@ struct PosterCard: View {
+     @State private var landscapeArtworkPrepared = false
+     @AppStorage(SettingsKey.trailersEnabled) private var trailersEnabled = true
+     @AppStorage(SettingsKey.trailerDelay) private var trailerDelay = 7
++    // Fork: Home's billboard plays the trailer behind the rows instead.
++    @Environment(\.forkBillboardOwnsCardTrailers) private var forkBillboardOwnsCardTrailers
+     @AppStorage(SettingsKey.cardCornerRadius) private var cardCornerRadiusSetting = AppCardStyle.defaultCornerRadiusRaw
+     @AppStorage(SettingsKey.liquidGlassCards) private var liquidGlassCards = true
+     @State private var isTrailerPreviewActive = false
+@@ -399,7 +401,7 @@ struct PosterCard: View {
+             .overlay {
+                 // Prepare during the delay, but keep playback and visibility
+                 // gated by isTrailerPreviewActive until the timer completes.
+-                if isFocused && effectiveLandscape && trailersEnabled
++                if isFocused && effectiveLandscape && cardTrailersEnabled
+                     && !isContinueOrUpcomingCard && !didFinishTrailerPreview {
+                     TrailerPreviewPlayer(
+                         meta: meta,
+@@ -868,7 +870,12 @@ struct PosterCard: View {
+     }
+ 
+     private var trailerActivationIdentity: String {
+-        "\(isFocused)\u{1f}\(effectiveLandscape)\u{1f}\(trailersEnabled)\u{1f}\(trailerDelay)\u{1f}\(isContinueOrUpcomingCard)"
++        "\(isFocused)\u{1f}\(effectiveLandscape)\u{1f}\(cardTrailersEnabled)\u{1f}\(trailerDelay)\u{1f}\(isContinueOrUpcomingCard)"
++    }
++
++    /// Fork: card trailers stay off while Home's billboard owns playback.
++    private var cardTrailersEnabled: Bool {
++        trailersEnabled && !forkBillboardOwnsCardTrailers
+     }
+ 
+     private var isTrailerPreviewVisible: Bool {
+@@ -880,7 +887,7 @@ struct PosterCard: View {
+         isTrailerPreviewActive = false
+         isTrailerPreviewReady = false
+         didFinishTrailerPreview = false
+-        guard isFocused, effectiveLandscape, trailersEnabled, !isContinueOrUpcomingCard else { return }
++        guard isFocused, effectiveLandscape, cardTrailersEnabled, !isContinueOrUpcomingCard else { return }
+ 
+         let delay = min(15, max(0, trailerDelay))
+         do {
+@@ -888,7 +895,7 @@ struct PosterCard: View {
+         } catch {
+             return
+         }
+-        guard !Task.isCancelled, isFocused, effectiveLandscape, trailersEnabled, !isContinueOrUpcomingCard else { return }
++        guard !Task.isCancelled, isFocused, effectiveLandscape, cardTrailersEnabled, !isContinueOrUpcomingCard else { return }
+         isTrailerPreviewActive = true
+     }
+ 
+diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+index 01dd2e28..b12e17d6 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+@@ -3076,6 +3076,7 @@ private struct LayoutDiscoverySettingsView: View {
+     // Fork switches (device-local).
+     @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
+     @AppStorage("fork_top10_numerals") private var forkTop10 = true
++    @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
+     @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
+     @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
+     @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
+@@ -3449,6 +3450,12 @@ private struct LayoutDiscoverySettingsView: View {
+                     isOn: $forkBecauseRows,
+                     accentColor: accentColor
+                 )
++                SettingsToggleRow(
++                    title: "Billboard Trailer",
++                    subtitle: "Play the focused title's trailer behind Home, like Netflix, instead of inside the card. Uses the Trailers settings in Playback",
++                    isOn: $forkBillboard,
++                    accentColor: accentColor
++                )
+                 SettingsToggleRow(
+                     title: "Top 10 Numbers",
+                     subtitle: "Big rank numbers on rows whose name says Top 10",
