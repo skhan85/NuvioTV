@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 8eae7448..35349efb 100644
+index 8eae7448..af036abc 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-@@ -498,6 +498,40 @@ enum TmdbDetailsService {
+@@ -498,6 +498,88 @@ enum TmdbDetailsService {
          )
      }
  
@@ -40,14 +40,62 @@ index 8eae7448..35349efb 100644
 +            .compactMap { mapDiscoverItemFast($0, defaultType: defaultType) }
 +    }
 +
++    /// Fork: kid-friendly stand-in for `fetchTrending` on a kids profile: TMDB's most popular
++    /// Family / Animation films rated PG or lower in the US, or Kids / Family shows
++    /// (crime, drama and war-politics shows left out). `mediaType` is "movie" or "tv".
++    static func fetchKidsPopular(mediaType: String, limit: Int = 20) async -> [RelatedTitle] {
++        if requestContext == nil {
++            return await withRequestContext {
++                await fetchKidsPopular(mediaType: mediaType, limit: limit)
++            }
++        }
++        guard let apiKey else { return [] }
++        var components = URLComponents(
++            url: apiBase.appendingPathComponent("discover/\(mediaType)"),
++            resolvingAgainstBaseURL: false
++        )!
++        var items = [
++            URLQueryItem(name: "api_key", value: apiKey),
++            URLQueryItem(name: "language", value: preferredLanguage),
++            URLQueryItem(name: "sort_by", value: "popularity.desc"),
++            URLQueryItem(name: "include_adult", value: "false")
++        ]
++        if mediaType == "movie" {
++            items += [
++                URLQueryItem(name: "certification_country", value: "US"),
++                URLQueryItem(name: "certification.lte", value: "PG"),
++                URLQueryItem(name: "with_genres", value: "10751|16"),
++                URLQueryItem(name: "vote_count.gte", value: "50")
++            ]
++        } else {
++            items += [
++                URLQueryItem(name: "with_genres", value: "10762|10751"),
++                URLQueryItem(name: "without_genres", value: "80|18|10768"),
++                URLQueryItem(name: "vote_count.gte", value: "20")
++            ]
++        }
++        components.queryItems = items
++        guard let url = components.url,
++              let (data, response) = try? await data(for: url),
++              let http = response as? HTTPURLResponse,
++              (200...299).contains(http.statusCode),
++              let decoded = try? JSONDecoder().decode(TmdbPagedResults.self, from: data) else {
++            return []
++        }
++        let defaultType = mediaType == "tv" ? "series" : "movie"
++        return decoded.results
++            .prefix(limit)
++            .compactMap { mapDiscoverItemFast($0, defaultType: defaultType) }
++    }
++
      /// Fetches full season and episode listings from TMDB, enabling unreleased/TBD episodes
      /// and accurate episode thumbnails/titles for ongoing and announced TV series.
      static func fetchEpisodes(for meta: NuvioMeta) async -> [NuvioVideo]? {
 diff --git a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
-index 917a74c1..2ec55541 100644
+index 917a74c1..dd6e6fea 100644
 --- a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
 +++ b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
-@@ -84,6 +84,47 @@ enum ForkBecauseYouWatched {
+@@ -84,6 +84,69 @@ enum ForkBecauseYouWatched {
      }
  }
  
@@ -59,6 +107,8 @@ index 917a74c1..2ec55541 100644
 +/// `fork_trending_rows` = false turns them off (Settings → Layout → Top 10 & Trending).
 +enum ForkTrendingRows {
 +    static let enabledKey = "fork_trending_rows"
++    /// Per profile (Home reads it through the profile's `.defaultAppStorage`): kid-friendly lists.
++    static let kidsKey = "fork_kids_trending"
 +    static let idPrefix = "fork_trending_"
 +    /// Refresh at most this often while Home stays mounted.
 +    static let refreshSeconds: UInt64 = 3 * 60 * 60
@@ -71,14 +121,34 @@ index 917a74c1..2ec55541 100644
 +        var isEmpty: Bool { topShows == nil && topMovies == nil && trendingNow == nil }
 +    }
 +
-+    static func load() async -> Rows {
-+        async let showsList = TmdbDetailsService.fetchTrending(mediaType: "tv", window: "day", limit: 10)
-+        async let moviesList = TmdbDetailsService.fetchTrending(mediaType: "movie", window: "day", limit: 10)
-+        async let weekList = TmdbDetailsService.fetchTrending(mediaType: "all", window: "week", limit: 20)
-+        let shows = await showsList.map(\.asMeta)
-+        let movies = await moviesList.map(\.asMeta)
-+        let topIds = Set((shows + movies).map(\.id))
-+        let week = await weekList.map(\.asMeta).filter { !topIds.contains($0.id) }
++    static func load(kids: Bool = false) async -> Rows {
++        let shows: [NuvioMeta]
++        let movies: [NuvioMeta]
++        let week: [NuvioMeta]
++        if kids {
++            // Kids profile: the most popular family / kids titles; Trending Now is the next ones,
++            // films and shows alternating.
++            async let kidsShows = TmdbDetailsService.fetchKidsPopular(mediaType: "tv")
++            async let kidsMovies = TmdbDetailsService.fetchKidsPopular(mediaType: "movie")
++            let allShows = await kidsShows.map(\.asMeta)
++            let allMovies = await kidsMovies.map(\.asMeta)
++            shows = Array(allShows.prefix(10))
++            movies = Array(allMovies.prefix(10))
++            let moreShows = Array(allShows.dropFirst(10))
++            let moreMovies = Array(allMovies.dropFirst(10))
++            week = (0..<max(moreShows.count, moreMovies.count)).flatMap { index in
++                [index < moreMovies.count ? moreMovies[index] : nil,
++                 index < moreShows.count ? moreShows[index] : nil].compactMap { $0 }
++            }
++        } else {
++            async let showsList = TmdbDetailsService.fetchTrending(mediaType: "tv", window: "day", limit: 10)
++            async let moviesList = TmdbDetailsService.fetchTrending(mediaType: "movie", window: "day", limit: 10)
++            async let weekList = TmdbDetailsService.fetchTrending(mediaType: "all", window: "week", limit: 20)
++            shows = await showsList.map(\.asMeta)
++            movies = await moviesList.map(\.asMeta)
++            let topIds = Set((shows + movies).map(\.id))
++            week = await weekList.map(\.asMeta).filter { !topIds.contains($0.id) }
++        }
 +
 +        func row(_ name: String, _ title: String, _ items: [NuvioMeta], min: Int) -> TVHomeSection? {
 +            guard items.count >= min else { return nil }
@@ -96,7 +166,7 @@ index 917a74c1..2ec55541 100644
  
  extension ContinueWatchingItem {
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 19bd259e..8344059c 100644
+index 19bd259e..1ba6af62 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -4664,6 +4664,7 @@ enum ProfileDisplayName {
@@ -107,7 +177,7 @@ index 19bd259e..8344059c 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -4994,6 +4995,10 @@ struct TVHomeView: View {
+@@ -4994,6 +4995,11 @@ struct TVHomeView: View {
      @State private var forkBecauseSections: [TVHomeSection] = []
      @State private var forkBecauseRevision = 0
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseEnabled = true
@@ -115,10 +185,11 @@ index 19bd259e..8344059c 100644
 +    @State private var forkTrending = ForkTrendingRows.Rows()
 +    @State private var forkTrendingRevision = 0
 +    @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingEnabled = true
++    @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
      @State private var upcomingItems: [ContinueWatchingItem] = []
      /// Derived once when Continue Watching changes. Recomputing these from the
      /// entire history inside `body` made every focus update scale with the
-@@ -5079,6 +5084,23 @@ struct TVHomeView: View {
+@@ -5079,6 +5085,26 @@ struct TVHomeView: View {
                      forkBecauseSections = sections
                      forkBecauseRevision &+= 1
                  }
@@ -126,10 +197,13 @@ index 19bd259e..8344059c 100644
 +            // A failed refresh keeps the rows already shown.
 +            Color.clear
 +                .frame(width: 0, height: 0)
-+                .task(id: forkTrendingEnabled && collectionHome == nil) {
++                .task(id: "\(forkTrendingEnabled && collectionHome == nil)-\(forkKidsTrending)") {
 +                    guard forkTrendingEnabled, collectionHome == nil else { return }
++                    // Never keep the other mode's rows on screen while these load.
++                    forkTrending = ForkTrendingRows.Rows()
++                    forkTrendingRevision &+= 1
 +                    while !Task.isCancelled {
-+                        let rows = await ForkTrendingRows.load()
++                        let rows = await ForkTrendingRows.load(kids: forkKidsTrending)
 +                        guard !Task.isCancelled else { return }
 +                        if !rows.isEmpty {
 +                            forkTrending = rows
@@ -142,7 +216,7 @@ index 19bd259e..8344059c 100644
              // Fork: a Continue Watching card that keeps focus for a second starts finding its
              // sources (and subtitles), so pressing it opens a full picker.
              Color.clear
-@@ -7513,6 +7535,7 @@ struct TVHomeView: View {
+@@ -7513,6 +7539,7 @@ struct TVHomeView: View {
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
              forkRevision: forkBecauseEnabled ? forkBecauseRevision : -1,
@@ -150,7 +224,7 @@ index 19bd259e..8344059c 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7547,7 +7570,11 @@ struct TVHomeView: View {
+@@ -7547,7 +7574,11 @@ struct TVHomeView: View {
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
          let allSections = collectionHome == nil
@@ -164,18 +238,19 @@ index 19bd259e..8344059c 100644
  
          let result: [TVHomeSection]
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index b12e17d6..3d0f963b 100644
+index b12e17d6..ad2117c9 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3077,6 +3077,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3077,6 +3077,8 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
      @AppStorage("fork_top10_numerals") private var forkTop10 = true
      @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
 +    @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
++    @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
      @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
      @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
      @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
-@@ -3456,6 +3457,12 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3456,6 +3458,20 @@ private struct LayoutDiscoverySettingsView: View {
                      isOn: $forkBillboard,
                      accentColor: accentColor
                  )
@@ -185,6 +260,14 @@ index b12e17d6..3d0f963b 100644
 +                    isOn: $forkTrendingRows,
 +                    accentColor: accentColor
 +                )
++                if forkTrendingRows {
++                    SettingsToggleRow(
++                        title: "Kids-Friendly Top 10",
++                        subtitle: "Only family and kids titles in Top 10 and Trending, for this profile",
++                        isOn: $forkKidsTrending,
++                        accentColor: accentColor
++                    )
++                }
                  SettingsToggleRow(
                      title: "Top 10 Numbers",
                      subtitle: "Big rank numbers on rows whose name says Top 10",
