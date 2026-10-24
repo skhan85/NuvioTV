@@ -1,0 +1,199 @@
+diff --git a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
+index dd6e6fea..8f2700bd 100644
+--- a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
++++ b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
+@@ -98,6 +98,9 @@ enum ForkTrendingRows {
+     /// Refresh at most this often while Home stays mounted.
+     static let refreshSeconds: UInt64 = 3 * 60 * 60
+ 
++    /// Fork: each Top 10 title's place ("#3 in TV Shows Today") for the details page badge.
++    @MainActor static var ranks: [String: (rank: Int, list: String)] = [:]
++
+     struct Rows {
+         var topShows: TVHomeSection?
+         var topMovies: TVHomeSection?
+@@ -139,6 +142,15 @@ enum ForkTrendingRows {
+             guard items.count >= min else { return nil }
+             return TVHomeSection(id: idPrefix + name, title: title, items: items)
+         }
++        var newRanks: [String: (rank: Int, list: String)] = [:]
++        for (index, item) in shows.prefix(10).enumerated() where newRanks[item.id] == nil {
++            newRanks[item.id] = (index + 1, "TV Shows")
++        }
++        for (index, item) in movies.prefix(10).enumerated() where newRanks[item.id] == nil {
++            newRanks[item.id] = (index + 1, "Movies")
++        }
++        let finalRanks = newRanks
++        await MainActor.run { ranks = finalRanks }
+         return Rows(
+             topShows: row("top_shows", "Top 10 Shows Today", shows, min: 5),
+             topMovies: row("top_movies", "Top 10 Movies Today", movies, min: 5),
+@@ -147,6 +159,15 @@ enum ForkTrendingRows {
+     }
+ }
+ 
++// MARK: - Fork: Netflix-style details page
++
++/// Fork: `fork_netflix_details` = Netflix-style details page: a square white Play button,
++/// labelled icon buttons, and the "TOP 10 · #3 in Movies Today" badge under the title.
++/// Settings → Layout → Netflix Style turns this on together with the other Netflix-style rows.
++enum ForkNetflixDetails {
++    static let enabledKey = "fork_netflix_details"
++}
++
+ // MARK: - Fork: episodes left on Continue Watching
+ 
+ extension ContinueWatchingItem {
+diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
+index 6a2bd57f..eeb15e28 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
+@@ -3614,6 +3614,9 @@ struct TvDetailsContent: View {
+ 
+                                     TvDetailsLogo(meta: meta)
+ 
++                                    // Fork: Netflix "TOP 10 · #3 in Movies Today" under the title.
++                                    TvDetailsTop10Badge(metaId: meta.id)
++
+                                     if detailsActionsBelowInfo {
+                                         TvDetailsSummary(
+                                             meta: meta,
+@@ -4532,9 +4535,39 @@ private struct TvDetailsActionButton: View {
+     var onBack: (() -> Void)? = nil
+ 
+     @State private var didTriggerHold = false
++    @AppStorage(ForkNetflixDetails.enabledKey) private var netflixStyle = false
+     private var isFocused: Bool { focus.wrappedValue == tag }
+ 
++    /// Fork: Netflix-style caption under each round icon button.
++    private var netflixCaption: String? {
++        guard netflixStyle, !isPrimary else { return nil }
++        switch tag {
++        case .watchlist: return "My List"
++        case .watched: return systemName == "eye.fill" ? "Watched" : "Mark Watched"
++        case .trailer: return "Trailer"
++        case .rate: return "Rate"
++        case .party: return "Watch Party"
++        case .play: return nil
++        }
++    }
++
+     var body: some View {
++        if let netflixCaption {
++            VStack(spacing: 10) {
++                actionButton
++                Text(netflixCaption)
++                    .font(.system(size: 20, weight: .medium))
++                    .foregroundColor(.white.opacity(isFocused ? 1 : 0.7))
++                    .lineLimit(1)
++                    .fixedSize()
++                    .accessibilityHidden(true)
++            }
++        } else {
++            actionButton
++        }
++    }
++
++    private var actionButton: some View {
+         Button(action: {
+             if didTriggerHold {
+                 didTriggerHold = false
+@@ -4556,9 +4589,12 @@ private struct TvDetailsActionButton: View {
+             }
+             .foregroundColor(foregroundColor)
+             .padding(.horizontal, isPrimary ? 44 : 0)
+-            .frame(minWidth: isPrimary ? 228 : 98, maxWidth: isPrimary ? nil : 98, minHeight: 98)
+-            .frame(height: 98)
+-            .modifier(TvDetailsGlassBackground(filled: isPrimary || isFocused, shape: Capsule()))
++            .frame(minWidth: isPrimary ? (netflixStyle ? 380 : 228) : 98, maxWidth: isPrimary ? nil : 98, minHeight: 98)
++            .frame(height: isPrimary && netflixStyle ? 88 : 98)
++            .modifier(TvNetflixOrGlassBackground(
++                netflix: isPrimary && netflixStyle,
++                filled: isPrimary || isFocused
++            ))
+             .shadow(color: .black.opacity(isFocused ? 0.35 : 0.18), radius: isFocused ? 18 : 7, y: 8)
+         }
+         .buttonStyle(TvPlayActionButtonStyle(onHold: longPressAction, didTriggerHold: $didTriggerHold))
+@@ -4587,6 +4623,46 @@ private struct TvDetailsActionButton: View {
+     }
+ }
+ 
++/// Fork: Netflix's solid white, gently rounded Play button; the usual glass capsule otherwise.
++private struct TvNetflixOrGlassBackground: ViewModifier {
++    let netflix: Bool
++    let filled: Bool
++
++    @ViewBuilder
++    func body(content: Content) -> some View {
++        if netflix {
++            content.background(Color.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
++        } else {
++            content.modifier(TvDetailsGlassBackground(filled: filled, shape: Capsule()))
++        }
++    }
++}
++
++/// Fork: Netflix-style "TOP 10 · #3 in Movies Today" line for titles in today's Top 10 rows.
++private struct TvDetailsTop10Badge: View {
++    let metaId: String
++    @AppStorage(ForkNetflixDetails.enabledKey) private var netflixStyle = false
++    @AppStorage(ForkTrendingRows.enabledKey) private var trendingEnabled = true
++
++    var body: some View {
++        if netflixStyle, trendingEnabled, let entry = ForkTrendingRows.ranks[metaId] {
++            HStack(spacing: 14) {
++                VStack(spacing: -2) {
++                    Text("TOP").font(.system(size: 11, weight: .bold))
++                    Text("10").font(.system(size: 22, weight: .black))
++                }
++                .foregroundColor(.white)
++                .frame(width: 40, height: 40)
++                .background(Color(red: 0.90, green: 0.04, blue: 0.08), in: RoundedRectangle(cornerRadius: 4))
++                Text("#\(entry.rank) in \(entry.list) Today")
++                    .font(.system(size: 30, weight: .bold))
++                    .foregroundColor(.white)
++            }
++            .accessibilityElement(children: .combine)
++        }
++    }
++}
++
+ private struct OptionalAccessibilityHint: ViewModifier {
+     let hint: String?
+ 
+diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+index ad2117c9..5cb9e92c 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+@@ -3075,6 +3075,7 @@ private struct LayoutDiscoverySettingsView: View {
+     @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
+     // Fork switches (device-local).
+     @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
++    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixDetails = false
+     @AppStorage("fork_top10_numerals") private var forkTop10 = true
+     @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
+     @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
+@@ -3446,6 +3447,23 @@ private struct LayoutDiscoverySettingsView: View {
+                 )
+ 
+                 // Fork
++                SettingsToggleRow(
++                    title: "Netflix Style",
++                    subtitle: "Netflix-style details page (white Play, labelled buttons, Top 10 badge). Turning it on also sets Modern home, Billboard Trailer, Top 10 rows and numbers, and Netflix search",
++                    isOn: Binding(
++                        get: { forkNetflixDetails },
++                        set: { on in
++                            forkNetflixDetails = on
++                            guard on else { return }
++                            homeLayout = "Modern"
++                            forkBillboard = true
++                            forkTrendingRows = true
++                            forkTop10 = true
++                            searchStyle = "Netflix"
++                        }
++                    ),
++                    accentColor: accentColor
++                )
+                 SettingsToggleRow(
+                     title: "Because You Watched",
+                     subtitle: "Rows of titles like the ones you watched last, under Continue Watching",
