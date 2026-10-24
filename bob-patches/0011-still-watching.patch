@@ -1,0 +1,243 @@
+diff --git a/tvosApp/NuvioTV/Sources/Fork/StillWatchingFork.swift b/tvosApp/NuvioTV/Sources/Fork/StillWatchingFork.swift
+new file mode 100644
+index 00000000..1603ec76
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/StillWatchingFork.swift
+@@ -0,0 +1,66 @@
++import SwiftUI
++
++// MARK: - Fork: "Are you still watching?" (Netflix-style)
++
++/// After `episodeLimit` episodes auto-play in a row with no remote input, the player asks
++/// before starting the next one instead of playing on all night. Per profile, on by default.
++enum ForkStillWatching {
++    static let enabledKey = "fork_still_watching"
++    static let episodeLimit = 3
++
++    static var isEnabled: Bool {
++        ProfileSettings.current.object(forKey: enabledKey) as? Bool ?? true
++    }
++}
++
++struct ForkStillWatchingPrompt: View {
++    let title: String
++    let onContinue: () -> Void
++    let onExit: () -> Void
++
++    private enum Choice: Hashable { case keepWatching, exit }
++    @FocusState private var focused: Choice?
++
++    var body: some View {
++        ZStack {
++            Color.black.opacity(0.82).ignoresSafeArea()
++
++            VStack(alignment: .leading, spacing: 20) {
++                Text(title.isEmpty ? "Are you still watching?" : "Are you still watching \(title)?")
++                    .font(.system(size: 52, weight: .bold))
++                    .foregroundColor(.white)
++                    .lineLimit(2)
++                    .fixedSize(horizontal: false, vertical: true)
++
++                Text("Playback paused so episodes don't keep playing while no one's watching.")
++                    .font(.system(size: 26))
++                    .foregroundColor(.white.opacity(0.65))
++
++                VStack(alignment: .leading, spacing: 18) {
++                    Button(action: onContinue) {
++                        Label("Continue Watching", systemImage: "play.fill")
++                            .font(.system(size: 28, weight: .semibold))
++                            .frame(width: 520, alignment: .leading)
++                    }
++                    .focused($focused, equals: .keepWatching)
++
++                    Button(action: onExit) {
++                        Label("Exit", systemImage: "xmark")
++                            .font(.system(size: 28, weight: .semibold))
++                            .frame(width: 520, alignment: .leading)
++                    }
++                    .focused($focused, equals: .exit)
++                }
++                .padding(.top, 24)
++                .focusSection()
++            }
++            .frame(maxWidth: 1200, alignment: .leading)
++            .padding(.horizontal, 120)
++            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
++        }
++        .defaultFocus($focused, .keepWatching)
++        .onAppear {
++            DispatchQueue.main.async { focused = .keepWatching }
++        }
++    }
++}
+diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
+index 64566de7..6bb6876a 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
+@@ -40,6 +40,24 @@ extension PlayerView {
+             settingsPanelLayer
+             sidePanelLayer
+             debugOverlayLayer
++            forkStillWatchingLayer
++                .zIndex(30)
++        }
++    }
++
++    /// Fork: Netflix-style "Are you still watching?" prompt.
++    @ViewBuilder
++    var forkStillWatchingLayer: some View {
++        if viewModel.forkStillWatchingVisible {
++            ForkStillWatchingPrompt(
++                title: viewModel.activeMeta?.name ?? "",
++                onContinue: { viewModel.forkConfirmStillWatching() },
++                onExit: {
++                    viewModel.forkDismissStillWatching()
++                    onBack()
++                }
++            )
++            .transition(.opacity)
+         }
+     }
+ 
+@@ -183,6 +201,7 @@ extension PlayerView {
+                     && !viewModel.isSceneDetailVisible
+                     && viewModel.sidePanel == nil
+                     && !viewModel.postPlayState.isVisible
++                    && !viewModel.forkStillWatchingVisible
+                     && !viewModel.isHoldingSeek
+                     && viewModel.pendingSeekDelta == 0
+                     && (!viewModel.showControls || viewModel.isScrubbing || viewModel.isTimelineFocused)
+@@ -215,6 +234,7 @@ extension PlayerView {
+                 && viewModel.sidePanel == nil
+                 && !viewModel.isScrubbing
+                 && !viewModel.postPlayState.isVisible
++                && !viewModel.forkStillWatchingVisible
+                 && (!viewModel.showControls || viewModel.isTimelineFocused),
+                 isNextEpisodeFocused: nextEpisodeFocused,
+                 isCancelAutoPlayFocused: cancelAutoPlayFocused,
+diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift
+index 6a476af9..1563ef62 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift
+@@ -19,6 +19,11 @@ extension PlayerView {
+             }
+             .onExitCommand {
+                 PlaybackTimelineRecorder.record(.backPressed, engine: viewModel.activeEngineKind)
++                if viewModel.forkStillWatchingVisible { // Fork: Back on the prompt leaves the player
++                    viewModel.forkDismissStillWatching()
++                    onBack()
++                    return
++                }
+                 if viewModel.isSceneDetailVisible {
+                     withAnimation(.easeInOut(duration: 0.2)) {
+                         viewModel.closeSceneDetail()
+diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+index d34a220e..a9dde6bd 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+@@ -7982,6 +7982,7 @@ private struct PlaybackSettingsView: View {
+     @AppStorage(SettingsKey.showAddonLogo) private var showAddonLogo = false
+     @AppStorage(SettingsKey.streamBadgePlacement) private var streamBadgePlacement = StreamBadgePlacement.bottom.rawValue
+     @AppStorage(SettingsKey.autoPlayNext) private var autoPlayNext = true
++    @AppStorage(ForkStillWatching.enabledKey) private var forkStillWatching = true
+     @AppStorage(SettingsKey.streamAutoPlayPreferBingeGroup) private var streamAutoPlayPreferBingeGroup = true
+     @AppStorage(SettingsKey.streamAutoPlayReuseBingeGroup) private var streamAutoPlayReuseBingeGroup = true
+     @AppStorage(SettingsKey.seekPreviewEnabled) private var seekPreviewEnabled = true
+@@ -8120,6 +8121,16 @@ private struct PlaybackSettingsView: View {
+                     accentColor: accentColor
+                 )
+ 
++                if autoPlayNext {
++                    // Fork: Netflix-style check-in.
++                    SettingsToggleRow(
++                        title: "Ask If Still Watching",
++                        subtitle: "After \(ForkStillWatching.episodeLimit) episodes in a row with no remote input, ask before playing the next one.",
++                        isOn: $forkStillWatching,
++                        accentColor: accentColor
++                    )
++                }
++
+                 SettingsToggleRow(
+                     title: L10n.string("tvos_settings_prefer_binge_group", fallback: "Prefer Same Source / Binge Group"),
+                     subtitle: L10n.string(
+diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
+index ad227856..5afd40e2 100644
+--- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
++++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
+@@ -318,6 +318,10 @@ class PlayerViewModel: ObservableObject {
+     @Published var nextEpisodeCountdown: Int?
+     /// Cancellation applies only to the currently configured episode.
+     @Published private(set) var isAutoPlayCancelled = false
++    /// Fork: "Are you still watching?" — shown instead of auto-playing after several
++    /// episodes in a row with no remote input.
++    @Published private(set) var forkStillWatchingVisible = false
++    private var forkAutoAdvanceCount = 0
+     /// True while the next episode's stream is being resolved and loaded, so the
+     /// card can show a spinner instead of a Play button.
+     @Published var isAdvancingEpisode: Bool = false
+@@ -2184,9 +2188,24 @@ class PlayerViewModel: ObservableObject {
+     /// Play the next episode now (the card's Play button).
+     func playNextEpisode() {
+         guard !isAdvanceInFlight, !isAwaitingStreamStart else { return }
++        forkAutoAdvanceCount = 0 // Fork: picked by hand
+         advance()
+     }
+ 
++    /// Fork: "Continue Watching" on the still-watching prompt.
++    func forkConfirmStillWatching() {
++        forkStillWatchingVisible = false
++        forkAutoAdvanceCount = 0
++        advance()
++    }
++
++    /// Fork: the prompt was dismissed without continuing.
++    func forkDismissStillWatching() {
++        forkStillWatchingVisible = false
++        forkAutoAdvanceCount = 0
++        cancelAutoPlay()
++    }
++
+     func cancelAutoPlay() {
+         isAutoPlayCancelled = true
+         nextEpisodeCountdown = nil
+@@ -3443,6 +3462,14 @@ class PlayerViewModel: ObservableObject {
+                     }
+                 }
+                 if autoPlayNextEnabled && !isAutoPlayCancelled {
++                    // Fork: after a few auto-played episodes with no input, ask first.
++                    if ForkStillWatching.isEnabled,
++                       nextEpisode != nil,
++                       forkAutoAdvanceCount >= ForkStillWatching.episodeLimit {
++                        if !forkStillWatchingVisible { forkStillWatchingVisible = true }
++                        return
++                    }
++                    if nextEpisode != nil { forkAutoAdvanceCount += 1 }
+                     advance()
+                     return
+                 }
+@@ -4107,6 +4134,7 @@ class PlayerViewModel: ObservableObject {
+     }
+ 
+     func togglePlayPause() {
++        forkAutoAdvanceCount = 0 // Fork: play/pause counts as "still watching"
+         recordWatchPartyTransportIntent()
+         if isScrubbing {
+             commitScrub(andPlay: true)
+@@ -4939,6 +4967,8 @@ class PlayerViewModel: ObservableObject {
+     }
+ 
+     func dpadSample(x: Double, y: Double) {
++        forkAutoAdvanceCount = 0 // Fork: any touch counts as "still watching"
++        guard !forkStillWatchingVisible else { return } // the prompt's buttons own input
+         guard !showScenePanel, !isSceneDetailVisible else { return }
+         if isScrubbing {
+             wheelSample(x: x, y: y)
+@@ -4975,6 +5005,8 @@ class PlayerViewModel: ObservableObject {
+     /// Handles GameController buttonA (physical click on Siri Remote touchpad).
+     /// On 1st Gen Siri Remotes (black remote), clicks on the left/right sides trigger discrete seek or hold-to-seek.
+     func handleGCButtonA(isPressed: Bool, pad: GCMicroGamepad? = nil, touchX: Double? = nil) {
++        forkAutoAdvanceCount = 0 // Fork: a click counts as "still watching"
++        guard !forkStillWatchingVisible else { return } // the prompt's buttons own input
+         let currentTouchX = touchX ?? gcLastTouchX ?? pad.map { Double($0.dpad.xAxis.value) } ?? 0
+ 
+         if isPressed {
