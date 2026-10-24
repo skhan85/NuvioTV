@@ -1,0 +1,194 @@
+diff --git a/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift b/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
+index d5c78000..365efa81 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
+@@ -13,6 +13,7 @@ public struct UserProfileView: View {
+     @State private var newProfileAvatarId = ProfileAvatarCatalog.defaultId
+     @State private var focusedColor = Color(hex: "#1E88E5")
+     @FocusState private var focusedItem: String?
++    @State private var forkCardsShown = false // Fork: staggered entrance
+ 
+     private static let addProfileFocusId = "add_profile"
+     private static let retryFocusId = "retry_account_sync"
+@@ -42,7 +43,7 @@ public struct UserProfileView: View {
+ 
+                 Spacer().frame(height: 14)
+ 
+-                Text(L10n.string("profile_selection_subtitle", fallback: "Select a profile to continue"))
++                Text(ForkWhosWatching.greeting()) // Fork: time-of-day greeting
+                     .font(.custom("Inter-Regular", size: 28))
+                     .foregroundColor(.white.opacity(0.6))
+ 
+@@ -83,30 +84,43 @@ public struct UserProfileView: View {
+                 Spacer()
+ 
+                 // Centered single row of profiles.
+-                HStack(alignment: .top, spacing: 56) {
+-                    ForEach(viewModel.profiles, id: \.id) { profile in
++                HStack(alignment: .top, spacing: forkAvatarSize > 180 ? 72 : 56) {
++                    ForEach(Array(viewModel.profiles.enumerated()), id: \.element.id) { index, profile in
+                         ProfileCard(
+                             profile: profile,
+-                            isFocused: focusedItem == profile.id
++                            isFocused: focusedItem == profile.id,
++                            avatarSize: forkAvatarSize,
++                            isKids: ForkWhosWatching.isKids(profile)
+                         ) {
+                             handleProfileSelection(profile)
+                         }
+                         .focused($focusedItem, equals: profile.id)
++                        .forkEntrance(shown: forkCardsShown, index: index)
+                     }
+ 
+                     if viewModel.canAddProfile {
+                         AddProfileButton(
+-                            isFocused: focusedItem == Self.addProfileFocusId
++                            isFocused: focusedItem == Self.addProfileFocusId,
++                            avatarSize: forkAvatarSize
+                         ) {
+                             showingAddProfile = true
+                         }
+                         .focused($focusedItem, equals: Self.addProfileFocusId)
++                        .forkEntrance(shown: forkCardsShown, index: viewModel.profiles.count)
+                     }
+                 }
+                 .padding(.horizontal, 80)
+                 .frame(maxWidth: .infinity)
+                 .defaultFocusIfAvailable($focusedItem, initialFocusTarget())
+ 
++                // Fork: what the focused profile is (Kids, PIN, last used).
++                Text(forkFocusedHint)
++                    .font(.custom("Inter-Regular", size: 24))
++                    .foregroundColor(.white.opacity(0.55))
++                    .frame(height: 34)
++                    .padding(.top, 44)
++                    .animation(.easeInOut(duration: 0.2), value: forkFocusedHint)
++
+                 Spacer()
+ 
+                 Spacer().frame(height: 56)
+@@ -141,6 +155,7 @@ public struct UserProfileView: View {
+         }
+         .animation(.easeInOut(duration: 0.18), value: showingAddProfile)
+         .onAppear {
++            withAnimation { forkCardsShown = true }
+             AvatarCatalogStore.shared.loadIfNeeded()
+             if accountSyncError != nil, onRetryAccountSync != nil {
+                 focusRetryIfNeeded()
+@@ -166,6 +181,27 @@ public struct UserProfileView: View {
+         }
+     }
+ 
++    /// Fork: larger avatars when only a few profiles share the row.
++    private var forkAvatarSize: CGFloat {
++        let count = viewModel.profiles.count + (viewModel.canAddProfile ? 1 : 0)
++        return count <= 4 ? 220 : 180
++    }
++
++    private var forkFocusedHint: String {
++        guard let id = focusedItem, let profile = viewModel.profiles.first(where: { $0.id == id }) else {
++            return focusedItem == Self.addProfileFocusId ? "Create a new profile" : " "
++        }
++        var parts: [String] = []
++        if ForkWhosWatching.isKids(profile) {
++            parts.append(ForkWhosWatching.hasRatingLimit(profile) ? "Kids profile · titles up to PG" : "Kids profile")
++        }
++        if profile.isPinProtected { parts.append("PIN required") }
++        let lastId = viewModel.lastActiveProfileId ?? UserDefaults.standard.string(forKey: "nuvio.lastActiveProfileId")
++        if profile.id == lastId { parts.append("Last used") }
++        if parts.isEmpty, profile.isAdmin { parts.append("Primary profile") }
++        return parts.isEmpty ? " " : parts.joined(separator: "  ·  ")
++    }
++
+     private func initialFocusTarget() -> String? {
+         if accountSyncError != nil, onRetryAccountSync != nil {
+             return Self.retryFocusId
+@@ -296,10 +332,10 @@ fileprivate extension Color {
+ struct ProfileCard: View {
+     let profile: Profile
+     let isFocused: Bool
++    var avatarSize: CGFloat = 180
++    var isKids: Bool = false
+     let action: () -> Void
+ 
+-    private let avatarSize: CGFloat = 180
+-
+     var body: some View {
+         Button(action: action) {
+             VStack(spacing: 18) {
+@@ -316,7 +352,16 @@ struct ProfileCard: View {
+                         .foregroundColor(isFocused ? .white : Color.white.opacity(0.6))
+                         .lineLimit(1)
+ 
+-                    if profile.isAdmin {
++                    if isKids {
++                        // Fork: Disney+-style Kids tag.
++                        Text("KIDS")
++                            .font(.custom("Inter-Bold", size: 15))
++                            .tracking(1.5)
++                            .foregroundColor(.black)
++                            .padding(.horizontal, 12)
++                            .padding(.vertical, 4)
++                            .background(Capsule().fill(Color(hex: "#FFD54F")))
++                    } else if profile.isAdmin {
+                         Text(L10n.string("profile_selection_primary_badge", fallback: "PRIMARY"))
+                             .font(.custom("Inter-Bold", size: 16))
+                             .tracking(1.5)
+@@ -352,10 +397,9 @@ struct ProfileCard: View {
+ 
+ struct AddProfileButton: View {
+     let isFocused: Bool
++    var avatarSize: CGFloat = 180
+     let action: () -> Void
+ 
+-    private let avatarSize: CGFloat = 180
+-
+     var body: some View {
+         Button(action: action) {
+             VStack(spacing: 18) {
+@@ -1212,3 +1256,45 @@ private struct ProfileAvatarPickerButton: View {
+         return prominent ? .black : .white
+     }
+ }
++
++
++// MARK: - Fork: Who's watching polish
++
++@MainActor
++enum ForkWhosWatching {
++    static func greeting(now: Date = Date()) -> String {
++        let hour = Calendar.current.component(.hour, from: now)
++        switch hour {
++        case 5..<12: return "Good morning"
++        case 12..<17: return "Good afternoon"
++        default: return "Good evening"
++        }
++    }
++
++    static func hasRatingLimit(_ profile: Profile) -> Bool {
++        ProfileSettings.store(for: profile.id).bool(forKey: ForkKidsFilter.enabledKey)
++    }
++
++    /// A profile is shown as Kids when it has the rating limit or kid-friendly Top 10 on.
++    static func isKids(_ profile: Profile) -> Bool {
++        let store = ProfileSettings.store(for: profile.id)
++        return store.bool(forKey: ForkKidsFilter.enabledKey) || store.bool(forKey: ForkTrendingRows.kidsKey)
++    }
++}
++
++private struct ForkEntrance: ViewModifier {
++    let shown: Bool
++    let index: Int
++    func body(content: Content) -> some View {
++        content
++            .opacity(shown ? 1 : 0)
++            .offset(y: shown ? 0 : 28)
++            .animation(.spring(response: 0.5, dampingFraction: 0.85).delay(0.06 * Double(index)), value: shown)
++    }
++}
++
++extension View {
++    func forkEntrance(shown: Bool, index: Int) -> some View {
++        modifier(ForkEntrance(shown: shown, index: index))
++    }
++}
