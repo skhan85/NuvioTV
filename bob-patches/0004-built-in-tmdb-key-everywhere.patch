@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-index c81f4efd..a2789363 100644
+index dad69a0b..71f2b2af 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-@@ -4654,8 +4654,7 @@ enum EpisodeMetadataEnrichment {
+@@ -4659,8 +4659,7 @@ enum EpisodeMetadataEnrichment {
              return nil
          }
  
@@ -13,10 +13,10 @@ index c81f4efd..a2789363 100644
  
          let preferredLang = TmdbDetailsService.preferredLanguage
 diff --git a/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift b/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
-index 4ae344f9..213c65b2 100644
+index 6c7d0f3f..39853929 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
-@@ -678,9 +678,8 @@ enum RemoteTrackingState {
+@@ -690,9 +690,8 @@ enum RemoteTrackingState {
              return ProfileSettings.isActiveStore(store)
                  && SimklRuntimeSession.authenticatedState(store: store) != nil
          case .tmdb:

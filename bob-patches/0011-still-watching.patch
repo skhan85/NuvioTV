@@ -71,10 +71,10 @@ index 00000000..1603ec76
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
-index 64566de7..6bb6876a 100644
+index bafeb1cf..eae7062c 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
-@@ -40,6 +40,24 @@ extension PlayerView {
+@@ -41,6 +41,24 @@ extension PlayerView {
              settingsPanelLayer
              sidePanelLayer
              debugOverlayLayer
@@ -99,7 +99,7 @@ index 64566de7..6bb6876a 100644
          }
      }
  
-@@ -183,6 +201,7 @@ extension PlayerView {
+@@ -212,6 +230,7 @@ extension PlayerView {
                      && !viewModel.isSceneDetailVisible
                      && viewModel.sidePanel == nil
                      && !viewModel.postPlayState.isVisible
@@ -107,7 +107,7 @@ index 64566de7..6bb6876a 100644
                      && !viewModel.isHoldingSeek
                      && viewModel.pendingSeekDelta == 0
                      && (!viewModel.showControls || viewModel.isScrubbing || viewModel.isTimelineFocused)
-@@ -215,6 +234,7 @@ extension PlayerView {
+@@ -244,6 +263,7 @@ extension PlayerView {
                  && viewModel.sidePanel == nil
                  && !viewModel.isScrubbing
                  && !viewModel.postPlayState.isVisible
@@ -132,18 +132,18 @@ index 6a476af9..1563ef62 100644
                      withAnimation(.easeInOut(duration: 0.2)) {
                          viewModel.closeSceneDetail()
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index d34a220e..a9dde6bd 100644
+index 3de71b41..d5e9190e 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -7982,6 +7982,7 @@ private struct PlaybackSettingsView: View {
-     @AppStorage(SettingsKey.showAddonLogo) private var showAddonLogo = false
-     @AppStorage(SettingsKey.streamBadgePlacement) private var streamBadgePlacement = StreamBadgePlacement.bottom.rawValue
-     @AppStorage(SettingsKey.autoPlayNext) private var autoPlayNext = true
+@@ -8025,6 +8025,7 @@ private struct PlaybackSettingsView: View {
+     @AppStorage(SettingsKey.autoSkipIntro) private var autoSkipIntro = false
+     @AppStorage(SettingsKey.autoSkipRecap) private var autoSkipRecap = false
+     @AppStorage(SettingsKey.autoSkipOutro) private var autoSkipOutro = false
 +    @AppStorage(ForkStillWatching.enabledKey) private var forkStillWatching = true
      @AppStorage(SettingsKey.streamAutoPlayPreferBingeGroup) private var streamAutoPlayPreferBingeGroup = true
      @AppStorage(SettingsKey.streamAutoPlayReuseBingeGroup) private var streamAutoPlayReuseBingeGroup = true
      @AppStorage(SettingsKey.seekPreviewEnabled) private var seekPreviewEnabled = true
-@@ -8120,6 +8121,16 @@ private struct PlaybackSettingsView: View {
+@@ -8163,6 +8164,16 @@ private struct PlaybackSettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -161,10 +161,10 @@ index d34a220e..a9dde6bd 100644
                      title: L10n.string("tvos_settings_prefer_binge_group", fallback: "Prefer Same Source / Binge Group"),
                      subtitle: L10n.string(
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index ad227856..5afd40e2 100644
+index fe4e4463..6156d991 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-@@ -318,6 +318,10 @@ class PlayerViewModel: ObservableObject {
+@@ -326,6 +326,10 @@ class PlayerViewModel: ObservableObject {
      @Published var nextEpisodeCountdown: Int?
      /// Cancellation applies only to the currently configured episode.
      @Published private(set) var isAutoPlayCancelled = false
@@ -175,7 +175,7 @@ index ad227856..5afd40e2 100644
      /// True while the next episode's stream is being resolved and loaded, so the
      /// card can show a spinner instead of a Play button.
      @Published var isAdvancingEpisode: Bool = false
-@@ -2184,9 +2188,24 @@ class PlayerViewModel: ObservableObject {
+@@ -2249,9 +2253,24 @@ class PlayerViewModel: ObservableObject {
      /// Play the next episode now (the card's Play button).
      func playNextEpisode() {
          guard !isAdvanceInFlight, !isAwaitingStreamStart else { return }
@@ -200,7 +200,7 @@ index ad227856..5afd40e2 100644
      func cancelAutoPlay() {
          isAutoPlayCancelled = true
          nextEpisodeCountdown = nil
-@@ -3443,6 +3462,14 @@ class PlayerViewModel: ObservableObject {
+@@ -3566,6 +3585,14 @@ class PlayerViewModel: ObservableObject {
                      }
                  }
                  if autoPlayNextEnabled && !isAutoPlayCancelled {
@@ -215,7 +215,7 @@ index ad227856..5afd40e2 100644
                      advance()
                      return
                  }
-@@ -4107,6 +4134,7 @@ class PlayerViewModel: ObservableObject {
+@@ -4246,6 +4273,7 @@ class PlayerViewModel: ObservableObject {
      }
  
      func togglePlayPause() {
@@ -223,7 +223,7 @@ index ad227856..5afd40e2 100644
          recordWatchPartyTransportIntent()
          if isScrubbing {
              commitScrub(andPlay: true)
-@@ -4939,6 +4967,8 @@ class PlayerViewModel: ObservableObject {
+@@ -5089,6 +5117,8 @@ class PlayerViewModel: ObservableObject {
      }
  
      func dpadSample(x: Double, y: Double) {
@@ -232,7 +232,7 @@ index ad227856..5afd40e2 100644
          guard !showScenePanel, !isSceneDetailVisible else { return }
          if isScrubbing {
              wheelSample(x: x, y: y)
-@@ -4975,6 +5005,8 @@ class PlayerViewModel: ObservableObject {
+@@ -5125,6 +5155,8 @@ class PlayerViewModel: ObservableObject {
      /// Handles GameController buttonA (physical click on Siri Remote touchpad).
      /// On 1st Gen Siri Remotes (black remote), clicks on the left/right sides trigger discrete seek or hold-to-seek.
      func handleGCButtonA(isPressed: Bool, pad: GCMicroGamepad? = nil, touchX: Double? = nil) {

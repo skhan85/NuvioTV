@@ -45,10 +45,10 @@ index dd6e6fea..8f2700bd 100644
  
  extension ContinueWatchingItem {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index 6a2bd57f..eeb15e28 100644
+index 8ab4b497..af80e69b 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -3614,6 +3614,9 @@ struct TvDetailsContent: View {
+@@ -3700,6 +3700,9 @@ struct TvDetailsContent: View {
  
                                      TvDetailsLogo(meta: meta)
  
@@ -58,7 +58,7 @@ index 6a2bd57f..eeb15e28 100644
                                      if detailsActionsBelowInfo {
                                          TvDetailsSummary(
                                              meta: meta,
-@@ -4532,9 +4535,39 @@ private struct TvDetailsActionButton: View {
+@@ -4618,9 +4621,39 @@ private struct TvDetailsActionButton: View {
      var onBack: (() -> Void)? = nil
  
      @State private var didTriggerHold = false
@@ -98,7 +98,7 @@ index 6a2bd57f..eeb15e28 100644
          Button(action: {
              if didTriggerHold {
                  didTriggerHold = false
-@@ -4556,9 +4589,12 @@ private struct TvDetailsActionButton: View {
+@@ -4642,9 +4675,12 @@ private struct TvDetailsActionButton: View {
              }
              .foregroundColor(foregroundColor)
              .padding(.horizontal, isPrimary ? 44 : 0)
@@ -114,7 +114,7 @@ index 6a2bd57f..eeb15e28 100644
              .shadow(color: .black.opacity(isFocused ? 0.35 : 0.18), radius: isFocused ? 18 : 7, y: 8)
          }
          .buttonStyle(TvPlayActionButtonStyle(onHold: longPressAction, didTriggerHold: $didTriggerHold))
-@@ -4587,6 +4623,46 @@ private struct TvDetailsActionButton: View {
+@@ -4673,6 +4709,46 @@ private struct TvDetailsActionButton: View {
      }
  }
  
@@ -162,10 +162,10 @@ index 6a2bd57f..eeb15e28 100644
      let hint: String?
  
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index ad2117c9..5cb9e92c 100644
+index 6f3a5527..b0be860b 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3075,6 +3075,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3090,6 +3090,7 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
      // Fork switches (device-local).
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
@@ -173,7 +173,7 @@ index ad2117c9..5cb9e92c 100644
      @AppStorage("fork_top10_numerals") private var forkTop10 = true
      @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
      @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
-@@ -3446,6 +3447,23 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3461,6 +3462,23 @@ private struct LayoutDiscoverySettingsView: View {
                  )
  
                  // Fork
