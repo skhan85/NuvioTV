@@ -1,0 +1,314 @@
+diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
+index f7ac1ef9..7e8e975d 100644
+--- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
++++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
+@@ -1845,7 +1845,11 @@ final class CinemetaCatalogRepository: CatalogRepository {
+         // Return fast, deduplicated search results immediately.
+         // Background enrichment (SearchResultEnrichment) handles artwork & TMDB localization
+         // asynchronously for visible cards without blocking the search spinner.
+-        let deduplicated = Self.deduplicatedSearchResults(rawResults)
++        var deduplicated = Self.deduplicatedSearchResults(rawResults)
++        // Fork: kids rating limit — wait for the (few) ratings, then drop anything above PG / TV-PG.
++        if await MainActor.run(body: { ForkKidsFilter.isActive }) {
++            deduplicated = await ForkKidsFilter.shared.resolvedVisible(deduplicated)
++        }
+         cacheMetadata(deduplicated, context: metadataContext)
+         return deduplicated
+     }
+diff --git a/tvosApp/NuvioTV/Sources/Fork/KidsFork.swift b/tvosApp/NuvioTV/Sources/Fork/KidsFork.swift
+new file mode 100644
+index 00000000..9538a2e4
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/KidsFork.swift
+@@ -0,0 +1,132 @@
++import Foundation
++import SwiftUI
++
++// MARK: - Fork: Kids rating limit (Disney+-style)
++
++/// Fork: on a profile with `fork_kids_rating_limit` on, titles rated above PG / TV-PG are hidden
++/// from Home rows, collections, search and More Like This. A title's rating comes from its own
++/// metadata when it has one, otherwise from TMDB (cached on the device). Titles whose rating is
++/// unknown stay hidden: a kids profile should rather miss a title than show the wrong one.
++@MainActor
++final class ForkKidsFilter: ObservableObject {
++    static let shared = ForkKidsFilter()
++    static let enabledKey = "fork_kids_rating_limit"
++
++    /// Ratings a kids profile may see, across the systems TMDB reports (US, UK, DE/AT, BR, ...).
++    static let allowedRatings: Set<String> = [
++        "G", "PG", "TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG",
++        "U", "UC", "0", "6", "L", "AL", "ALL", "TP", "Livre"
++    ]
++
++    /// Bumped (at most twice a second) as ratings arrive, so views re-filter.
++    @Published private(set) var revision = 0
++
++    private var verdicts: [String: Bool]
++    private var inFlight = Set<String>()
++    private var queue: [NuvioMeta] = []
++    private var running = 0
++    private var publishScheduled = false
++    private static let maxConcurrent = 6
++    private static let storeKey = "fork_kids_rating_verdicts_v1"
++
++    private init() {
++        verdicts = (UserDefaults.standard.dictionary(forKey: Self.storeKey) as? [String: Bool]) ?? [:]
++    }
++
++    /// Whether the active profile has the kids rating limit on.
++    static var isActive: Bool {
++        ProfileSettings.current.bool(forKey: enabledKey)
++    }
++
++    static func isAllowedRating(_ rating: String) -> Bool {
++        let normalized = rating.trimmingCharacters(in: .whitespacesAndNewlines)
++        guard !normalized.isEmpty else { return false }
++        return allowedRatings.contains(normalized) || allowedRatings.contains(normalized.uppercased())
++    }
++
++    /// true / false once known; nil while the rating is still being looked up.
++    func verdict(for meta: NuvioMeta) -> Bool? {
++        if let cert = meta.certification?.trimmingCharacters(in: .whitespacesAndNewlines), !cert.isEmpty {
++            return Self.isAllowedRating(cert)
++        }
++        return verdicts[meta.id]
++    }
++
++    /// The items a kids profile may see right now (everything when the limit is off). Unknown
++    /// ratings are looked up in the background and the list fills in as they arrive.
++    func visible(_ items: [NuvioMeta]) -> [NuvioMeta] {
++        guard Self.isActive else { return items }
++        _ = revision
++        var unknown: [NuvioMeta] = []
++        let allowed = items.filter { meta in
++            switch verdict(for: meta) {
++            case .some(let ok): return ok
++            case .none:
++                unknown.append(meta)
++                return false
++            }
++        }
++        if !unknown.isEmpty { enqueue(unknown) }
++        return allowed
++    }
++
++    /// Waits for every rating, then returns what a kids profile may see (used by search, whose
++    /// short result list is worth a brief wait rather than filling in afterwards).
++    func resolvedVisible(_ items: [NuvioMeta]) async -> [NuvioMeta] {
++        guard Self.isActive else { return items }
++        let unknown = items.filter { verdict(for: $0) == nil }
++        await withTaskGroup(of: (String, Bool).self) { group in
++            for meta in unknown.prefix(60) {
++                group.addTask {
++                    let cert = await TmdbDetailsService.fetchCertification(for: meta)
++                    return (meta.id, cert.map { ForkKidsFilter.isAllowedRating($0) } ?? false)
++                }
++            }
++            for await (id, ok) in group { verdicts[id] = ok }
++        }
++        persist()
++        return items.filter { verdict(for: $0) == true }
++    }
++
++    private func enqueue(_ metas: [NuvioMeta]) {
++        for meta in metas where !inFlight.contains(meta.id) {
++            inFlight.insert(meta.id)
++            queue.append(meta)
++        }
++        pump()
++    }
++
++    private func pump() {
++        while running < Self.maxConcurrent, !queue.isEmpty {
++            let meta = queue.removeFirst()
++            running += 1
++            Task { @MainActor in
++                let cert = await TmdbDetailsService.fetchCertification(for: meta)
++                verdicts[meta.id] = cert.map { Self.isAllowedRating($0) } ?? false
++                inFlight.remove(meta.id)
++                running -= 1
++                schedulePublish()
++                pump()
++            }
++        }
++    }
++
++    private func schedulePublish() {
++        guard !publishScheduled else { return }
++        publishScheduled = true
++        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
++            guard let self else { return }
++            publishScheduled = false
++            revision &+= 1
++            persist()
++        }
++    }
++
++    private func persist() {
++        // Ratings rarely change; keep the newest few thousand.
++        if verdicts.count > 4000 {
++            verdicts = Dictionary(uniqueKeysWithValues: verdicts.prefix(3000).map { ($0.key, $0.value) })
++        }
++        UserDefaults.standard.set(verdicts, forKey: Self.storeKey)
++    }
++}
+diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+index 1d36a5ca..2ffbdca1 100644
+--- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
++++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+@@ -4676,6 +4676,8 @@ private final class TVHomeFocusWork {
+         let hideUnreleased: Bool
+         let cwLandscape: Bool
+         let landscapePosters: Bool
++        /// Fork: kids rating limit (-1 when off), bumped as ratings arrive.
++        var kidsRevision: Int = -1
+     }
+     struct CachedVisibleSections {
+         let signature: VisibleSectionsSignature
+@@ -5000,6 +5002,8 @@ struct TVHomeView: View {
+     @State private var forkTrendingRevision = 0
+     @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingEnabled = true
+     @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
++    @AppStorage(ForkKidsFilter.enabledKey) private var forkKidsLimit = false
++    @ObservedObject private var forkKids = ForkKidsFilter.shared
+     @State private var upcomingItems: [ContinueWatchingItem] = []
+     /// Derived once when Continue Watching changes. Recomputing these from the
+     /// entire history inside `body` made every focus update scale with the
+@@ -7550,7 +7554,8 @@ struct TVHomeView: View {
+             storeRevision: store.sectionsRevision,
+             hideUnreleased: hideUnreleased,
+             cwLandscape: continueWatchingLandscape,
+-            landscapePosters: landscapePosters
++            landscapePosters: landscapePosters,
++            kidsRevision: forkKidsLimit ? forkKids.revision : -1
+         )
+ 
+         if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
+@@ -7603,7 +7608,28 @@ struct TVHomeView: View {
+             }
+         }
+ 
+-        let contentSections = result.filter(\.hasContent)
++        // Fork: kids rating limit — only titles rated up to PG / TV-PG (your own Continue
++        // Watching, collection folders and local/Jellyfin rows are left as they are).
++        let kidsFiltered: [TVHomeSection]
++        if forkKidsLimit {
++            kidsFiltered = result.map { section in
++                if !section.collectionFolders.isEmpty
++                    || section.id == TVHomeSection.continueWatchingId
++                    || section.id == TVHomeSection.upcomingId
++                    || section.id == TVHomeSection.localTitlesId
++                    || section.id == TVHomeSection.jellyfinId
++                    || section.id.hasPrefix(TVHomeSection.jellyfinLibraryIdPrefix) {
++                    return section
++                }
++                var copy = section
++                copy.items = forkKids.visible(section.items)
++                return copy
++            }
++        } else {
++            kidsFiltered = result
++        }
++
++        let contentSections = kidsFiltered.filter(\.hasContent)
+         focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
+             signature: signature,
+             sections: contentSections
+diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
+index eeb15e28..7604e41a 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
+@@ -3183,6 +3183,8 @@ private enum TvDetailsFocusSection: Hashable {
+ 
+ struct TvDetailsContent: View {
+     let uiState: DetailsUiState
++    /// Fork: re-filter More Like This as kids ratings arrive.
++    @ObservedObject private var forkKids = ForkKidsFilter.shared
+     var initialPlayRequestID: UInt? = nil
+     var onInitialPlayRequestConsumed: ((UInt) -> Void)? = nil
+     let onPlayClick: () -> Void
+@@ -3736,7 +3738,8 @@ struct TvDetailsContent: View {
+                                 if !uiState.moreLikeThis.isEmpty {
+                                     TvDetailsRelatedRow(
+                                         title: L10n.string("settings_tmdb_module_more_like_this", fallback: "More Like This"),
+-                                        items: uiState.moreLikeThis,
++                                        // Fork: kids rating limit.
++                                        items: ForkKidsFilter.shared.visible(uiState.moreLikeThis),
+                                         entryLocked: focusedDetailsSection != .related,
+                                         onSelect: { item in
+                                             stopBackgroundTrailer(manual: false)
+diff --git a/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift b/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
+index edaeff44..49500d2a 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
+@@ -42,6 +42,8 @@ struct CollectionFolderBrowseView: View {
+     let onBack: () -> Void
+ 
+     @State private var items: [NuvioMeta] = []
++    /// Fork: kids rating limit, re-filtered as ratings arrive.
++    @ObservedObject private var forkKids = ForkKidsFilter.shared
+     @State private var catalogRows: [CollectionFolderCatalogRow] = []
+     @State private var installedAddonCatalogs: [AddonCatalogOption] = []
+     @State private var isLoading = true
+@@ -253,7 +255,7 @@ struct CollectionFolderBrowseView: View {
+                             CollectionFolderHomeStyleRow(
+                                 id: row.id,
+                                 title: sourceLabel(row.source),
+-                                items: row.items,
++                                items: forkKids.visible(row.items), // Fork: kids rating limit
+                                 isLoadingMore: row.isLoadingMore,
+                                 layoutMode: collectionRowLayoutMode,
+                                 showPosterLabels: posterLabels,
+@@ -371,7 +373,7 @@ struct CollectionFolderBrowseView: View {
+ 
+                 ScrollView {
+                     LazyVGrid(columns: columns, alignment: .leading, spacing: CollectionFolderGridMetrics.posterGap) {
+-                        ForEach(row.items) { item in
++                        ForEach(forkKids.visible(row.items)) { item in
+                             CollectionFolderResultCard(
+                                 meta: item,
+                                 externalFocus: $focusedItemID,
+@@ -542,7 +544,7 @@ struct CollectionFolderBrowseView: View {
+                             CollectionFolderHomeStyleRow(
+                                 id: row.id,
+                                 title: sourceLabel(row.source),
+-                                items: row.items,
++                                items: forkKids.visible(row.items), // Fork: kids rating limit
+                                 isLoadingMore: row.isLoadingMore,
+                                 layoutMode: collectionRowLayoutMode,
+                                 showPosterLabels: posterLabels,
+@@ -571,7 +573,7 @@ struct CollectionFolderBrowseView: View {
+     private var gridContent: some View {
+         ScrollView {
+             LazyVGrid(columns: columns, alignment: .leading, spacing: CollectionFolderGridMetrics.posterGap) {
+-                ForEach(displayedGridItems) { item in
++                ForEach(forkKids.visible(displayedGridItems)) { item in
+                     CollectionFolderResultCard(
+                         meta: item,
+                         externalFocus: $focusedItemID,
+diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+index 5cb9e92c..d34a220e 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+@@ -3080,6 +3080,7 @@ private struct LayoutDiscoverySettingsView: View {
+     @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
+     @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
+     @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
++    @AppStorage(ForkKidsFilter.enabledKey) private var forkKidsLimit = false
+     @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
+     @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
+     @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
+@@ -3482,6 +3483,12 @@ private struct LayoutDiscoverySettingsView: View {
+                     isOn: $forkTrendingRows,
+                     accentColor: accentColor
+                 )
++                SettingsToggleRow(
++                    title: "Kids Rating Limit",
++                    subtitle: "This profile only sees titles rated up to PG / TV-PG on Home, in collections, search and More Like This. Unrated titles are hidden too",
++                    isOn: $forkKidsLimit,
++                    accentColor: accentColor
++                )
+                 if forkTrendingRows {
+                     SettingsToggleRow(
+                         title: "Kids-Friendly Top 10",
