@@ -17,10 +17,10 @@ index f7ac1ef9..7e8e975d 100644
      }
 diff --git a/tvosApp/NuvioTV/Sources/Fork/KidsFork.swift b/tvosApp/NuvioTV/Sources/Fork/KidsFork.swift
 new file mode 100644
-index 00000000..9538a2e4
+index 00000000..91ac5b16
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/KidsFork.swift
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,139 @@
 +import Foundation
 +import SwiftUI
 +
@@ -36,7 +36,7 @@ index 00000000..9538a2e4
 +    static let enabledKey = "fork_kids_rating_limit"
 +
 +    /// Ratings a kids profile may see, across the systems TMDB reports (US, UK, DE/AT, BR, ...).
-+    static let allowedRatings: Set<String> = [
++    nonisolated static let allowedRatings: Set<String> = [
 +        "G", "PG", "TV-Y", "TV-Y7", "TV-Y7-FV", "TV-G", "TV-PG",
 +        "U", "UC", "0", "6", "L", "AL", "ALL", "TP", "Livre"
 +    ]
@@ -61,7 +61,7 @@ index 00000000..9538a2e4
 +        ProfileSettings.current.bool(forKey: enabledKey)
 +    }
 +
-+    static func isAllowedRating(_ rating: String) -> Bool {
++    nonisolated static func isAllowedRating(_ rating: String) -> Bool {
 +        let normalized = rating.trimmingCharacters(in: .whitespacesAndNewlines)
 +        guard !normalized.isEmpty else { return false }
 +        return allowedRatings.contains(normalized) || allowedRatings.contains(normalized.uppercased())
@@ -91,6 +91,13 @@ index 00000000..9538a2e4
 +        }
 +        if !unknown.isEmpty { enqueue(unknown) }
 +        return allowed
++    }
++
++    /// More Like This entries (`RelatedTitle`) through the same filter.
++    func visible(_ titles: [RelatedTitle]) -> [RelatedTitle] {
++        guard Self.isActive else { return titles }
++        let allowedIds = Set(visible(titles.map(\.asMeta)).map(\.id))
++        return titles.filter { allowedIds.contains($0.id) }
 +    }
 +
 +    /// Waits for every rating, then returns what a kids profile may see (used by search, whose
@@ -216,25 +223,26 @@ index 1d36a5ca..2ffbdca1 100644
              signature: signature,
              sections: contentSections
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index eeb15e28..7604e41a 100644
+index eeb15e28..f29531cd 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -3183,6 +3183,8 @@ private enum TvDetailsFocusSection: Hashable {
+@@ -3183,6 +3183,10 @@ private enum TvDetailsFocusSection: Hashable {
  
  struct TvDetailsContent: View {
      let uiState: DetailsUiState
 +    /// Fork: re-filter More Like This as kids ratings arrive.
 +    @ObservedObject private var forkKids = ForkKidsFilter.shared
++    /// Fork: kids rating limit (everything when it's off).
++    private var forkVisibleMoreLikeThis: [RelatedTitle] { forkKids.visible(uiState.moreLikeThis) }
      var initialPlayRequestID: UInt? = nil
      var onInitialPlayRequestConsumed: ((UInt) -> Void)? = nil
      let onPlayClick: () -> Void
-@@ -3736,7 +3738,8 @@ struct TvDetailsContent: View {
+@@ -3736,7 +3740,7 @@ struct TvDetailsContent: View {
                                  if !uiState.moreLikeThis.isEmpty {
                                      TvDetailsRelatedRow(
                                          title: L10n.string("settings_tmdb_module_more_like_this", fallback: "More Like This"),
 -                                        items: uiState.moreLikeThis,
-+                                        // Fork: kids rating limit.
-+                                        items: ForkKidsFilter.shared.visible(uiState.moreLikeThis),
++                                        items: forkVisibleMoreLikeThis,
                                          entryLocked: focusedDetailsSection != .related,
                                          onSelect: { item in
                                              stopBackgroundTrailer(manual: false)
