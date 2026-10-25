@@ -1,0 +1,271 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
+index 129bac56..c98aba8c 100644
+--- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
++++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
+@@ -591,6 +591,29 @@ enum TmdbDetailsService {
+             .compactMap { mapDiscoverItemFast($0, defaultType: defaultType) }
+     }
+ 
++    /// Fork: a studio's or TV network's logo path on TMDB (for the Kids brand tiles).
++    static func fetchBrandLogoPath(tmdbId: Int, isNetwork: Bool) async -> String? {
++        if requestContext == nil {
++            return await withRequestContext { await fetchBrandLogoPath(tmdbId: tmdbId, isNetwork: isNetwork) }
++        }
++        guard let apiKey else { return nil }
++        struct Brand: Decodable { let logo_path: String? }
++        var components = URLComponents(
++            url: apiBase.appendingPathComponent("\(isNetwork ? "network" : "company")/\(tmdbId)"),
++            resolvingAgainstBaseURL: false
++        )!
++        components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
++        guard let url = components.url,
++              let (body, response) = try? await data(for: url),
++              let http = response as? HTTPURLResponse,
++              (200...299).contains(http.statusCode),
++              let brand = try? JSONDecoder().decode(Brand.self, from: body),
++              let path = brand.logo_path, !path.isEmpty else {
++            return nil
++        }
++        return path
++    }
++
+     /// Fork: Netflix card tag for a title. Series: "New Episode" / "New Season" when an
+     /// episode aired in the last 10 days (or a new season starts within the week), with
+     /// "Watch Now" or the next air day beside it. Movies: "Recently Added" when the digital
+diff --git a/tvosApp/NuvioTV/Sources/Fork/DisneyKidsFork.swift b/tvosApp/NuvioTV/Sources/Fork/DisneyKidsFork.swift
+new file mode 100644
+index 00000000..c59e6366
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/DisneyKidsFork.swift
+@@ -0,0 +1,131 @@
++import Foundation
++import SwiftUI
++
++// MARK: - Fork: Disney+ look for a Kids profile
++
++/// Per profile. On: Disney navy background, sky accents, and a row of kids studio tiles
++/// (Disney, Pixar, DreamWorks, Illumination, Nickelodeon, Cartoon Network) above the rows;
++/// each opens that studio's titles.
++enum ForkDisneyKids {
++    static let enabledKey = "fork_disney_style"
++    static let openBrandNotification = Notification.Name("fork.disney.openBrand")
++
++    struct Brand: Identifiable, Hashable {
++        let tmdbId: Int
++        let name: String
++        let kind: MetaCompany.Kind
++        var id: String { "\(kind.rawValue)-\(tmdbId)" }
++    }
++
++    static let brands: [Brand] = [
++        Brand(tmdbId: 2, name: "Disney", kind: .production),
++        Brand(tmdbId: 3, name: "Pixar", kind: .production),
++        Brand(tmdbId: 521, name: "DreamWorks", kind: .production),
++        Brand(tmdbId: 6704, name: "Illumination", kind: .production),
++        Brand(tmdbId: 13, name: "Nickelodeon", kind: .network),
++        Brand(tmdbId: 56, name: "Cartoon Network", kind: .network)
++    ]
++
++    static func open(_ brand: Brand, logoURL: String?) {
++        let company = MetaCompany(name: brand.name, logoURL: logoURL, tmdbId: brand.tmdbId, kind: brand.kind)
++        NotificationCenter.default.post(name: openBrandNotification, object: company)
++    }
++}
++
++/// Studio logos from TMDB, fetched once per launch.
++@MainActor
++final class ForkBrandLogos: ObservableObject {
++    static let shared = ForkBrandLogos()
++    @Published private(set) var logos: [String: String] = [:]
++    private var started = false
++
++    func loadIfNeeded() {
++        guard !started else { return }
++        started = true
++        Task { @MainActor in
++            for brand in ForkDisneyKids.brands {
++                if let path = await TmdbDetailsService.fetchBrandLogoPath(tmdbId: brand.tmdbId, isNetwork: brand.kind == .network) {
++                    logos[brand.id] = "https://image.tmdb.org/t/p/w500" + path
++                }
++            }
++            // Let a later visit retry anything that failed (offline at launch).
++            if logos.count < ForkDisneyKids.brands.count { started = false }
++        }
++    }
++}
++
++struct ForkKidsBrandRow: View {
++    @ObservedObject private var logos = ForkBrandLogos.shared
++
++    var body: some View {
++        HStack(spacing: 28) {
++            ForEach(ForkDisneyKids.brands) { brand in
++                ForkKidsBrandTile(brand: brand, logoURL: logos.logos[brand.id])
++            }
++        }
++        .padding(.leading, TVLayout.rowLeading)
++        .padding(.vertical, 14)
++        .focusSection()
++        .onAppear { logos.loadIfNeeded() }
++    }
++}
++
++private struct ForkKidsBrandTile: View {
++    let brand: ForkDisneyKids.Brand
++    let logoURL: String?
++    @FocusState private var focused: Bool
++
++    var body: some View {
++        Button {
++            ForkDisneyKids.open(brand, logoURL: logoURL)
++        } label: {
++            ZStack {
++                RoundedRectangle(cornerRadius: 14, style: .continuous)
++                    .fill(
++                        LinearGradient(
++                            colors: [Color(red: 0.19, green: 0.23, blue: 0.38), Color(red: 0.10, green: 0.13, blue: 0.24)],
++                            startPoint: .top,
++                            endPoint: .bottom
++                        )
++                    )
++                if let logoURL, let url = URL(string: logoURL) {
++                    AsyncImage(url: url) { phase in
++                        if case .success(let image) = phase {
++                            image
++                                .renderingMode(.template)
++                                .resizable()
++                                .scaledToFit()
++                                .foregroundColor(.white)
++                        } else {
++                            brandName
++                        }
++                    }
++                    .padding(.horizontal, 30)
++                    .padding(.vertical, 26)
++                } else {
++                    brandName
++                }
++            }
++            .frame(width: 236, height: 132)
++            .overlay(
++                RoundedRectangle(cornerRadius: 14, style: .continuous)
++                    .stroke(Color.white.opacity(focused ? 0.95 : 0.16), lineWidth: focused ? 4 : 2)
++            )
++            .scaleEffect(focused ? 1.08 : 1)
++            .shadow(color: .black.opacity(focused ? 0.55 : 0.25), radius: focused ? 18 : 8, y: 6)
++            .animation(.easeOut(duration: 0.18), value: focused)
++        }
++        .buttonStyle(.plain)
++        .focused($focused)
++        .nuvioFocusEffectDisabledIfAvailable()
++    }
++
++    private var brandName: some View {
++        Text(brand.name)
++            .font(.system(size: 26, weight: .bold))
++            .foregroundColor(.white)
++            .multilineTextAlignment(.center)
++            .minimumScaleFactor(0.7)
++            .padding(.horizontal, 16)
++    }
++}
+diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+index 70295bbd..6128f8d6 100644
+--- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
++++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+@@ -629,6 +629,14 @@ struct ContentView: View {
+         .onChange(of: profileViewModel.activeProfile?.name, initial: true) { _, name in
+             ForkNetflixUI.activeProfileName = name
+         }
++        // Fork: a Kids studio tile opens that studio's titles.
++        .onReceive(NotificationCenter.default.publisher(for: ForkDisneyKids.openBrandNotification)) { note in
++            guard let company = note.object as? MetaCompany else { return }
++            productionBrowseReturn = nil
++            withAnimation(.easeInOut(duration: 0.28)) {
++                activeScreen = .productionBrowse(company)
++            }
++        }
+         // Backing out of the switch must not leave the cover behind.
+         .onChange(of: isOnProfileSelection) { _, isSelecting in
+             if isSelecting, isPreparingProfile {
+@@ -5113,6 +5121,8 @@ struct TVHomeView: View {
+     @State private var forkBillboardPlayingId: String?
+     // Fork: Netflix Style ("Continue Watching for <name>").
+     @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixUI = false
++    // Fork: Disney+ look for a Kids profile (studio tiles above the rows).
++    @AppStorage(ForkDisneyKids.enabledKey) private var forkDisneyStyle = false
+     @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
+     @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
+     @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
+@@ -5472,6 +5482,10 @@ struct TVHomeView: View {
+                                             .padding(.horizontal, horizontalEdgeInset)
+                                         }
+ 
++                                        if forkDisneyStyle {
++                                            ForkKidsBrandRow()
++                                        }
++
+                                         ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
+                                             let isNearFocusedRow = abs(index - focusedRowIndex) <= 2
+                                             if isNearFocusedRow {
+diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+index ea9a92e4..ab3f5481 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+@@ -1003,11 +1003,13 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
+     case crimson = "Crimson"
+     case rust = "Rust"
+     case teal = "Teal"
++    case disney = "Disney" // Fork: Disney+ navy for the Kids look
+ 
+     var id: String { rawValue }
+ 
+     var color: Color {
+         switch self {
++        case .disney: return Color(red: 0.067, green: 0.090, blue: 0.200)
+         case .charcoal: return Color(red: 13.0 / 255.0, green: 13.0 / 255.0, blue: 13.0 / 255.0)
+         case .black: return .black
+         case .midnight: return Color(red: 0.020, green: 0.030, blue: 0.065)
+@@ -1038,6 +1040,7 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
+         case .crimson: return Color(red: 0.64, green: 0.11, blue: 0.14)
+         case .rust: return Color(red: 0.56, green: 0.27, blue: 0.09)
+         case .teal: return Color(red: 0.07, green: 0.42, blue: 0.39)
++        case .disney: return Color(red: 0.16, green: 0.22, blue: 0.46)
+         }
+     }
+ 
+@@ -3092,6 +3095,9 @@ private struct LayoutDiscoverySettingsView: View {
+     @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
+     @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixDetails = false
+     @AppStorage(ForkNetflixUI.cardBadgesKey) private var forkCardBadges = true
++    @AppStorage(ForkDisneyKids.enabledKey) private var forkDisneyStyle = false
++    @AppStorage(SettingsKey.bodyColor) private var forkBodyColor = SettingsBackground.charcoal.rawValue
++    @AppStorage(SettingsKey.theme) private var forkTheme = SettingsAccent.white.rawValue
+     @AppStorage("fork_top10_numerals") private var forkTop10 = true
+     @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
+     @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
+@@ -3482,6 +3488,24 @@ private struct LayoutDiscoverySettingsView: View {
+                     ),
+                     accentColor: accentColor
+                 )
++                SettingsToggleRow(
++                    title: "Disney+ Style",
++                    subtitle: "For a Kids profile: Disney navy background, blue accents, and Disney, Pixar, DreamWorks, Illumination, Nickelodeon and Cartoon Network tiles above the rows",
++                    isOn: Binding(
++                        get: { forkDisneyStyle },
++                        set: { on in
++                            forkDisneyStyle = on
++                            if on {
++                                forkBodyColor = SettingsBackground.disney.rawValue
++                                forkTheme = SettingsAccent.sky.rawValue
++                            } else {
++                                if forkBodyColor == SettingsBackground.disney.rawValue { forkBodyColor = SettingsBackground.charcoal.rawValue }
++                                if forkTheme == SettingsAccent.sky.rawValue { forkTheme = SettingsAccent.white.rawValue }
++                            }
++                        }
++                    ),
++                    accentColor: accentColor
++                )
+                 SettingsToggleRow(
+                     title: "Card Tags",
+                     subtitle: "Netflix TOP 10 tags and New Episode / New Season / Recently Added tags on posters (from TMDB)",
