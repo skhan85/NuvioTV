@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 63228960..68790f8a 100644
+index fb78fe81..129bac56 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-@@ -590,6 +590,115 @@ enum TmdbDetailsService {
+@@ -591,6 +591,115 @@ enum TmdbDetailsService {
              .compactMap { mapDiscoverItemFast($0, defaultType: defaultType) }
      }
  
@@ -120,10 +120,10 @@ index 63228960..68790f8a 100644
      static func fetchEpisodes(for meta: NuvioMeta) async -> [NuvioVideo]? {
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..c3fa3197
+index 00000000..1c3c7fd9
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
-@@ -0,0 +1,262 @@
+@@ -0,0 +1,214 @@
 +import Foundation
 +import SwiftUI
 +
@@ -142,54 +142,6 @@ index 00000000..c3fa3197
 +            return "Continue Watching for \(name)"
 +        }
 +        return "Continue Watching"
-+    }
-+}
-+
-+/// Home filter: everything, only series, or only movies (Netflix's Shows / Movies tabs).
-+enum ForkHomeTypeFilter: String, CaseIterable, Hashable {
-+    case all, shows, movies
-+
-+    var title: String {
-+        switch self {
-+        case .all: return "Home"
-+        case .shows: return "Shows"
-+        case .movies: return "Movies"
-+        }
-+    }
-+
-+    func matches(_ meta: NuvioMeta) -> Bool {
-+        switch self {
-+        case .all: return true
-+        case .shows: return meta.isSeries
-+        case .movies: return !meta.isSeries
-+        }
-+    }
-+}
-+
-+struct ForkHomeTypeFilterBar: View {
-+    @Binding var selection: ForkHomeTypeFilter
-+    @FocusState private var focused: ForkHomeTypeFilter?
-+
-+    var body: some View {
-+        HStack(spacing: 12) {
-+            ForEach(ForkHomeTypeFilter.allCases, id: \.self) { filter in
-+                Button {
-+                    withAnimation(.easeInOut(duration: 0.2)) { selection = filter }
-+                } label: {
-+                    Text(filter.title)
-+                        .font(.system(size: 24, weight: selection == filter ? .bold : .medium))
-+                        .foregroundColor(focused == filter ? .black : (selection == filter ? .white : .white.opacity(0.62)))
-+                        .padding(.horizontal, 22)
-+                        .padding(.vertical, 9)
-+                        .background(
-+                            Capsule().fill(focused == filter ? Color.white : (selection == filter ? Color.white.opacity(0.16) : .clear))
-+                        )
-+                }
-+                .buttonStyle(.plain)
-+                .focused($focused, equals: filter)
-+            }
-+        }
-+        .focusSection()
 +    }
 +}
 +
@@ -387,7 +339,7 @@ index 00000000..c3fa3197
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index a4a2dfe6..8e6cb118 100644
+index 171f751d..70295bbd 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -625,6 +625,10 @@ struct ContentView: View {
@@ -401,53 +353,35 @@ index a4a2dfe6..8e6cb118 100644
          // Backing out of the switch must not leave the cover behind.
          .onChange(of: isOnProfileSelection) { _, isSelecting in
              if isSelecting, isPreparingProfile {
-@@ -4778,6 +4782,9 @@ private final class TVHomeFocusWork {
+@@ -4840,6 +4844,8 @@ private final class TVHomeFocusWork {
          let landscapePosters: Bool
          /// Fork: kids rating limit (-1 when off), bumped as ratings arrive.
          var kidsRevision: Int = -1
-+        /// Fork: Netflix Home / Shows / Movies filter and the profile-named CW title.
-+        var forkTypeFilter: String = "all"
++        /// Fork: the profile-named Continue Watching title.
 +        var forkCWTitle: String = ""
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5043,6 +5050,9 @@ struct TVHomeView: View {
+@@ -5105,6 +5111,8 @@ struct TVHomeView: View {
      @AppStorage(SettingsKey.trailersEnabled) private var forkTrailersEnabled = true
      @AppStorage(SettingsKey.trailerDelay) private var forkTrailerDelay = 7
      @State private var forkBillboardPlayingId: String?
-+    // Fork: Netflix Home / Shows / Movies switch (shown with Netflix Style on).
++    // Fork: Netflix Style ("Continue Watching for <name>").
 +    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixUI = false
-+    @State private var forkTypeFilter: ForkHomeTypeFilter = .all
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5361,6 +5371,14 @@ struct TVHomeView: View {
-                                 navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
-                             }
-                             .equatable()
-+                            // Fork: Netflix Home / Shows / Movies tabs above the billboard.
-+                            .overlay(alignment: .topLeading) {
-+                                if forkNetflixUI && homeLayout != "Grid View" {
-+                                    ForkHomeTypeFilterBar(selection: $forkTypeFilter)
-+                                        .padding(.leading, TVLayout.rowLeading - 22)
-+                                        .padding(.top, homeLayout == "Compact" ? 18 : 44)
-+                                }
-+                            }
-                         }
-                     }
-                     
-@@ -7655,7 +7673,9 @@ struct TVHomeView: View {
+@@ -7717,7 +7725,8 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
 -            kidsRevision: forkKidsLimit ? forkKids.revision : -1
 +            kidsRevision: forkKidsLimit ? forkKids.revision : -1,
-+            forkTypeFilter: forkNetflixUI ? forkTypeFilter.rawValue : "all",
 +            forkCWTitle: forkNetflixUI ? ForkNetflixUI.continueWatchingTitle : ""
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -7664,7 +7684,9 @@ struct TVHomeView: View {
+@@ -7726,7 +7735,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -458,34 +392,7 @@ index a4a2dfe6..8e6cb118 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster"
          )
-@@ -7729,7 +7751,25 @@ struct TVHomeView: View {
-             kidsFiltered = result
-         }
- 
--        let contentSections = kidsFiltered.filter(\.hasContent)
-+        // Fork: Netflix Shows / Movies — keep only that kind of title in every row.
-+        let typeFiltered: [TVHomeSection]
-+        if forkNetflixUI && forkTypeFilter != .all {
-+            typeFiltered = kidsFiltered.map { section in
-+                if !section.collectionFolders.isEmpty
-+                    || section.id == TVHomeSection.localTitlesId
-+                    || section.id == TVHomeSection.jellyfinId
-+                    || section.id.hasPrefix(TVHomeSection.jellyfinLibraryIdPrefix) {
-+                    return section
-+                }
-+                var copy = section
-+                copy.items = section.items.filter { forkTypeFilter.matches($0) }
-+                return copy
-+            }
-+        } else {
-+            typeFiltered = kidsFiltered
-+        }
-+
-+        let contentSections = typeFiltered.filter(\.hasContent)
-         focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
-             signature: signature,
-             sections: contentSections
-@@ -10849,6 +10889,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -10946,6 +10957,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -493,7 +400,7 @@ index a4a2dfe6..8e6cb118 100644
      let meta: NuvioMeta
      /// Continue Watching entry for this title, when one exists. Lets the hero
      /// say which episode is in progress, how much is left, and show the
-@@ -10874,6 +10915,14 @@ private struct TVHeroView: View {
+@@ -10971,6 +10983,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
@@ -583,7 +490,7 @@ index c3b4fc91..8883e925 100644
                  }
                  .padding(.leading, 22)
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index d5e9190e..9178aa7c 100644
+index ef79ff8a..ea9a92e4 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 @@ -3091,6 +3091,7 @@ private struct LayoutDiscoverySettingsView: View {
@@ -599,7 +506,7 @@ index d5e9190e..9178aa7c 100644
                  SettingsToggleRow(
                      title: "Netflix Style",
 -                    subtitle: "Netflix-style details page (white Play, labelled buttons, Top 10 badge). Turning it on also sets Modern home, Billboard Trailer, Top 10 rows and numbers, and Netflix search",
-+                    subtitle: "Netflix look: Home / Shows / Movies tabs, genre line on the billboard, \"Continue Watching for\" your name with play buttons and red progress, and the Netflix details page. Turning it on also sets Modern home, Billboard Trailer, Top 10 rows and numbers, card tags, and Netflix search",
++                    subtitle: "Netflix look: genre line on the billboard, \"Continue Watching for\" your name with play buttons and red progress, and the Netflix details page. Turning it on also sets Modern home, Billboard Trailer, Top 10 rows and numbers, card tags, and Netflix search",
                      isOn: Binding(
                          get: { forkNetflixDetails },
                          set: { on in
