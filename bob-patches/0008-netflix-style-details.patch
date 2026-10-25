@@ -45,10 +45,10 @@ index dd6e6fea..8f2700bd 100644
  
  extension ContinueWatchingItem {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index 8ab4b497..af80e69b 100644
+index 6d0a24e3..c6d9b0e3 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -3700,6 +3700,9 @@ struct TvDetailsContent: View {
+@@ -3780,6 +3780,9 @@ struct TvDetailsContent: View {
  
                                      TvDetailsLogo(meta: meta)
  
@@ -58,7 +58,7 @@ index 8ab4b497..af80e69b 100644
                                      if detailsActionsBelowInfo {
                                          TvDetailsSummary(
                                              meta: meta,
-@@ -4618,9 +4621,39 @@ private struct TvDetailsActionButton: View {
+@@ -4698,9 +4701,39 @@ private struct TvDetailsActionButton: View {
      var onBack: (() -> Void)? = nil
  
      @State private var didTriggerHold = false
@@ -98,7 +98,7 @@ index 8ab4b497..af80e69b 100644
          Button(action: {
              if didTriggerHold {
                  didTriggerHold = false
-@@ -4642,9 +4675,12 @@ private struct TvDetailsActionButton: View {
+@@ -4722,9 +4755,12 @@ private struct TvDetailsActionButton: View {
              }
              .foregroundColor(foregroundColor)
              .padding(.horizontal, isPrimary ? 44 : 0)
@@ -114,7 +114,7 @@ index 8ab4b497..af80e69b 100644
              .shadow(color: .black.opacity(isFocused ? 0.35 : 0.18), radius: isFocused ? 18 : 7, y: 8)
          }
          .buttonStyle(TvPlayActionButtonStyle(onHold: longPressAction, didTriggerHold: $didTriggerHold))
-@@ -4673,6 +4709,46 @@ private struct TvDetailsActionButton: View {
+@@ -4753,6 +4789,46 @@ private struct TvDetailsActionButton: View {
      }
  }
  
@@ -162,7 +162,7 @@ index 8ab4b497..af80e69b 100644
      let hint: String?
  
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 6f3a5527..b0be860b 100644
+index 765f1361..6e525fd2 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 @@ -3090,6 +3090,7 @@ private struct LayoutDiscoverySettingsView: View {

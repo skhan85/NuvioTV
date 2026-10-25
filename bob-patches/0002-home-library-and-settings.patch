@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 0ca871b0..62b4982c 100644
+index 8ae4815b..9fda5a9e 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-@@ -191,8 +191,8 @@ enum TmdbDetailsService {
+@@ -192,8 +192,8 @@ enum TmdbDetailsService {
      ) async -> T {
          if requestContext != nil { return await operation() }
          let store = defaults ?? ProfileSettings.current
@@ -13,7 +13,7 @@ index 0ca871b0..62b4982c 100644
          let keys = [
              SettingsKey.tmdbUseTrailers, SettingsKey.tmdbUseArtwork,
              SettingsKey.tmdbUseBasicInfo, SettingsKey.tmdbUseDetails,
-@@ -206,7 +206,8 @@ enum TmdbDetailsService {
+@@ -207,7 +207,8 @@ enum TmdbDetailsService {
          })
          let context = RequestContext(
              apiKey: rawKey.isEmpty ? nil : rawKey,
@@ -23,7 +23,7 @@ index 0ca871b0..62b4982c 100644
              language: TmdbMetadataLanguage.resolvedLanguage(in: store),
              flags: flags
          )
-@@ -246,14 +247,16 @@ enum TmdbDetailsService {
+@@ -247,14 +248,16 @@ enum TmdbDetailsService {
      static var currentApiKey: String? { apiKey }
      private static var apiKey: String? {
          if let requestContext { return requestContext.apiKey }
@@ -44,11 +44,11 @@ index 0ca871b0..62b4982c 100644
  
      static var preferredLanguage: String {
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-index b0eb63e7..cf1222d8 100644
+index 5e4b3a7e..bf1246f1 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-@@ -1725,7 +1725,69 @@ final class CinemetaCatalogRepository: CatalogRepository {
-             )
+@@ -1777,7 +1777,69 @@ final class CinemetaCatalogRepository: CatalogRepository {
+             }
          }
  
 -        // 2. Discover search-capable targets from configured add-ons in parallel
@@ -118,28 +118,9 @@ index b0eb63e7..cf1222d8 100644
          // with a short deadline (2.5s) so slow/offline add-on hosts never stall search.
          let candidateURLs = Self.configuredStreamAddonManifestURLs
          if !candidateURLs.isEmpty {
-@@ -1755,59 +1817,28 @@ final class CinemetaCatalogRepository: CatalogRepository {
-             }
-         }
- 
--        if targets.isEmpty {
--            targets = [
-+        var addonTargets = Array(targets.dropFirst(immediateTargets.count))
-+        if immediateTargets.isEmpty && addonTargets.isEmpty {
-+            addonTargets = [
-                 SearchTarget(addonName: "Cinemeta", baseURL: baseURL, type: "movie", catalogId: "top", isAddon: false),
-                 SearchTarget(addonName: "Cinemeta", baseURL: baseURL, type: "series", catalogId: "top", isAddon: false)
-             ]
-         }
-+        var addonResults: [(Int, [NuvioMeta])] = []
-+        if !Task.isCancelled {
-+            addonResults = await runTargets(addonTargets, offset: immediateTargets.count)
-+        }
-+        let immediateResults = await withTaskCancellationHandler {
-+            await immediateSearch.value
-+        } onCancel: {
-+            immediateSearch.cancel()
-+        }
+@@ -1821,52 +1883,22 @@ final class CinemetaCatalogRepository: CatalogRepository {
+         // Do not silently re-enable Cinemeta when the user hid every source.
+         guard !targets.isEmpty else { return [] }
  
 -        guard !Task.isCancelled else { return [] }
 -
@@ -181,7 +162,17 @@ index b0eb63e7..cf1222d8 100644
 -                indexed.append(result)
 -            }
 -            indexed.sort { $0.0 < $1.0 }
--
++        let addonTargets = Array(targets.dropFirst(immediateTargets.count))
++        var addonResults: [(Int, [NuvioMeta])] = []
++        if !Task.isCancelled {
++            addonResults = await runTargets(addonTargets, offset: immediateTargets.count)
++        }
++        let immediateResults = await withTaskCancellationHandler {
++            await immediateSearch.value
++        } onCancel: {
++            immediateSearch.cancel()
++        }
+ 
 -            var merged: [NuvioMeta] = []
 -            for (_, items) in indexed {
 -                merged.append(contentsOf: items)
@@ -958,7 +949,7 @@ index 675390ca..958e0734 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index bacf6511..b22b6e2b 100644
+index 22e49b0d..a324338b 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 @@ -3088,6 +3088,15 @@ private struct LayoutDiscoverySettingsView: View {
@@ -1034,7 +1025,7 @@ index bacf6511..b22b6e2b 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -4436,7 +4495,7 @@ private struct IntegrationSettingsView: View {
+@@ -4438,7 +4497,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -1043,7 +1034,7 @@ index bacf6511..b22b6e2b 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -4749,7 +4808,7 @@ private struct TmdbOptionsSheet: View {
+@@ -4751,7 +4810,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -1052,7 +1043,7 @@ index bacf6511..b22b6e2b 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -12511,8 +12570,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -12513,8 +12572,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs
@@ -1063,10 +1054,10 @@ index bacf6511..b22b6e2b 100644
  
          if let providers = await fetchWatchProviders(apiKey: key) {
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
-index 3af8d0b6..cec57042 100644
+index b9b2199a..c01dcd4a 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
-@@ -50,7 +50,7 @@ class NetflixSearchViewModel: ObservableObject {
+@@ -51,7 +51,7 @@ class NetflixSearchViewModel: ObservableObject {
  
          $searchText
              .removeDuplicates()
@@ -1076,10 +1067,10 @@ index 3af8d0b6..cec57042 100644
                  self?.performSearch(query: text)
              }
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
-index 67107995..0b95a255 100644
+index 306f7307..d2bfa102 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
-@@ -67,7 +67,7 @@ class SearchViewModel: ObservableObject {
+@@ -68,7 +68,7 @@ class SearchViewModel: ObservableObject {
  
          $searchText
              .removeDuplicates()

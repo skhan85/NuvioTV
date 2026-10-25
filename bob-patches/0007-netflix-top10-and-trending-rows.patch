@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 62b4982c..63228960 100644
+index 9fda5a9e..fb78fe81 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-@@ -508,6 +508,88 @@ enum TmdbDetailsService {
+@@ -509,6 +509,88 @@ enum TmdbDetailsService {
          )
      }
  
@@ -166,10 +166,10 @@ index 917a74c1..dd6e6fea 100644
  
  extension ContinueWatchingItem {
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 9978c966..8ad45149 100644
+index 52e72c85..e12030dd 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -4764,6 +4764,7 @@ enum ProfileDisplayName {
+@@ -4826,6 +4826,7 @@ enum ProfileDisplayName {
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
          let forkRevision: Int
@@ -177,7 +177,7 @@ index 9978c966..8ad45149 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -5094,6 +5095,11 @@ struct TVHomeView: View {
+@@ -5156,6 +5157,11 @@ struct TVHomeView: View {
      @State private var forkBecauseSections: [TVHomeSection] = []
      @State private var forkBecauseRevision = 0
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseEnabled = true
@@ -189,7 +189,7 @@ index 9978c966..8ad45149 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      /// Derived once when Continue Watching changes. Recomputing these from the
      /// entire history inside `body` made every focus update scale with the
-@@ -5179,6 +5185,26 @@ struct TVHomeView: View {
+@@ -5241,6 +5247,26 @@ struct TVHomeView: View {
                      forkBecauseSections = sections
                      forkBecauseRevision &+= 1
                  }
@@ -216,7 +216,7 @@ index 9978c966..8ad45149 100644
              // Fork: a Continue Watching card that keeps focus for a second starts finding its
              // sources (and subtitles), so pressing it opens a full picker.
              Color.clear
-@@ -7613,6 +7639,7 @@ struct TVHomeView: View {
+@@ -7675,6 +7701,7 @@ struct TVHomeView: View {
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
              forkRevision: forkBecauseEnabled ? forkBecauseRevision : -1,
@@ -224,7 +224,7 @@ index 9978c966..8ad45149 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7647,7 +7674,12 @@ struct TVHomeView: View {
+@@ -7709,7 +7736,12 @@ struct TVHomeView: View {
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
          let allSections = collectionHome == nil
@@ -239,7 +239,7 @@ index 9978c966..8ad45149 100644
  
          let result: [TVHomeSection]
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 6775abb2..6f3a5527 100644
+index 8c77b4e2..765f1361 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 @@ -3092,6 +3092,8 @@ private struct LayoutDiscoverySettingsView: View {
