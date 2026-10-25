@@ -1,0 +1,624 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
+index 63228960..68790f8a 100644
+--- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
++++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
+@@ -590,6 +590,115 @@ enum TmdbDetailsService {
+             .compactMap { mapDiscoverItemFast($0, defaultType: defaultType) }
+     }
+ 
++    /// Fork: Netflix card tag for a title. Series: "New Episode" / "New Season" when an
++    /// episode aired in the last 10 days (or a new season starts within the week), with
++    /// "Watch Now" or the next air day beside it. Movies: "Recently Added" when the digital
++    /// release was in the last 30 days. nil when TMDB can't be reached.
++    static func fetchFreshness(for meta: NuvioMeta) async -> (primary: String?, secondary: String?)? {
++        if requestContext == nil {
++            return await withRequestContext { await fetchFreshness(for: meta) }
++        }
++        guard let apiKey, let resolved = await resolveTmdbId(for: meta) else { return nil }
++
++        var calendar = Calendar(identifier: .gregorian)
++        calendar.timeZone = .current
++        let today = calendar.startOfDay(for: Date())
++        let dayFormatter = DateFormatter()
++        dayFormatter.calendar = calendar
++        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
++        dayFormatter.timeZone = .current
++        dayFormatter.dateFormat = "yyyy-MM-dd"
++        func day(_ raw: String?) -> Date? {
++            guard let raw, raw.count >= 10 else { return nil }
++            return dayFormatter.date(from: String(raw.prefix(10)))
++        }
++        func daysFromToday(_ date: Date) -> Int {
++            calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: date)).day ?? 0
++        }
++
++        if resolved.mediaType == "tv" {
++            struct Episode: Decodable {
++                let air_date: String?
++                let episode_number: Int?
++                let season_number: Int?
++            }
++            struct Show: Decodable {
++                let last_episode_to_air: Episode?
++                let next_episode_to_air: Episode?
++            }
++            var components = URLComponents(
++                url: apiBase.appendingPathComponent("tv/\(resolved.id)"),
++                resolvingAgainstBaseURL: false
++            )!
++            components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
++            guard let url = components.url,
++                  let (body, response) = try? await data(for: url),
++                  let http = response as? HTTPURLResponse,
++                  (200...299).contains(http.statusCode),
++                  let show = try? JSONDecoder().decode(Show.self, from: body) else {
++                return nil
++            }
++            var primary: String?
++            var secondary: String?
++            if let last = show.last_episode_to_air, let aired = day(last.air_date) {
++                let daysAgo = -daysFromToday(aired)
++                if daysAgo >= 0 && daysAgo <= 10 {
++                    primary = (last.episode_number == 1 && (last.season_number ?? 1) > 1) ? "New Season" : "New Episode"
++                }
++            }
++            if let next = show.next_episode_to_air, let airs = day(next.air_date) {
++                let daysAhead = daysFromToday(airs)
++                if daysAhead >= 0 && daysAhead <= 6 {
++                    if primary == nil, next.episode_number == 1, (next.season_number ?? 1) > 1 {
++                        primary = "New Season"
++                    }
++                    if primary != nil {
++                        let weekday = DateFormatter()
++                        weekday.locale = Locale.current
++                        weekday.dateFormat = "EEEE"
++                        secondary = daysAhead == 0 ? "Today" : weekday.string(from: airs)
++                    }
++                }
++            }
++            if primary != nil && secondary == nil { secondary = "Watch Now" }
++            return (primary, secondary)
++        } else {
++            struct ReleaseDate: Decodable {
++                let type: Int?
++                let release_date: String?
++            }
++            struct Country: Decodable {
++                let release_dates: [ReleaseDate]
++            }
++            struct Releases: Decodable {
++                let results: [Country]
++            }
++            var components = URLComponents(
++                url: apiBase.appendingPathComponent("movie/\(resolved.id)/release_dates"),
++                resolvingAgainstBaseURL: false
++            )!
++            components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
++            guard let url = components.url,
++                  let (body, response) = try? await data(for: url),
++                  let http = response as? HTTPURLResponse,
++                  (200...299).contains(http.statusCode),
++                  let releases = try? JSONDecoder().decode(Releases.self, from: body) else {
++                return nil
++            }
++            // Digital (4) or physical (5): when it became watchable at home.
++            let homeRelease = releases.results
++                .flatMap(\.release_dates)
++                .filter { ($0.type ?? 0) >= 4 }
++                .compactMap { day($0.release_date) }
++                .min()
++            if let homeRelease {
++                let daysAgo = -daysFromToday(homeRelease)
++                if daysAgo >= 0 && daysAgo <= 30 { return ("Recently Added", nil) }
++            }
++            return (nil, nil)
++        }
++    }
++
+     /// Fetches full season and episode listings from TMDB, enabling unreleased/TBD episodes
+     /// and accurate episode thumbnails/titles for ongoing and announced TV series.
+     static func fetchEpisodes(for meta: NuvioMeta) async -> [NuvioVideo]? {
+diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
+new file mode 100644
+index 00000000..c3fa3197
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
+@@ -0,0 +1,262 @@
++import Foundation
++import SwiftUI
++
++// MARK: - Fork: Netflix home touches
++
++enum ForkNetflixUI {
++    /// Red TOP 10 tag and New Episode / New Season / Recently Added tags on every card.
++    static let cardBadgesKey = "fork_card_badges"
++    static let netflixRed = Color(red: 0xE5 / 255, green: 0x09 / 255, blue: 0x14 / 255)
++
++    /// Set by the app root whenever the active profile changes.
++    @MainActor static var activeProfileName: String?
++
++    @MainActor static var continueWatchingTitle: String {
++        if let name = activeProfileName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
++            return "Continue Watching for \(name)"
++        }
++        return "Continue Watching"
++    }
++}
++
++/// Home filter: everything, only series, or only movies (Netflix's Shows / Movies tabs).
++enum ForkHomeTypeFilter: String, CaseIterable, Hashable {
++    case all, shows, movies
++
++    var title: String {
++        switch self {
++        case .all: return "Home"
++        case .shows: return "Shows"
++        case .movies: return "Movies"
++        }
++    }
++
++    func matches(_ meta: NuvioMeta) -> Bool {
++        switch self {
++        case .all: return true
++        case .shows: return meta.isSeries
++        case .movies: return !meta.isSeries
++        }
++    }
++}
++
++struct ForkHomeTypeFilterBar: View {
++    @Binding var selection: ForkHomeTypeFilter
++    @FocusState private var focused: ForkHomeTypeFilter?
++
++    var body: some View {
++        HStack(spacing: 12) {
++            ForEach(ForkHomeTypeFilter.allCases, id: \.self) { filter in
++                Button {
++                    withAnimation(.easeInOut(duration: 0.2)) { selection = filter }
++                } label: {
++                    Text(filter.title)
++                        .font(.system(size: 24, weight: selection == filter ? .bold : .medium))
++                        .foregroundColor(focused == filter ? .black : (selection == filter ? .white : .white.opacity(0.62)))
++                        .padding(.horizontal, 22)
++                        .padding(.vertical, 9)
++                        .background(
++                            Capsule().fill(focused == filter ? Color.white : (selection == filter ? Color.white.opacity(0.16) : .clear))
++                        )
++                }
++                .buttonStyle(.plain)
++                .focused($focused, equals: filter)
++            }
++        }
++        .focusSection()
++    }
++}
++
++// MARK: Card badges
++
++/// Per-title freshness from TMDB ("New Episode", "New Season", "Recently Added"),
++/// looked up a few at a time and kept on the device for 12 hours.
++@MainActor
++final class ForkCardBadges: ObservableObject {
++    static let shared = ForkCardBadges()
++
++    struct Entry: Codable, Equatable {
++        var primary: String?
++        var secondary: String?
++        var at: Double
++    }
++
++    /// Bumped (at most twice a second) as badges arrive, so card overlays redraw.
++    @Published private(set) var revision = 0
++
++    private var entries: [String: Entry]
++    private var inFlight = Set<String>()
++    private var queue: [NuvioMeta] = []
++    private var running = 0
++    private var publishScheduled = false
++    private static let maxConcurrent = 4
++    private static let storeKey = "fork_card_badges_v1"
++    private static let ttl: Double = 12 * 3600
++
++    private init() {
++        if let data = UserDefaults.standard.data(forKey: Self.storeKey),
++           let decoded = try? JSONDecoder().decode([String: Entry].self, from: data) {
++            entries = decoded
++        } else {
++            entries = [:]
++        }
++    }
++
++    static var isEnabled: Bool {
++        ProfileSettings.current.object(forKey: ForkNetflixUI.cardBadgesKey) as? Bool ?? true
++    }
++
++    /// The badge for a title if known; starts a lookup when missing or stale.
++    func entry(for meta: NuvioMeta) -> Entry? {
++        let now = Date().timeIntervalSince1970
++        if let cached = entries[meta.id], now - cached.at < Self.ttl { return cached }
++        enqueue(meta)
++        return entries[meta.id]
++    }
++
++    private func enqueue(_ meta: NuvioMeta) {
++        guard !inFlight.contains(meta.id) else { return }
++        inFlight.insert(meta.id)
++        queue.append(meta)
++        // Defer so a view body never kicks off work synchronously.
++        DispatchQueue.main.async { [weak self] in self?.pump() }
++    }
++
++    private func pump() {
++        while running < Self.maxConcurrent, !queue.isEmpty {
++            let meta = queue.removeLast() // newest first: what's on screen now
++            running += 1
++            Task { @MainActor in
++                let result = await TmdbDetailsService.fetchFreshness(for: meta)
++                entries[meta.id] = Entry(
++                    primary: result?.primary,
++                    secondary: result?.secondary,
++                    at: Date().timeIntervalSince1970
++                )
++                inFlight.remove(meta.id)
++                running -= 1
++                schedulePublish()
++                pump()
++            }
++        }
++    }
++
++    private func schedulePublish() {
++        guard !publishScheduled else { return }
++        publishScheduled = true
++        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
++            guard let self else { return }
++            publishScheduled = false
++            revision &+= 1
++            persist()
++        }
++    }
++
++    private func persist() {
++        let now = Date().timeIntervalSince1970
++        entries = entries.filter { now - $0.value.at < Self.ttl * 4 }
++        if entries.count > 3000 {
++            entries = Dictionary(uniqueKeysWithValues: entries.sorted { $0.value.at > $1.value.at }.prefix(2000).map { ($0.key, $0.value) })
++        }
++        if let data = try? JSONEncoder().encode(entries) {
++            UserDefaults.standard.set(data, forKey: Self.storeKey)
++        }
++    }
++}
++
++/// Netflix-style tags drawn over a poster: a red TOP 10 tag for today's Top 10, and a
++/// red "New Episode" / "New Season" / "Recently Added" tag (with "Watch Now" or the
++/// next air day beside it).
++struct ForkCardBadgeOverlay: View {
++    let meta: NuvioMeta
++    let landscape: Bool
++    @ObservedObject private var store = ForkCardBadges.shared
++
++    var body: some View {
++        let _ = store.revision
++        let isTop10 = ForkTrendingRows.ranks[meta.id] != nil
++        let entry = store.entry(for: meta)
++
++        ZStack {
++            if landscape {
++                HStack(alignment: .top, spacing: 8) {
++                    if isTop10 { top10Tag }
++                    if let primary = entry?.primary { pill(primary, entry?.secondary) }
++                }
++                .padding(14)
++                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
++            } else {
++                if isTop10 {
++                    top10Tag
++                        .padding(10)
++                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
++                }
++                if let primary = entry?.primary {
++                    pill(primary, entry?.secondary)
++                        .padding(.bottom, 12)
++                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
++                }
++            }
++        }
++        .allowsHitTesting(false)
++    }
++
++    private var top10Tag: some View {
++        VStack(spacing: -3) {
++            Text("TOP")
++                .font(.system(size: 12, weight: .heavy))
++            Text("10")
++                .font(.system(size: 22, weight: .black))
++        }
++        .foregroundColor(.white)
++        .frame(width: 40, height: 46)
++        .background(
++            RoundedRectangle(cornerRadius: 4, style: .continuous).fill(ForkNetflixUI.netflixRed)
++        )
++        .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
++    }
++
++    private func pill(_ primary: String, _ secondary: String?) -> some View {
++        HStack(spacing: 0) {
++            Text(primary)
++                .font(.system(size: 17, weight: .bold))
++                .foregroundColor(.white)
++                .padding(.horizontal, 10)
++                .padding(.vertical, 5)
++                .background(ForkNetflixUI.netflixRed)
++            if let secondary {
++                Text(secondary)
++                    .font(.system(size: 17, weight: .bold))
++                    .foregroundColor(.black)
++                    .padding(.horizontal, 10)
++                    .padding(.vertical, 5)
++                    .background(Color.white)
++            }
++        }
++        .lineLimit(1)
++        .fixedSize()
++        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
++        .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
++    }
++}
++
++/// Netflix's big round play button over a Continue Watching card.
++struct ForkContinuePlayCircle: View {
++    var size: CGFloat = 76
++
++    var body: some View {
++        ZStack {
++            Circle()
++                .fill(Color.black.opacity(0.38))
++            Circle()
++                .stroke(Color.white, lineWidth: 3)
++            Image(systemName: "play.fill")
++                .font(.system(size: size * 0.38, weight: .bold))
++                .foregroundColor(.white)
++                .offset(x: size * 0.04)
++        }
++        .frame(width: size, height: size)
++        .shadow(color: .black.opacity(0.4), radius: 6)
++        .allowsHitTesting(false)
++    }
++}
+diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+index a4a2dfe6..8e6cb118 100644
+--- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
++++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
+@@ -625,6 +625,10 @@ struct ContentView: View {
+         .onChange(of: profileViewModel.activeProfile?.id) { _, _ in
+             AppLocaleManager.shared.reloadFromProfileStore()
+         }
++        // Fork: "Continue Watching for <name>".
++        .onChange(of: profileViewModel.activeProfile?.name, initial: true) { _, name in
++            ForkNetflixUI.activeProfileName = name
++        }
+         // Backing out of the switch must not leave the cover behind.
+         .onChange(of: isOnProfileSelection) { _, isSelecting in
+             if isSelecting, isPreparingProfile {
+@@ -4778,6 +4782,9 @@ private final class TVHomeFocusWork {
+         let landscapePosters: Bool
+         /// Fork: kids rating limit (-1 when off), bumped as ratings arrive.
+         var kidsRevision: Int = -1
++        /// Fork: Netflix Home / Shows / Movies filter and the profile-named CW title.
++        var forkTypeFilter: String = "all"
++        var forkCWTitle: String = ""
+     }
+     struct CachedVisibleSections {
+         let signature: VisibleSectionsSignature
+@@ -5043,6 +5050,9 @@ struct TVHomeView: View {
+     @AppStorage(SettingsKey.trailersEnabled) private var forkTrailersEnabled = true
+     @AppStorage(SettingsKey.trailerDelay) private var forkTrailerDelay = 7
+     @State private var forkBillboardPlayingId: String?
++    // Fork: Netflix Home / Shows / Movies switch (shown with Netflix Style on).
++    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixUI = false
++    @State private var forkTypeFilter: ForkHomeTypeFilter = .all
+     @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
+     @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
+     @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
+@@ -5361,6 +5371,14 @@ struct TVHomeView: View {
+                                 navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
+                             }
+                             .equatable()
++                            // Fork: Netflix Home / Shows / Movies tabs above the billboard.
++                            .overlay(alignment: .topLeading) {
++                                if forkNetflixUI && homeLayout != "Grid View" {
++                                    ForkHomeTypeFilterBar(selection: $forkTypeFilter)
++                                        .padding(.leading, TVLayout.rowLeading - 22)
++                                        .padding(.top, homeLayout == "Compact" ? 18 : 44)
++                                }
++                            }
+                         }
+                     }
+                     
+@@ -7655,7 +7673,9 @@ struct TVHomeView: View {
+             hideUnreleased: hideUnreleased,
+             cwLandscape: continueWatchingLandscape,
+             landscapePosters: landscapePosters,
+-            kidsRevision: forkKidsLimit ? forkKids.revision : -1
++            kidsRevision: forkKidsLimit ? forkKids.revision : -1,
++            forkTypeFilter: forkNetflixUI ? forkTypeFilter.rawValue : "all",
++            forkCWTitle: forkNetflixUI ? ForkNetflixUI.continueWatchingTitle : ""
+         )
+ 
+         if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
+@@ -7664,7 +7684,9 @@ struct TVHomeView: View {
+ 
+         let resumeSection = TVHomeSection(
+             id: TVHomeSection.continueWatchingId,
+-            title: L10n.string("home_continue_watching", fallback: "Continue Watching"),
++            title: forkNetflixUI
++                ? ForkNetflixUI.continueWatchingTitle
++                : L10n.string("home_continue_watching", fallback: "Continue Watching"),
+             items: continueWatchingMetas,
+             posterShape: continueWatchingLandscape ? "landscape" : "poster"
+         )
+@@ -7729,7 +7751,25 @@ struct TVHomeView: View {
+             kidsFiltered = result
+         }
+ 
+-        let contentSections = kidsFiltered.filter(\.hasContent)
++        // Fork: Netflix Shows / Movies — keep only that kind of title in every row.
++        let typeFiltered: [TVHomeSection]
++        if forkNetflixUI && forkTypeFilter != .all {
++            typeFiltered = kidsFiltered.map { section in
++                if !section.collectionFolders.isEmpty
++                    || section.id == TVHomeSection.localTitlesId
++                    || section.id == TVHomeSection.jellyfinId
++                    || section.id.hasPrefix(TVHomeSection.jellyfinLibraryIdPrefix) {
++                    return section
++                }
++                var copy = section
++                copy.items = section.items.filter { forkTypeFilter.matches($0) }
++                return copy
++            }
++        } else {
++            typeFiltered = kidsFiltered
++        }
++
++        let contentSections = typeFiltered.filter(\.hasContent)
+         focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
+             signature: signature,
+             sections: contentSections
+@@ -10849,6 +10889,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+ }
+ 
+ private struct TVHeroView: View {
++    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixUI = false
+     let meta: NuvioMeta
+     /// Continue Watching entry for this title, when one exists. Lets the hero
+     /// say which episode is in progress, how much is left, and show the
+@@ -10874,6 +10915,14 @@ private struct TVHeroView: View {
+                     .foregroundColor(.white)
+             }
+ 
++            // Fork: Netflix "Witty • Quirky • Comedy" line under the logo (genres here).
++            if forkNetflixUI, let genres = meta.genres, genres.count > 1 {
++                Text(genres.prefix(5).joined(separator: "  •  "))
++                    .font(.custom("Inter-SemiBold", size: 22))
++                    .foregroundColor(.white.opacity(0.88))
++                    .lineLimit(1)
++            }
++
+             TVHeroMetaLine(meta: meta, episodeLine: episodeLine)
+ 
+             if let continueItem {
+diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
+index c3b4fc91..8883e925 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
+@@ -233,6 +233,9 @@ struct PosterCard: View {
+     @AppStorage(SettingsKey.customPosterURLPattern) private var customPosterURLPattern = ""
+     @AppStorage(SettingsKey.customPosterEnabledScreens) private var customPosterEnabledScreens = "all"
+     @State private var loadedCustomLandscapeArtworkURL: String?
++    // Fork: Netflix look (Continue Watching play circle, red progress) and card tags.
++    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixUI = false
++    @AppStorage(ForkNetflixUI.cardBadgesKey) private var forkCardBadges = true
+ 
+     #if os(tvOS)
+     @FocusState private var isFocused: Bool
+@@ -432,6 +435,27 @@ struct PosterCard: View {
+             .overlay(alignment: effectiveLandscape ? .topTrailing : .top) {
+                 continueBadge
+             }
++            // Fork: Netflix TOP 10 / New Episode tags on catalog cards.
++            .overlay {
++                if forkCardBadges && !isContinueOrUpcomingCard {
++                    ForkCardBadgeOverlay(meta: meta, landscape: effectiveLandscape)
++                }
++            }
++            // Fork: Netflix Continue Watching — round play button and "S3:E24" label.
++            .overlay {
++                if forkNetflixUI && forkShowsPlayCircle {
++                    ForkContinuePlayCircle(size: effectiveLandscape ? 84 : 68)
++                }
++            }
++            .overlay(alignment: .bottom) {
++                if forkNetflixUI, !effectiveLandscape, !continueIsUpNext, let episode = continueEpisodeText {
++                    Text(episode.replacingOccurrences(of: " ", with: ":"))
++                        .font(.system(size: 20, weight: .bold))
++                        .foregroundColor(.white)
++                        .shadow(color: .black.opacity(0.8), radius: 3)
++                        .padding(.bottom, continueProgress != nil ? 34 : 14)
++                }
++            }
+             .overlay(alignment: .bottomTrailing) {
+                 if let collectionOrigin, !continueIsUpNext {
+                     CollectionOriginBadge(origin: collectionOrigin)
+@@ -635,9 +659,22 @@ struct PosterCard: View {
+         }
+     }
+ 
++    /// Fork: in-progress or playable up-next cards get Netflix's play circle; upcoming
++    /// ("Airs in…", "Coming Soon") cards don't.
++    private var forkShowsPlayCircle: Bool {
++        if continueProgress != nil, !continueIsUpNext { return true }
++        guard continueIsUpNext else { return false }
++        let badge = (continueUpNextBadgeText ?? "Next Up").uppercased()
++        return !(badge.hasPrefix("AIRS") || badge == "COMING SOON")
++    }
++
+     private var continueBadgeDisplayText: String? {
+         if continueIsUpNext { return continueUpNextBadgeText ?? "Next Up" }
+         guard let continueRemainingText else { return nil }
++        // Fork: Netflix mode shows the episode at the bottom of portrait cards instead.
++        if forkNetflixUI, !effectiveLandscape, continueEpisodeText != nil {
++            return continueRemainingText
++        }
+         if let continueEpisodeText {
+             return "\(continueEpisodeText) • \(continueRemainingText)"
+         }
+@@ -658,7 +695,7 @@ struct PosterCard: View {
+                         .frame(width: width, height: 8)
+ 
+                     Capsule()
+-                        .fill(Color.white)
++                        .fill(forkNetflixUI ? ForkNetflixUI.netflixRed : Color.white)
+                         .frame(width: max(8, width * progress), height: 8)
+                 }
+                 .padding(.leading, 22)
+diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+index d5e9190e..9178aa7c 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+@@ -3091,6 +3091,7 @@ private struct LayoutDiscoverySettingsView: View {
+     // Fork switches (device-local).
+     @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
+     @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixDetails = false
++    @AppStorage(ForkNetflixUI.cardBadgesKey) private var forkCardBadges = true
+     @AppStorage("fork_top10_numerals") private var forkTop10 = true
+     @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
+     @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
+@@ -3465,7 +3466,7 @@ private struct LayoutDiscoverySettingsView: View {
+                 // Fork
+                 SettingsToggleRow(
+                     title: "Netflix Style",
+-                    subtitle: "Netflix-style details page (white Play, labelled buttons, Top 10 badge). Turning it on also sets Modern home, Billboard Trailer, Top 10 rows and numbers, and Netflix search",
++                    subtitle: "Netflix look: Home / Shows / Movies tabs, genre line on the billboard, \"Continue Watching for\" your name with play buttons and red progress, and the Netflix details page. Turning it on also sets Modern home, Billboard Trailer, Top 10 rows and numbers, card tags, and Netflix search",
+                     isOn: Binding(
+                         get: { forkNetflixDetails },
+                         set: { on in
+@@ -3475,11 +3476,18 @@ private struct LayoutDiscoverySettingsView: View {
+                             forkBillboard = true
+                             forkTrendingRows = true
+                             forkTop10 = true
++                            forkCardBadges = true
+                             searchStyle = "Netflix"
+                         }
+                     ),
+                     accentColor: accentColor
+                 )
++                SettingsToggleRow(
++                    title: "Card Tags",
++                    subtitle: "Netflix TOP 10 tags and New Episode / New Season / Recently Added tags on posters (from TMDB)",
++                    isOn: $forkCardBadges,
++                    accentColor: accentColor
++                )
+                 SettingsToggleRow(
+                     title: "Because You Watched",
+                     subtitle: "Rows of titles like the ones you watched last, under Continue Watching",
