@@ -77,10 +77,10 @@ index 00000000..b03ae552
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 4d80504e..52e72c85 100644
+index ba233e21..d45a09b9 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -5097,6 +5097,11 @@ struct TVHomeView: View {
+@@ -5127,6 +5127,11 @@ struct TVHomeView: View {
      @AppStorage(SettingsKey.bodyColor) private var bodyColor = SettingsBackground.charcoal.rawValue
      @AppStorage(SettingsKey.heroEnabled) private var heroEnabled = true
      @AppStorage(SettingsKey.fullscreenHeroBackdrop) private var fullscreenHeroBackdrop = true
@@ -92,7 +92,7 @@ index 4d80504e..52e72c85 100644
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5261,6 +5266,7 @@ struct TVHomeView: View {
+@@ -5293,6 +5298,7 @@ struct TVHomeView: View {
                      )
                      .equatable()
                      .frame(width: proxy.size.width, height: proxy.size.height)
@@ -100,7 +100,7 @@ index 4d80504e..52e72c85 100644
                      .clipped()
                  } else {
                      let backdropWidth = proxy.size.width * 0.65
-@@ -5276,6 +5282,7 @@ struct TVHomeView: View {
+@@ -5308,6 +5314,7 @@ struct TVHomeView: View {
                          )
                          .equatable()
                          .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
@@ -108,7 +108,7 @@ index 4d80504e..52e72c85 100644
                          .mask(
                              LinearGradient(
                                  stops: [
-@@ -5380,7 +5387,8 @@ struct TVHomeView: View {
+@@ -5412,7 +5419,8 @@ struct TVHomeView: View {
                          } else if let heroMeta = visibleFocusedMeta ?? visibleHero {
                              TVHeroView(
                                  meta: heroMeta,
@@ -118,7 +118,7 @@ index 4d80504e..52e72c85 100644
                              ) {
                                  navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
                              }
-@@ -5449,6 +5457,8 @@ struct TVHomeView: View {
+@@ -5481,6 +5489,8 @@ struct TVHomeView: View {
                                      .frame(maxWidth: .infinity, alignment: .leading)
                                      .padding(.top, TVHomeLayout.rowsTopPadding)
                                      .padding(.bottom, 80)
@@ -127,7 +127,7 @@ index 4d80504e..52e72c85 100644
                                      #if os(tvOS)
                                      // Place the configurator inside the scroll content so its
                                      // ancestor is the UIScrollView that owns the row offset.
-@@ -7778,6 +7788,39 @@ struct TVHomeView: View {
+@@ -7812,6 +7822,39 @@ struct TVHomeView: View {
          return focusedMeta
      }
  
@@ -167,7 +167,7 @@ index 4d80504e..52e72c85 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -10850,6 +10893,8 @@ private struct TVHeroView: View {
+@@ -10910,6 +10953,8 @@ private struct TVHeroView: View {
      /// say which episode is in progress, how much is left, and show the
      /// episode's own overview instead of the series blurb.
      var continueItem: ContinueWatchingItem? = nil
@@ -176,7 +176,7 @@ index 4d80504e..52e72c85 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
  
-@@ -10884,6 +10929,8 @@ private struct TVHeroView: View {
+@@ -10944,6 +10989,8 @@ private struct TVHeroView: View {
                      .lineLimit(4)
                      .frame(maxWidth: 900, alignment: .leading)
                      .padding(.top, 4)
@@ -185,7 +185,7 @@ index 4d80504e..52e72c85 100644
              }
          }
          .foregroundColor(.white)
-@@ -10922,6 +10969,7 @@ extension TVHeroView: Equatable {
+@@ -10982,6 +11029,7 @@ extension TVHeroView: Equatable {
              && lhs.continueItem?.meta.id == rhs.continueItem?.meta.id
              && lhs.continueItem?.episodeLabel == rhs.continueItem?.episodeLabel
              && lhs.continueItem?.remainingText == rhs.continueItem?.remainingText
@@ -194,7 +194,7 @@ index 4d80504e..52e72c85 100644
  }
  
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index 24c305fc..c3b4fc91 100644
+index 00ace0fc..422a3605 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 @@ -240,6 +240,8 @@ struct PosterCard: View {
@@ -206,7 +206,7 @@ index 24c305fc..c3b4fc91 100644
      @AppStorage(SettingsKey.cardCornerRadius) private var cardCornerRadiusSetting = AppCardStyle.defaultCornerRadiusRaw
      @AppStorage(SettingsKey.liquidGlassCards) private var liquidGlassCards = true
      @State private var isTrailerPreviewActive = false
-@@ -399,7 +401,7 @@ struct PosterCard: View {
+@@ -411,7 +413,7 @@ struct PosterCard: View {
              .overlay {
                  // Prepare during the delay, but keep playback and visibility
                  // gated by isTrailerPreviewActive until the timer completes.
@@ -215,7 +215,7 @@ index 24c305fc..c3b4fc91 100644
                      && !isContinueOrUpcomingCard && !didFinishTrailerPreview {
                      TrailerPreviewPlayer(
                          meta: meta,
-@@ -868,7 +870,12 @@ struct PosterCard: View {
+@@ -880,7 +882,12 @@ struct PosterCard: View {
      }
  
      private var trailerActivationIdentity: String {
@@ -229,7 +229,7 @@ index 24c305fc..c3b4fc91 100644
      }
  
      private var isTrailerPreviewVisible: Bool {
-@@ -880,7 +887,7 @@ struct PosterCard: View {
+@@ -892,7 +899,7 @@ struct PosterCard: View {
          isTrailerPreviewActive = false
          isTrailerPreviewReady = false
          didFinishTrailerPreview = false
@@ -238,7 +238,7 @@ index 24c305fc..c3b4fc91 100644
  
          let delay = min(15, max(0, trailerDelay))
          do {
-@@ -888,7 +895,7 @@ struct PosterCard: View {
+@@ -900,7 +907,7 @@ struct PosterCard: View {
          } catch {
              return
          }
@@ -248,10 +248,10 @@ index 24c305fc..c3b4fc91 100644
      }
  
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index a324338b..8c77b4e2 100644
+index 6c724ead..bc99b01a 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3091,6 +3091,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3264,6 +3264,7 @@ private struct LayoutDiscoverySettingsView: View {
      // Fork switches (device-local).
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
      @AppStorage("fork_top10_numerals") private var forkTop10 = true
@@ -259,7 +259,7 @@ index a324338b..8c77b4e2 100644
      @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
      @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
      @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
-@@ -3464,6 +3465,12 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3655,6 +3656,12 @@ private struct LayoutDiscoverySettingsView: View {
                      isOn: $forkBecauseRows,
                      accentColor: accentColor
                  )

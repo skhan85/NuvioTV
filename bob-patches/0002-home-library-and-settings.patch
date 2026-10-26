@@ -44,7 +44,7 @@ index 8ae4815b..9fda5a9e 100644
  
      static var preferredLanguage: String {
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-index 5e4b3a7e..bf1246f1 100644
+index ad84706f..d8831912 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 @@ -1777,7 +1777,69 @@ final class CinemetaCatalogRepository: CatalogRepository {
@@ -812,10 +812,10 @@ index 00000000..f7933e1b
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index ab2df484..24c305fc 100644
+index aeb8852e..00ace0fc 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-@@ -3061,6 +3061,9 @@ struct TitleActionsMenuContent: View {
+@@ -3073,6 +3073,9 @@ struct TitleActionsMenuContent: View {
          } else {
              let inLibrary = LibraryStore.contains(metaId: meta.id, type: meta.type)
              let isItemWatched = WatchedStore.contains(meta: meta)
@@ -825,7 +825,7 @@ index ab2df484..24c305fc 100644
  
              Button {
                  DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
-@@ -3075,25 +3078,32 @@ struct TitleActionsMenuContent: View {
+@@ -3087,25 +3090,32 @@ struct TitleActionsMenuContent: View {
                      toggleLibrary(currentlyInLibrary: inLibrary)
                  }
              } label: {
@@ -949,10 +949,10 @@ index 675390ca..958e0734 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 22e49b0d..a324338b 100644
+index 6db6aaea..6c724ead 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3088,6 +3088,15 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3261,6 +3261,15 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.upNextFromFurthestEpisode) private var upNextFromFurthestEpisode = true
      @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -968,7 +968,7 @@ index 22e49b0d..a324338b 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3448,6 +3457,56 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3639,6 +3648,56 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -1025,7 +1025,7 @@ index 22e49b0d..a324338b 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -4438,7 +4497,7 @@ private struct IntegrationSettingsView: View {
+@@ -4727,7 +4786,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -1034,7 +1034,7 @@ index 22e49b0d..a324338b 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -4751,7 +4810,7 @@ private struct TmdbOptionsSheet: View {
+@@ -5040,7 +5099,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -1043,7 +1043,7 @@ index 22e49b0d..a324338b 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -12513,8 +12572,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -13050,8 +13109,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs

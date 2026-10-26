@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-index bf1246f1..4632eb99 100644
+index d8831912..62ddc8dc 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 @@ -1228,8 +1228,7 @@ final class CinemetaCatalogRepository: CatalogRepository {

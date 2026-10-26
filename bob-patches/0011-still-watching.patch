@@ -132,10 +132,10 @@ index 6a476af9..1563ef62 100644
                      withAnimation(.easeInOut(duration: 0.2)) {
                          viewModel.closeSceneDetail()
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index a0ab5020..ef79ff8a 100644
+index 349b73b7..1943b772 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -8027,6 +8027,7 @@ private struct PlaybackSettingsView: View {
+@@ -8317,6 +8317,7 @@ private struct PlaybackSettingsView: View {
      @AppStorage(SettingsKey.autoSkipIntro) private var autoSkipIntro = false
      @AppStorage(SettingsKey.autoSkipRecap) private var autoSkipRecap = false
      @AppStorage(SettingsKey.autoSkipOutro) private var autoSkipOutro = false
@@ -143,10 +143,11 @@ index a0ab5020..ef79ff8a 100644
      @AppStorage(SettingsKey.streamAutoPlayPreferBingeGroup) private var streamAutoPlayPreferBingeGroup = true
      @AppStorage(SettingsKey.streamAutoPlayReuseBingeGroup) private var streamAutoPlayReuseBingeGroup = true
      @AppStorage(SettingsKey.seekPreviewEnabled) private var seekPreviewEnabled = true
-@@ -8165,6 +8166,16 @@ private struct PlaybackSettingsView: View {
+@@ -8648,6 +8649,16 @@ private struct PlaybackSettingsView: View {
+                     isOn: $autoPlayNext,
                      accentColor: accentColor
                  )
- 
++
 +                if autoPlayNext {
 +                    // Fork: Netflix-style check-in.
 +                    SettingsToggleRow(
@@ -156,15 +157,14 @@ index a0ab5020..ef79ff8a 100644
 +                        accentColor: accentColor
 +                    )
 +                }
-+
-                 SettingsToggleRow(
-                     title: L10n.string("tvos_settings_prefer_binge_group", fallback: "Prefer Same Source / Binge Group"),
-                     subtitle: L10n.string(
+             }
+ 
+             SettingsGroup(title: L10n.string("tvos_settings_smart_playback", fallback: "Smart Playback"), subtitle: L10n.string("tvos_settings_automatically_choose_streams_and_matchin_9ca69e9f", fallback: "Automatically choose streams and matching subtitles")) {
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index a0a11228..007d17ea 100644
+index bdf5ab07..f29ada9c 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-@@ -326,6 +326,10 @@ class PlayerViewModel: ObservableObject {
+@@ -330,6 +330,10 @@ class PlayerViewModel: ObservableObject {
      @Published var nextEpisodeCountdown: Int?
      /// Cancellation applies only to the currently configured episode.
      @Published private(set) var isAutoPlayCancelled = false
@@ -175,7 +175,7 @@ index a0a11228..007d17ea 100644
      /// True while the next episode's stream is being resolved and loaded, so the
      /// card can show a spinner instead of a Play button.
      @Published var isAdvancingEpisode: Bool = false
-@@ -2260,9 +2264,24 @@ class PlayerViewModel: ObservableObject {
+@@ -2271,9 +2275,24 @@ class PlayerViewModel: ObservableObject {
      /// Play the next episode now (the card's Play button).
      func playNextEpisode() {
          guard !isAdvanceInFlight, !isAwaitingStreamStart else { return }
@@ -200,7 +200,7 @@ index a0a11228..007d17ea 100644
      func cancelAutoPlay() {
          isAutoPlayCancelled = true
          nextEpisodeCountdown = nil
-@@ -3601,6 +3620,14 @@ class PlayerViewModel: ObservableObject {
+@@ -3627,6 +3646,14 @@ class PlayerViewModel: ObservableObject {
                      }
                  }
                  if autoPlayNextEnabled && !isAutoPlayCancelled {
@@ -215,7 +215,7 @@ index a0a11228..007d17ea 100644
                      advance()
                      return
                  }
-@@ -4284,6 +4311,7 @@ class PlayerViewModel: ObservableObject {
+@@ -4315,6 +4342,7 @@ class PlayerViewModel: ObservableObject {
      }
  
      func togglePlayPause() {
@@ -223,7 +223,7 @@ index a0a11228..007d17ea 100644
          recordWatchPartyTransportIntent()
          if isScrubbing {
              commitScrub(andPlay: true)
-@@ -5127,6 +5155,8 @@ class PlayerViewModel: ObservableObject {
+@@ -5158,6 +5186,8 @@ class PlayerViewModel: ObservableObject {
      }
  
      func dpadSample(x: Double, y: Double) {
@@ -232,7 +232,7 @@ index a0a11228..007d17ea 100644
          guard !showScenePanel, !isSceneDetailVisible else { return }
          if isScrubbing {
              wheelSample(x: x, y: y)
-@@ -5163,6 +5193,8 @@ class PlayerViewModel: ObservableObject {
+@@ -5194,6 +5224,8 @@ class PlayerViewModel: ObservableObject {
      /// Handles GameController buttonA (physical click on Siri Remote touchpad).
      /// On 1st Gen Siri Remotes (black remote), clicks on the left/right sides trigger discrete seek or hold-to-seek.
      func handleGCButtonA(isPressed: Bool, pad: GCMicroGamepad? = nil, touchX: Double? = nil) {

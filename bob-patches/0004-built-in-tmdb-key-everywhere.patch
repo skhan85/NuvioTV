@@ -13,7 +13,7 @@ index dad69a0b..71f2b2af 100644
  
          let preferredLang = TmdbDetailsService.preferredLanguage
 diff --git a/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift b/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
-index 6c7d0f3f..39853929 100644
+index dbbb44b9..ad60af2e 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
 @@ -690,9 +690,8 @@ enum RemoteTrackingState {
