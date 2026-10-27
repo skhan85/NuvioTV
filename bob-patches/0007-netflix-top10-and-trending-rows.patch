@@ -166,10 +166,10 @@ index 917a74c1..dd6e6fea 100644
  
  extension ContinueWatchingItem {
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index d45a09b9..7a320e35 100644
+index fa1f8e4c..0c0f7496 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -4856,6 +4856,7 @@ enum ProfileDisplayName {
+@@ -4915,6 +4915,7 @@ enum ProfileDisplayName {
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
          let forkRevision: Int
@@ -177,7 +177,7 @@ index d45a09b9..7a320e35 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -5186,6 +5187,11 @@ struct TVHomeView: View {
+@@ -5249,6 +5250,11 @@ struct TVHomeView: View {
      @State private var forkBecauseSections: [TVHomeSection] = []
      @State private var forkBecauseRevision = 0
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseEnabled = true
@@ -187,9 +187,9 @@ index d45a09b9..7a320e35 100644
 +    @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingEnabled = true
 +    @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
      @State private var upcomingItems: [ContinueWatchingItem] = []
+     @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-     /// entire history inside `body` made every focus update scale with the
-@@ -5273,6 +5279,26 @@ struct TVHomeView: View {
+@@ -5337,6 +5343,26 @@ struct TVHomeView: View {
                      forkBecauseSections = sections
                      forkBecauseRevision &+= 1
                  }
@@ -216,7 +216,7 @@ index d45a09b9..7a320e35 100644
              // Fork: a Continue Watching card that keeps focus for a second starts finding its
              // sources (and subtitles), so pressing it opens a full picker.
              Color.clear
-@@ -7709,6 +7735,7 @@ struct TVHomeView: View {
+@@ -7803,6 +7829,7 @@ struct TVHomeView: View {
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
              forkRevision: forkBecauseEnabled ? forkBecauseRevision : -1,
@@ -224,7 +224,7 @@ index d45a09b9..7a320e35 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7743,7 +7770,12 @@ struct TVHomeView: View {
+@@ -7845,7 +7872,12 @@ struct TVHomeView: View {
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
          let allSections = collectionHome == nil
@@ -239,10 +239,10 @@ index d45a09b9..7a320e35 100644
  
          let result: [TVHomeSection]
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index bc99b01a..ea6771cf 100644
+index dcd670a6..529d3b6d 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3265,6 +3265,8 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3292,6 +3292,8 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
      @AppStorage("fork_top10_numerals") private var forkTop10 = true
      @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
@@ -251,7 +251,7 @@ index bc99b01a..ea6771cf 100644
      @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
      @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
      @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
-@@ -3662,6 +3664,20 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3707,6 +3709,20 @@ private struct LayoutDiscoverySettingsView: View {
                      isOn: $forkBillboard,
                      accentColor: accentColor
                  )

@@ -161,38 +161,38 @@ index 00000000..91ac5b16
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 7a320e35..06c041c4 100644
+index 0c0f7496..8183969d 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -4868,6 +4868,8 @@ private final class TVHomeFocusWork {
-         let hideUnreleased: Bool
+@@ -4928,6 +4928,8 @@ private final class TVHomeFocusWork {
          let cwLandscape: Bool
          let landscapePosters: Bool
+         let calendarToday: [NuvioMeta]
 +        /// Fork: kids rating limit (-1 when off), bumped as ratings arrive.
 +        var kidsRevision: Int = -1
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5192,6 +5194,8 @@ struct TVHomeView: View {
+@@ -5255,6 +5257,8 @@ struct TVHomeView: View {
      @State private var forkTrendingRevision = 0
      @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingEnabled = true
      @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
 +    @AppStorage(ForkKidsFilter.enabledKey) private var forkKidsLimit = false
 +    @ObservedObject private var forkKids = ForkKidsFilter.shared
      @State private var upcomingItems: [ContinueWatchingItem] = []
+     @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-     /// entire history inside `body` made every focus update scale with the
-@@ -7746,7 +7750,8 @@ struct TVHomeView: View {
-             storeRevision: store.sectionsRevision,
+@@ -7841,7 +7845,8 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
--            landscapePosters: landscapePosters
-+            landscapePosters: landscapePosters,
+             landscapePosters: landscapePosters,
+-            calendarToday: homeCalendarToday ? calendarToday.metas : []
++            calendarToday: homeCalendarToday ? calendarToday.metas : [],
 +            kidsRevision: forkKidsLimit ? forkKids.revision : -1
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -7799,7 +7804,28 @@ struct TVHomeView: View {
+@@ -7901,7 +7906,28 @@ struct TVHomeView: View {
              }
          }
  
@@ -223,10 +223,10 @@ index 7a320e35..06c041c4 100644
              signature: signature,
              sections: contentSections
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index 9cbb4856..58a945e8 100644
+index ddc611f9..16725ace 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -3648,6 +3648,10 @@ private enum TvDetailsFocusSection: Hashable {
+@@ -3653,6 +3653,10 @@ private enum TvDetailsFocusSection: Hashable {
  
  struct TvDetailsContent: View {
      let uiState: DetailsUiState
@@ -235,9 +235,9 @@ index 9cbb4856..58a945e8 100644
 +    /// Fork: kids rating limit (everything when it's off).
 +    private var forkVisibleMoreLikeThis: [RelatedTitle] { forkKids.visible(uiState.moreLikeThis) }
      var initialPlayRequestID: UInt? = nil
+     var initialFocusEpisode: DetailsEpisodeFocus? = nil
      var onInitialPlayRequestConsumed: ((UInt) -> Void)? = nil
-     let onPlayClick: () -> Void
-@@ -4201,7 +4205,7 @@ struct TvDetailsContent: View {
+@@ -4211,7 +4215,7 @@ struct TvDetailsContent: View {
                                  if !uiState.moreLikeThis.isEmpty {
                                      TvDetailsRelatedRow(
                                          title: L10n.string("settings_tmdb_module_more_like_this", fallback: "More Like This"),
@@ -296,10 +296,10 @@ index edaeff44..49500d2a 100644
                          meta: item,
                          externalFocus: $focusedItemID,
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 5a29afc5..349b73b7 100644
+index ee4a4bcd..a1e968e3 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3268,6 +3268,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3295,6 +3295,7 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
      @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
      @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
@@ -307,7 +307,7 @@ index 5a29afc5..349b73b7 100644
      @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
      @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
      @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
-@@ -3688,6 +3689,12 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3733,6 +3734,12 @@ private struct LayoutDiscoverySettingsView: View {
                      isOn: $forkTrendingRows,
                      accentColor: accentColor
                  )

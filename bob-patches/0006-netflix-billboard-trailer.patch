@@ -77,11 +77,11 @@ index 00000000..b03ae552
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index ba233e21..d45a09b9 100644
+index 8258899b..fa1f8e4c 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -5127,6 +5127,11 @@ struct TVHomeView: View {
-     @AppStorage(SettingsKey.bodyColor) private var bodyColor = SettingsBackground.charcoal.rawValue
+@@ -5190,6 +5190,11 @@ struct TVHomeView: View {
+     @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.heroEnabled) private var heroEnabled = true
      @AppStorage(SettingsKey.fullscreenHeroBackdrop) private var fullscreenHeroBackdrop = true
 +    // Fork: Netflix-style billboard trailer behind the Home hero.
@@ -92,7 +92,7 @@ index ba233e21..d45a09b9 100644
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5293,6 +5298,7 @@ struct TVHomeView: View {
+@@ -5357,6 +5362,7 @@ struct TVHomeView: View {
                      )
                      .equatable()
                      .frame(width: proxy.size.width, height: proxy.size.height)
@@ -100,7 +100,7 @@ index ba233e21..d45a09b9 100644
                      .clipped()
                  } else {
                      let backdropWidth = proxy.size.width * 0.65
-@@ -5308,6 +5314,7 @@ struct TVHomeView: View {
+@@ -5372,6 +5378,7 @@ struct TVHomeView: View {
                          )
                          .equatable()
                          .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
@@ -108,7 +108,7 @@ index ba233e21..d45a09b9 100644
                          .mask(
                              LinearGradient(
                                  stops: [
-@@ -5412,7 +5419,8 @@ struct TVHomeView: View {
+@@ -5476,7 +5483,8 @@ struct TVHomeView: View {
                          } else if let heroMeta = visibleFocusedMeta ?? visibleHero {
                              TVHeroView(
                                  meta: heroMeta,
@@ -118,7 +118,7 @@ index ba233e21..d45a09b9 100644
                              ) {
                                  navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
                              }
-@@ -5481,6 +5489,8 @@ struct TVHomeView: View {
+@@ -5545,6 +5553,8 @@ struct TVHomeView: View {
                                      .frame(maxWidth: .infinity, alignment: .leading)
                                      .padding(.top, TVHomeLayout.rowsTopPadding)
                                      .padding(.bottom, 80)
@@ -127,7 +127,7 @@ index ba233e21..d45a09b9 100644
                                      #if os(tvOS)
                                      // Place the configurator inside the scroll content so its
                                      // ancestor is the UIScrollView that owns the row offset.
-@@ -7812,6 +7822,39 @@ struct TVHomeView: View {
+@@ -7914,6 +7924,39 @@ struct TVHomeView: View {
          return focusedMeta
      }
  
@@ -167,7 +167,7 @@ index ba233e21..d45a09b9 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -10910,6 +10953,8 @@ private struct TVHeroView: View {
+@@ -11021,6 +11064,8 @@ private struct TVHeroView: View {
      /// say which episode is in progress, how much is left, and show the
      /// episode's own overview instead of the series blurb.
      var continueItem: ContinueWatchingItem? = nil
@@ -176,7 +176,7 @@ index ba233e21..d45a09b9 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
  
-@@ -10944,6 +10989,8 @@ private struct TVHeroView: View {
+@@ -11055,6 +11100,8 @@ private struct TVHeroView: View {
                      .lineLimit(4)
                      .frame(maxWidth: 900, alignment: .leading)
                      .padding(.top, 4)
@@ -185,7 +185,7 @@ index ba233e21..d45a09b9 100644
              }
          }
          .foregroundColor(.white)
-@@ -10982,6 +11029,7 @@ extension TVHeroView: Equatable {
+@@ -11093,6 +11140,7 @@ extension TVHeroView: Equatable {
              && lhs.continueItem?.meta.id == rhs.continueItem?.meta.id
              && lhs.continueItem?.episodeLabel == rhs.continueItem?.episodeLabel
              && lhs.continueItem?.remainingText == rhs.continueItem?.remainingText
@@ -248,10 +248,10 @@ index 00ace0fc..422a3605 100644
      }
  
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 6c724ead..bc99b01a 100644
+index bd168911..dcd670a6 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3264,6 +3264,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3291,6 +3291,7 @@ private struct LayoutDiscoverySettingsView: View {
      // Fork switches (device-local).
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
      @AppStorage("fork_top10_numerals") private var forkTop10 = true
@@ -259,7 +259,7 @@ index 6c724ead..bc99b01a 100644
      @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
      @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
      @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
-@@ -3655,6 +3656,12 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3700,6 +3701,12 @@ private struct LayoutDiscoverySettingsView: View {
                      isOn: $forkBecauseRows,
                      accentColor: accentColor
                  )

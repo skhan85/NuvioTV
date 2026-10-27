@@ -875,19 +875,19 @@ index aeb8852e..00ace0fc 100644
  
              if let onRefreshCatalog {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-index 26509c55..1262d818 100644
+index e9001be4..7f38e0f9 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-@@ -634,7 +634,7 @@ struct TVCatalogRow: View {
+@@ -646,7 +646,7 @@ struct TVCatalogRow: View {
                      isAlwaysLandscape: rowTileShape == .landscape || item.tileShape == .landscape,
                      tileShape: item.tileShape != .poster ? item.tileShape : rowTileShape,
                      continueProgress: progressItem?.progress,
 -                    continueRemainingText: progressItem?.remainingText,
 +                    continueRemainingText: progressItem?.forkRemainingText,
-                     continueEpisodeText: progressItem?.episodeLabel,
-                     continueEpisodeTitleText: progressItem?.episodeDisplayTitle,
-                     continueEpisodeArtworkURL: progressItem?.episodeArtworkURL
-@@ -677,6 +677,12 @@ struct TVCatalogRow: View {
+                     continueEpisodeText: episodeText,
+                     continueEpisodeTitleText: episodeTitleText,
+                     continueEpisodeArtworkURL: episodeArtworkURL,
+@@ -689,6 +689,12 @@ struct TVCatalogRow: View {
                  ) {
                      onSelect(item)
                  }
@@ -949,12 +949,12 @@ index 675390ca..958e0734 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 6db6aaea..6c724ead 100644
+index d00e9f83..bd168911 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3261,6 +3261,15 @@ private struct LayoutDiscoverySettingsView: View {
-     @AppStorage(SettingsKey.upNextFromFurthestEpisode) private var upNextFromFurthestEpisode = true
+@@ -3288,6 +3288,15 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
+     @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
 +    // Fork switches (device-local).
 +    @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
@@ -968,7 +968,7 @@ index 6db6aaea..6c724ead 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3639,6 +3648,56 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3684,6 +3693,56 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -1025,7 +1025,7 @@ index 6db6aaea..6c724ead 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -4727,7 +4786,7 @@ private struct IntegrationSettingsView: View {
+@@ -4772,7 +4831,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -1034,7 +1034,7 @@ index 6db6aaea..6c724ead 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -5040,7 +5099,7 @@ private struct TmdbOptionsSheet: View {
+@@ -5085,7 +5144,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -1043,7 +1043,7 @@ index 6db6aaea..6c724ead 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -13050,8 +13109,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -13120,8 +13179,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs
