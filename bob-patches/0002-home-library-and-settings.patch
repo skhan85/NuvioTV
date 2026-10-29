@@ -901,7 +901,7 @@ index e9001be4..7f38e0f9 100644
          }
          .padding(
 diff --git a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
-index 675390ca..958e0734 100644
+index f0413512..0adbfb27 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
 @@ -38,6 +38,8 @@ public struct LibraryView: View {
@@ -949,10 +949,10 @@ index 675390ca..958e0734 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index d00e9f83..bd168911 100644
+index e7d19357..022a5827 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3288,6 +3288,15 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3293,6 +3293,15 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -968,7 +968,7 @@ index d00e9f83..bd168911 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3684,6 +3693,56 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3691,6 +3700,56 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -1025,7 +1025,7 @@ index d00e9f83..bd168911 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -4772,7 +4831,7 @@ private struct IntegrationSettingsView: View {
+@@ -4805,7 +4864,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -1034,7 +1034,7 @@ index d00e9f83..bd168911 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -5085,7 +5144,7 @@ private struct TmdbOptionsSheet: View {
+@@ -5118,7 +5177,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -1043,7 +1043,7 @@ index d00e9f83..bd168911 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -13120,8 +13179,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -13286,8 +13345,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs

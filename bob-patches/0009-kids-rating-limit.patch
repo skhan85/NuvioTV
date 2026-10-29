@@ -161,10 +161,10 @@ index 00000000..91ac5b16
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 0c0f7496..8183969d 100644
+index 6dd56f11..232190b0 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -4928,6 +4928,8 @@ private final class TVHomeFocusWork {
+@@ -4956,6 +4956,8 @@ private final class TVHomeFocusWork {
          let cwLandscape: Bool
          let landscapePosters: Bool
          let calendarToday: [NuvioMeta]
@@ -173,7 +173,7 @@ index 0c0f7496..8183969d 100644
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5255,6 +5257,8 @@ struct TVHomeView: View {
+@@ -5283,6 +5285,8 @@ struct TVHomeView: View {
      @State private var forkTrendingRevision = 0
      @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingEnabled = true
      @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
@@ -182,7 +182,7 @@ index 0c0f7496..8183969d 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -7841,7 +7845,8 @@ struct TVHomeView: View {
+@@ -7869,7 +7873,8 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
@@ -192,7 +192,7 @@ index 0c0f7496..8183969d 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -7901,7 +7906,28 @@ struct TVHomeView: View {
+@@ -7929,7 +7934,28 @@ struct TVHomeView: View {
              }
          }
  
@@ -223,10 +223,10 @@ index 0c0f7496..8183969d 100644
              signature: signature,
              sections: contentSections
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index ddc611f9..16725ace 100644
+index 310f9dd3..a139bf07 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -3653,6 +3653,10 @@ private enum TvDetailsFocusSection: Hashable {
+@@ -3671,6 +3671,10 @@ private enum TvDetailsFocusSection: Hashable {
  
  struct TvDetailsContent: View {
      let uiState: DetailsUiState
@@ -237,15 +237,15 @@ index ddc611f9..16725ace 100644
      var initialPlayRequestID: UInt? = nil
      var initialFocusEpisode: DetailsEpisodeFocus? = nil
      var onInitialPlayRequestConsumed: ((UInt) -> Void)? = nil
-@@ -4211,7 +4215,7 @@ struct TvDetailsContent: View {
-                                 if !uiState.moreLikeThis.isEmpty {
-                                     TvDetailsRelatedRow(
-                                         title: L10n.string("settings_tmdb_module_more_like_this", fallback: "More Like This"),
--                                        items: uiState.moreLikeThis,
-+                                        items: forkVisibleMoreLikeThis,
-                                         entryLocked: focusedDetailsSection != .related,
-                                         onSelect: { item in
-                                             stopBackgroundTrailer(manual: false)
+@@ -4131,7 +4135,7 @@ struct TvDetailsContent: View {
+             if !uiState.moreLikeThis.isEmpty {
+                 TvDetailsRelatedRow(
+                     title: L10n.string("settings_tmdb_module_more_like_this", fallback: "More Like This"),
+-                    items: uiState.moreLikeThis,
++                    items: forkVisibleMoreLikeThis,
+                     entryLocked: focusedDetailsSection != .related,
+                     onSelect: { item in
+                         stopBackgroundTrailer(manual: false)
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift b/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
 index edaeff44..49500d2a 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
@@ -296,10 +296,10 @@ index edaeff44..49500d2a 100644
                          meta: item,
                          externalFocus: $focusedItemID,
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index ee4a4bcd..a1e968e3 100644
+index fabef3c7..1968f0c7 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3295,6 +3295,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3300,6 +3300,7 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
      @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
      @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
@@ -307,7 +307,7 @@ index ee4a4bcd..a1e968e3 100644
      @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
      @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
      @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
-@@ -3733,6 +3734,12 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3740,6 +3741,12 @@ private struct LayoutDiscoverySettingsView: View {
                      isOn: $forkTrendingRows,
                      accentColor: accentColor
                  )

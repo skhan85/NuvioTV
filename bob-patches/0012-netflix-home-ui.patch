@@ -339,10 +339,10 @@ index 00000000..1c3c7fd9
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 8183969d..b4f07261 100644
+index 232190b0..49909e42 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -644,6 +644,10 @@ struct ContentView: View {
+@@ -645,6 +645,10 @@ struct ContentView: View {
          .onChange(of: profileViewModel.activeProfile?.id) { _, _ in
              AppLocaleManager.shared.reloadFromProfileStore()
          }
@@ -353,7 +353,7 @@ index 8183969d..b4f07261 100644
          // Backing out of the switch must not leave the cover behind.
          .onChange(of: isOnProfileSelection) { _, isSelecting in
              if isSelecting, isPreparingProfile {
-@@ -4930,6 +4934,8 @@ private final class TVHomeFocusWork {
+@@ -4958,6 +4962,8 @@ private final class TVHomeFocusWork {
          let calendarToday: [NuvioMeta]
          /// Fork: kids rating limit (-1 when off), bumped as ratings arrive.
          var kidsRevision: Int = -1
@@ -362,7 +362,7 @@ index 8183969d..b4f07261 100644
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5198,6 +5204,8 @@ struct TVHomeView: View {
+@@ -5226,6 +5232,8 @@ struct TVHomeView: View {
      @AppStorage(SettingsKey.trailersEnabled) private var forkTrailersEnabled = true
      @AppStorage(SettingsKey.trailerDelay) private var forkTrailerDelay = 7
      @State private var forkBillboardPlayingId: String?
@@ -371,7 +371,7 @@ index 8183969d..b4f07261 100644
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -7846,7 +7854,8 @@ struct TVHomeView: View {
+@@ -7874,7 +7882,8 @@ struct TVHomeView: View {
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
              calendarToday: homeCalendarToday ? calendarToday.metas : [],
@@ -381,7 +381,7 @@ index 8183969d..b4f07261 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -7855,7 +7864,9 @@ struct TVHomeView: View {
+@@ -7883,7 +7892,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -392,7 +392,7 @@ index 8183969d..b4f07261 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster"
          )
-@@ -11117,6 +11128,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -11318,6 +11329,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -400,7 +400,7 @@ index 8183969d..b4f07261 100644
      let meta: NuvioMeta
      /// Continue Watching entry for this title, when one exists. Lets the hero
      /// say which episode is in progress, how much is left, and show the
-@@ -11142,6 +11154,14 @@ private struct TVHeroView: View {
+@@ -11343,6 +11355,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
@@ -490,10 +490,10 @@ index 422a3605..c764f0dd 100644
                  }
                  .padding(.leading, 22)
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 82494bdb..350fc1e3 100644
+index 026b42a8..3708b69b 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3291,6 +3291,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3296,6 +3296,7 @@ private struct LayoutDiscoverySettingsView: View {
      // Fork switches (device-local).
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
      @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixDetails = false
@@ -501,7 +501,7 @@ index 82494bdb..350fc1e3 100644
      @AppStorage("fork_top10_numerals") private var forkTop10 = true
      @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
      @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
-@@ -3701,7 +3702,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3708,7 +3709,7 @@ private struct LayoutDiscoverySettingsView: View {
                  // Fork
                  SettingsToggleRow(
                      title: "Netflix Style",
@@ -510,7 +510,7 @@ index 82494bdb..350fc1e3 100644
                      isOn: Binding(
                          get: { forkNetflixDetails },
                          set: { on in
-@@ -3711,11 +3712,18 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3718,11 +3719,18 @@ private struct LayoutDiscoverySettingsView: View {
                              forkBillboard = true
                              forkTrendingRows = true
                              forkTop10 = true
