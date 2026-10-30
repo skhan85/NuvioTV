@@ -900,10 +900,10 @@ index 00000000..ccdd468e
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 1fad9548..fdb64ca2 100644
+index 8dd414b1..e08fa67c 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -412,6 +412,10 @@ struct ContentView: View {
+@@ -465,6 +465,10 @@ struct ContentView: View {
      @State private var reopenStreamPickerResumePosition: Double?
      /// Episode to select when Details opens from the calendar.
      @State private var detailsFocusEpisode: DetailsEpisodeFocus?
@@ -914,7 +914,7 @@ index 1fad9548..fdb64ca2 100644
      /// Title whose liquid-glass quick-actions menu is showing (long-press on a
      /// card). Presented as an overlay over the tab view, like Details/Player.
      @State private var cardMenuMeta: NuvioMeta?
-@@ -471,6 +475,42 @@ struct ContentView: View {
+@@ -524,6 +528,42 @@ struct ContentView: View {
          ZStack {
              ProfileScopedRootBackground()
  
@@ -957,7 +957,7 @@ index 1fad9548..fdb64ca2 100644
              switch activeScreen {
              case .login:
                  // `.login` is also the value this state starts at, before
-@@ -1189,10 +1229,24 @@ struct ContentView: View {
+@@ -1250,10 +1290,24 @@ struct ContentView: View {
          guard !callback.isError else { return }
  
          let duration = session.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
@@ -983,7 +983,7 @@ index 1fad9548..fdb64ca2 100644
          guard let progress, progress.isFinite, (0...1).contains(progress) else { return }
  
          let isEpisode = session.meta.isSeries && session.season != nil && session.episode != nil
-@@ -1251,6 +1305,10 @@ struct ContentView: View {
+@@ -1312,6 +1366,10 @@ struct ContentView: View {
              return
          }
  
@@ -994,7 +994,7 @@ index 1fad9548..fdb64ca2 100644
          if progress >= WatchProgressLedger.completionFraction {
              if let duration {
                  ContinueWatchingStore.markPlaybackCompleted(
-@@ -1281,6 +1339,129 @@ struct ContentView: View {
+@@ -1342,6 +1400,129 @@ struct ContentView: View {
          }
      }
  
@@ -1124,7 +1124,7 @@ index 1fad9548..fdb64ca2 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1726,6 +1907,15 @@ struct ContentView: View {
+@@ -1787,6 +1968,15 @@ struct ContentView: View {
          }
      }
  
@@ -1140,7 +1140,7 @@ index 1fad9548..fdb64ca2 100644
      private func presentPlayback(
          url: URL,
          meta: NuvioMeta,
-@@ -1742,7 +1932,8 @@ struct ContentView: View {
+@@ -1803,7 +1993,8 @@ struct ContentView: View {
          startupBenchmarkToken: UUID? = nil,
          sourceID: String? = nil,
          collectionContext: CollectionPlaybackContext? = nil,
@@ -1150,7 +1150,7 @@ index 1fad9548..fdb64ca2 100644
      ) {
          // Usenet streams arrive as nuvio-usenet:// URLs: start the local
          // engine first, then play its 127.0.0.1 URL like any other stream.
-@@ -1784,13 +1975,47 @@ struct ContentView: View {
+@@ -1845,13 +2036,47 @@ struct ContentView: View {
          let store = ProfileSettings.store(for: profileViewModel.activeProfile?.id)
          let defaultPlayer = ExternalPlayer.from(store.string(forKey: SettingsKey.externalPlayer))
          let player = customPlayer ?? defaultPlayer
@@ -1200,7 +1200,7 @@ index 1fad9548..fdb64ca2 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -1837,7 +2062,13 @@ struct ContentView: View {
+@@ -1898,7 +2123,13 @@ struct ContentView: View {
          // Hand off to the external app only when it is actually installed
          // (`canOpenURL` needs its scheme in LSApplicationQueriesSchemes); if it
          // isn't, fall through to the built-in player instead of a dead launch.
@@ -1215,7 +1215,7 @@ index 1fad9548..fdb64ca2 100644
              meta: meta,
              season: meta.isSeries ? numbers?.season : nil,
              episode: meta.isSeries ? numbers?.episode : nil,
-@@ -1859,6 +2090,22 @@ struct ContentView: View {
+@@ -1920,6 +2151,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -1238,7 +1238,7 @@ index 1fad9548..fdb64ca2 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -4695,6 +4942,7 @@ enum ProfileDisplayName {
+@@ -4812,6 +5059,7 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -1246,7 +1246,7 @@ index 1fad9548..fdb64ca2 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -5020,6 +5268,10 @@ struct TVHomeView: View {
+@@ -5137,6 +5385,10 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -1257,7 +1257,7 @@ index 1fad9548..fdb64ca2 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -5098,6 +5350,26 @@ struct TVHomeView: View {
+@@ -5215,6 +5467,26 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -1284,7 +1284,7 @@ index 1fad9548..fdb64ca2 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -7548,6 +7820,7 @@ struct TVHomeView: View {
+@@ -7665,6 +7937,7 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -1292,7 +1292,7 @@ index 1fad9548..fdb64ca2 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7589,7 +7862,9 @@ struct TVHomeView: View {
+@@ -7706,7 +7979,9 @@ struct TVHomeView: View {
              + ((calendarToday.isEmpty || !homeCalendarToday) ? [] : [calendarTodaySection])
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
@@ -1303,7 +1303,7 @@ index 1fad9548..fdb64ca2 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -7653,6 +7928,15 @@ struct TVHomeView: View {
+@@ -7770,6 +8045,15 @@ struct TVHomeView: View {
      }
  
  
@@ -1320,10 +1320,10 @@ index 1fad9548..fdb64ca2 100644
          guard let focusedMeta, isVisible(focusedMeta) else { return nil }
          return focusedMeta
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index 56917619..da6446eb 100644
+index c91e34d9..ebbc4483 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -435,6 +435,14 @@ struct DetailsScreen: View {
+@@ -451,6 +451,14 @@ struct DetailsScreen: View {
              finishSmartPlaybackIfPossible()
              performBackgroundAutoSelectionAndPreResolution()
          }
@@ -1338,7 +1338,7 @@ index 56917619..da6446eb 100644
          .onChange(of: viewModel.uiState.isLoading) { _, isLoading in
              if !isLoading {
                  if let meta = viewModel.uiState.meta, meta.id == id, !meta.isSeries {
-@@ -4442,6 +4450,17 @@ struct TvDetailsContent: View {
+@@ -4472,6 +4480,17 @@ struct TvDetailsContent: View {
              }
              .background(Color.black.ignoresSafeArea())
              .onExitCommand(perform: handleDetailsBack)
@@ -1356,7 +1356,7 @@ index 56917619..da6446eb 100644
              // tvOS doesn't re-run default-focus when this content swaps in after
              // the async load finishes, so focus lands nowhere / off the Play
              // button. Move it onto Play explicitly once the content appears
-@@ -8235,6 +8254,8 @@ private struct TvStreamPickerOverlay: View {
+@@ -8347,6 +8366,8 @@ private struct TvStreamPickerOverlay: View {
      @State private var showingP2PConsent = false
      @State private var pendingTorrentSelection: (stream: NuvioStream, player: ExternalPlayer?)? = nil
  
@@ -1365,7 +1365,7 @@ index 56917619..da6446eb 100644
  
      private let filterAllKey = "filter::all"
      private let sortKey = "filter::sort"
-@@ -8389,6 +8410,16 @@ private struct TvStreamPickerOverlay: View {
+@@ -8501,6 +8522,16 @@ private struct TvStreamPickerOverlay: View {
              // cards before landing on the next one; re-seeding on that blip
              // snaps focus back to the first stream (the reported bug), so we
              // debounce and bail when focus has already landed somewhere.
@@ -1382,7 +1382,7 @@ index 56917619..da6446eb 100644
              .onChange(of: focusedItem) { _, newValue in
                  if let newValue, newValue != filterAllKey, !didSeedStreamFocus {
                      didSeedStreamFocus = true
-@@ -8769,6 +8800,20 @@ private struct TvStreamPickerOverlay: View {
+@@ -8881,6 +8912,20 @@ private struct TvStreamPickerOverlay: View {
                                      action: { select(stream, player: nil) },
                                      onSelectPlayer: { player in select(stream, player: player) }
                                  )
@@ -1403,7 +1403,7 @@ index 56917619..da6446eb 100644
                                  .id(stream.id)
                                  .onAppear {
                                      if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -9234,6 +9279,9 @@ private struct TvStreamCard: View {
+@@ -9346,6 +9391,9 @@ private struct TvStreamCard: View {
                          )
                      }
  
@@ -1413,7 +1413,7 @@ index 56917619..da6446eb 100644
                      Text(primaryName)
                          .font(.system(size: 34, weight: .bold))
                          .foregroundColor(.white)
-@@ -9249,12 +9297,9 @@ private struct TvStreamCard: View {
+@@ -9361,12 +9409,9 @@ private struct TvStreamCard: View {
                      }
  
                      if let description = stream.description, !description.isEmpty {
@@ -1506,7 +1506,7 @@ index 7040a4a8..793acf39 100644
          requestID = UUID()
          server.stop()
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
-index a066e8ce..09bac10f 100644
+index 7a7f9923..48918912 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
 @@ -968,6 +968,8 @@ class DetailsViewModel: ObservableObject {
@@ -1519,10 +1519,10 @@ index a066e8ce..09bac10f 100644
          if streamDiscoveryMode == .shared {
              prepareSharedStreams(forId: streamId, type: type, forceRefresh: forceRefresh)
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index 90cf1b3f..85cca4e6 100644
+index 7b752665..ccb99e1c 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-@@ -666,7 +666,8 @@ class PlayerViewModel: ObservableObject {
+@@ -672,7 +672,8 @@ class PlayerViewModel: ObservableObject {
      private var loadWatchdogGeneration: UInt64?
      private var loadWatchdogDiscGraceGranted = false
      /// A source that hasn't started within this long is treated as dead.
@@ -1532,7 +1532,7 @@ index 90cf1b3f..85cca4e6 100644
  
      init(
          sessionCoordinator suppliedCoordinator: PlaybackSessionCoordinator? = nil,
-@@ -2559,7 +2560,24 @@ class PlayerViewModel: ObservableObject {
+@@ -2586,7 +2587,24 @@ class PlayerViewModel: ObservableObject {
          }
          let timeoutSeconds = loadTimeoutSeconds
          loadWatchdogTask = Task { [weak self] in
@@ -1558,7 +1558,7 @@ index 90cf1b3f..85cca4e6 100644
              guard !Task.isCancelled, let self,
                    self.sessionCoordinator.loadGeneration == targetGeneration,
                    self.sessionCoordinator.lastLoadError == nil,
-@@ -2620,7 +2638,7 @@ class PlayerViewModel: ObservableObject {
+@@ -2647,7 +2665,7 @@ class PlayerViewModel: ObservableObject {
                  LastPlaybackStreamStore.remove(metaId: meta.id, season: numbers?.season, episode: numbers?.episode)
              }
              self.attemptFailover(

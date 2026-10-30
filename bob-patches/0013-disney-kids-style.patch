@@ -170,10 +170,10 @@ index 00000000..c59e6366
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 49909e42..f9fd207d 100644
+index 588958a9..a415ea18 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -649,6 +649,14 @@ struct ContentView: View {
+@@ -702,6 +702,14 @@ struct ContentView: View {
          .onChange(of: profileViewModel.activeProfile?.name, initial: true) { _, name in
              ForkNetflixUI.activeProfileName = name
          }
@@ -188,7 +188,7 @@ index 49909e42..f9fd207d 100644
          // Backing out of the switch must not leave the cover behind.
          .onChange(of: isOnProfileSelection) { _, isSelecting in
              if isSelecting, isPreparingProfile {
-@@ -5234,6 +5242,8 @@ struct TVHomeView: View {
+@@ -5351,6 +5359,8 @@ struct TVHomeView: View {
      @State private var forkBillboardPlayingId: String?
      // Fork: Netflix Style ("Continue Watching for <name>").
      @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixUI = false
@@ -197,7 +197,7 @@ index 49909e42..f9fd207d 100644
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5596,6 +5606,10 @@ struct TVHomeView: View {
+@@ -5713,6 +5723,10 @@ struct TVHomeView: View {
                                              .padding(.horizontal, horizontalEdgeInset)
                                          }
  
@@ -209,10 +209,10 @@ index 49909e42..f9fd207d 100644
                                              let isNearFocusedRow = abs(index - focusedRowIndex) <= 2
                                              if isNearFocusedRow {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 3708b69b..a95a6326 100644
+index 34d82f2a..0b8fd4ce 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -1110,11 +1110,13 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
+@@ -1112,11 +1112,13 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
      case crimson = "Crimson"
      case rust = "Rust"
      case teal = "Teal"
@@ -226,7 +226,7 @@ index 3708b69b..a95a6326 100644
          case .charcoal: return Color(red: 13.0 / 255.0, green: 13.0 / 255.0, blue: 13.0 / 255.0)
          case .black: return .black
          case .midnight: return Color(red: 0.020, green: 0.030, blue: 0.065)
-@@ -1145,6 +1147,7 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
+@@ -1147,6 +1149,7 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
          case .crimson: return Color(red: 0.64, green: 0.11, blue: 0.14)
          case .rust: return Color(red: 0.56, green: 0.27, blue: 0.09)
          case .teal: return Color(red: 0.07, green: 0.42, blue: 0.39)
@@ -234,7 +234,7 @@ index 3708b69b..a95a6326 100644
          }
      }
  
-@@ -3297,6 +3300,9 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3299,6 +3302,9 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
      @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixDetails = false
      @AppStorage(ForkNetflixUI.cardBadgesKey) private var forkCardBadges = true
@@ -244,7 +244,7 @@ index 3708b69b..a95a6326 100644
      @AppStorage("fork_top10_numerals") private var forkTop10 = true
      @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
      @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
-@@ -3725,6 +3731,24 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3727,6 +3733,24 @@ private struct LayoutDiscoverySettingsView: View {
                      ),
                      accentColor: accentColor
                  )
