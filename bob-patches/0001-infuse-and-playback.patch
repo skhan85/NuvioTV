@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
-index 983d548c..b226c270 100644
+index 290d6213..66cf11b8 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
-@@ -1133,6 +1133,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -1242,6 +1242,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          checkError(mpv_set_option_string(mpv, "gpu-api", "vulkan"))
          checkError(mpv_set_option_string(mpv, "gpu-context", "moltenvk"))
          checkError(mpv_set_option_string(mpv, "hwdec", "videotoolbox"))
@@ -15,7 +15,7 @@ index 983d548c..b226c270 100644
          checkError(mpv_set_option_string(mpv, "ao", Self.defaultAudioOutput))
          // AVSampleBufferAudioRenderer follows tvOS's active output route without
          // using the failing RemoteIO callback from MPV's AudioUnit backend.
-@@ -1211,11 +1217,10 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -1320,11 +1326,10 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          checkError(mpv_set_option_string(mpv, "keep-open", "yes"))
          checkError(mpv_set_option_string(mpv, "target-colorspace-hint", "yes"))
          checkError(mpv_set_option_string(mpv, "tone-mapping", "auto"))
@@ -30,7 +30,7 @@ index 983d548c..b226c270 100644
          checkError(mpv_set_option_string(mpv, "target-prim", "auto"))
          checkError(mpv_set_option_string(mpv, "target-trc", "auto"))
  
-@@ -1529,11 +1534,59 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -1640,11 +1645,59 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          }
      }
  
@@ -90,7 +90,7 @@ index 983d548c..b226c270 100644
  #if NUVIO_MPV_MEMORY_WATCHDOG && os(tvOS)
          memoryDiagnosticSessionID = UUID().uuidString
          memoryDiagnosticCacheMode = "pending"
-@@ -2069,12 +2122,17 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2181,12 +2234,17 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          case .off:
              break
          case .enhance:
@@ -111,7 +111,7 @@ index 983d548c..b226c270 100644
          }
          let filterString = filters.joined(separator: ",")
          mpv_set_property_string(mpv, "af", filterString)
-@@ -2300,6 +2358,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2432,6 +2490,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          let seeking = getFlag("seeking")
          isSeekingForWatchParty = seeking
          let bufferingCache = getFlag("paused-for-cache")
@@ -119,8 +119,8 @@ index 983d548c..b226c270 100644
  
          isAtEndOfFile = eofReached
  
-@@ -2446,6 +2505,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
-         refreshTracks()
+@@ -2596,6 +2655,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         chapters = PlaybackChapters.chapters(from: items, totalDuration: duration)
      }
  
 +    // MARK: Fork: playback health log (diagnostics export, source "MPVHealth")
@@ -165,7 +165,7 @@ index 983d548c..b226c270 100644
      private func refreshTracks() {
          guard mpv != nil else { return }
          var audio = [PlaybackTrackInfo]()
-@@ -2965,7 +3063,14 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3115,7 +3213,14 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          )
          clearStartupVideoResyncState(clearAnchor: true)
          if shouldPlay {
@@ -180,7 +180,7 @@ index 983d548c..b226c270 100644
          }
          updateState()
      }
-@@ -3140,6 +3245,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3290,6 +3395,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          markStartupVideoDetachedIfNeeded()
          setStringProperty("vid", "no")
  
@@ -188,7 +188,7 @@ index 983d548c..b226c270 100644
          manager.preferredDisplayCriteria = AVDisplayCriteria(
              refreshRate: Float(fps),
              formatDescription: formatDescription
-@@ -3337,6 +3443,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3487,6 +3593,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          }
          isDisplaySwitchInFlight = false
          removeDisplayModeSwitchObservers()
@@ -196,7 +196,7 @@ index 983d548c..b226c270 100644
          setStringProperty("vid", "auto")
          recordMPVRenderContext(event: "display_mode_settled")
          if pendingURL != nil {
-@@ -3508,6 +3615,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3658,6 +3765,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
  #endif
                          self.clearPlaybackError()
                          guard !self.rejectUnsupportedSimulatorCodecIfNeeded() else { return }
@@ -204,7 +204,7 @@ index 983d548c..b226c270 100644
                          self.isPlayerLoading = false
                          self.attachPendingAudioIfNeeded()
                          self.applyPendingLoadConfiguration()
-@@ -3583,6 +3691,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3733,6 +3841,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
                          self.memoryWatchdog.record(event: "video_reconfig")
  #endif
                          self.recordMPVRenderContext(event: "video_reconfig")
@@ -900,10 +900,10 @@ index 00000000..ccdd468e
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 8dd414b1..e08fa67c 100644
+index 7954da3f..527babde 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -465,6 +465,10 @@ struct ContentView: View {
+@@ -470,6 +470,10 @@ struct ContentView: View {
      @State private var reopenStreamPickerResumePosition: Double?
      /// Episode to select when Details opens from the calendar.
      @State private var detailsFocusEpisode: DetailsEpisodeFocus?
@@ -914,7 +914,7 @@ index 8dd414b1..e08fa67c 100644
      /// Title whose liquid-glass quick-actions menu is showing (long-press on a
      /// card). Presented as an overlay over the tab view, like Details/Player.
      @State private var cardMenuMeta: NuvioMeta?
-@@ -524,6 +528,42 @@ struct ContentView: View {
+@@ -529,6 +533,42 @@ struct ContentView: View {
          ZStack {
              ProfileScopedRootBackground()
  
@@ -957,7 +957,7 @@ index 8dd414b1..e08fa67c 100644
              switch activeScreen {
              case .login:
                  // `.login` is also the value this state starts at, before
-@@ -1250,10 +1290,24 @@ struct ContentView: View {
+@@ -1270,10 +1310,24 @@ struct ContentView: View {
          guard !callback.isError else { return }
  
          let duration = session.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
@@ -983,7 +983,7 @@ index 8dd414b1..e08fa67c 100644
          guard let progress, progress.isFinite, (0...1).contains(progress) else { return }
  
          let isEpisode = session.meta.isSeries && session.season != nil && session.episode != nil
-@@ -1312,6 +1366,10 @@ struct ContentView: View {
+@@ -1332,6 +1386,10 @@ struct ContentView: View {
              return
          }
  
@@ -994,7 +994,7 @@ index 8dd414b1..e08fa67c 100644
          if progress >= WatchProgressLedger.completionFraction {
              if let duration {
                  ContinueWatchingStore.markPlaybackCompleted(
-@@ -1342,6 +1400,129 @@ struct ContentView: View {
+@@ -1362,6 +1420,129 @@ struct ContentView: View {
          }
      }
  
@@ -1124,7 +1124,7 @@ index 8dd414b1..e08fa67c 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1787,6 +1968,15 @@ struct ContentView: View {
+@@ -1813,6 +1994,15 @@ struct ContentView: View {
          }
      }
  
@@ -1140,7 +1140,7 @@ index 8dd414b1..e08fa67c 100644
      private func presentPlayback(
          url: URL,
          meta: NuvioMeta,
-@@ -1803,7 +1993,8 @@ struct ContentView: View {
+@@ -1829,7 +2019,8 @@ struct ContentView: View {
          startupBenchmarkToken: UUID? = nil,
          sourceID: String? = nil,
          collectionContext: CollectionPlaybackContext? = nil,
@@ -1150,7 +1150,7 @@ index 8dd414b1..e08fa67c 100644
      ) {
          // Usenet streams arrive as nuvio-usenet:// URLs: start the local
          // engine first, then play its 127.0.0.1 URL like any other stream.
-@@ -1845,13 +2036,47 @@ struct ContentView: View {
+@@ -1871,13 +2062,47 @@ struct ContentView: View {
          let store = ProfileSettings.store(for: profileViewModel.activeProfile?.id)
          let defaultPlayer = ExternalPlayer.from(store.string(forKey: SettingsKey.externalPlayer))
          let player = customPlayer ?? defaultPlayer
@@ -1200,7 +1200,7 @@ index 8dd414b1..e08fa67c 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -1898,7 +2123,13 @@ struct ContentView: View {
+@@ -1924,7 +2149,13 @@ struct ContentView: View {
          // Hand off to the external app only when it is actually installed
          // (`canOpenURL` needs its scheme in LSApplicationQueriesSchemes); if it
          // isn't, fall through to the built-in player instead of a dead launch.
@@ -1215,7 +1215,7 @@ index 8dd414b1..e08fa67c 100644
              meta: meta,
              season: meta.isSeries ? numbers?.season : nil,
              episode: meta.isSeries ? numbers?.episode : nil,
-@@ -1920,6 +2151,22 @@ struct ContentView: View {
+@@ -1946,6 +2177,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -1238,7 +1238,7 @@ index 8dd414b1..e08fa67c 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -4812,6 +5059,7 @@ enum ProfileDisplayName {
+@@ -4870,6 +5117,7 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -1246,7 +1246,7 @@ index 8dd414b1..e08fa67c 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -5137,6 +5385,10 @@ struct TVHomeView: View {
+@@ -5195,6 +5443,10 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -1257,7 +1257,7 @@ index 8dd414b1..e08fa67c 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -5215,6 +5467,26 @@ struct TVHomeView: View {
+@@ -5273,6 +5525,26 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -1284,7 +1284,7 @@ index 8dd414b1..e08fa67c 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -7665,6 +7937,7 @@ struct TVHomeView: View {
+@@ -7723,6 +7995,7 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -1292,7 +1292,7 @@ index 8dd414b1..e08fa67c 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7706,7 +7979,9 @@ struct TVHomeView: View {
+@@ -7764,7 +8037,9 @@ struct TVHomeView: View {
              + ((calendarToday.isEmpty || !homeCalendarToday) ? [] : [calendarTodaySection])
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
@@ -1303,7 +1303,7 @@ index 8dd414b1..e08fa67c 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -7770,6 +8045,15 @@ struct TVHomeView: View {
+@@ -7828,6 +8103,15 @@ struct TVHomeView: View {
      }
  
  
@@ -1320,10 +1320,10 @@ index 8dd414b1..e08fa67c 100644
          guard let focusedMeta, isVisible(focusedMeta) else { return nil }
          return focusedMeta
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index c91e34d9..ebbc4483 100644
+index 5b7a6b86..3983f13c 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -451,6 +451,14 @@ struct DetailsScreen: View {
+@@ -452,6 +452,14 @@ struct DetailsScreen: View {
              finishSmartPlaybackIfPossible()
              performBackgroundAutoSelectionAndPreResolution()
          }
@@ -1338,7 +1338,7 @@ index c91e34d9..ebbc4483 100644
          .onChange(of: viewModel.uiState.isLoading) { _, isLoading in
              if !isLoading {
                  if let meta = viewModel.uiState.meta, meta.id == id, !meta.isSeries {
-@@ -4472,6 +4480,17 @@ struct TvDetailsContent: View {
+@@ -4509,6 +4517,17 @@ struct TvDetailsContent: View {
              }
              .background(Color.black.ignoresSafeArea())
              .onExitCommand(perform: handleDetailsBack)
@@ -1356,16 +1356,16 @@ index c91e34d9..ebbc4483 100644
              // tvOS doesn't re-run default-focus when this content swaps in after
              // the async load finishes, so focus lands nowhere / off the Play
              // button. Move it onto Play explicitly once the content appears
-@@ -8347,6 +8366,8 @@ private struct TvStreamPickerOverlay: View {
-     @State private var showingP2PConsent = false
-     @State private var pendingTorrentSelection: (stream: NuvioStream, player: ExternalPlayer?)? = nil
+@@ -8454,6 +8473,8 @@ private struct TvStreamPickerOverlay: View {
+     @State private var focusedStreamWarmTask: Task<Void, Never>? = nil
+     @State private var focusedStreamWarmToken: UUID? = nil
  
 +    /// Fork: link warm-up and dead-link marks for this picker.
 +    @ObservedObject private var warmup = ForkStreamWarmup.shared
  
      private let filterAllKey = "filter::all"
      private let sortKey = "filter::sort"
-@@ -8501,6 +8522,16 @@ private struct TvStreamPickerOverlay: View {
+@@ -8608,6 +8629,16 @@ private struct TvStreamPickerOverlay: View {
              // cards before landing on the next one; re-seeding on that blip
              // snaps focus back to the first stream (the reported bug), so we
              // debounce and bail when focus has already landed somewhere.
@@ -1382,7 +1382,7 @@ index c91e34d9..ebbc4483 100644
              .onChange(of: focusedItem) { _, newValue in
                  if let newValue, newValue != filterAllKey, !didSeedStreamFocus {
                      didSeedStreamFocus = true
-@@ -8881,6 +8912,20 @@ private struct TvStreamPickerOverlay: View {
+@@ -9018,6 +9049,20 @@ private struct TvStreamPickerOverlay: View {
                                      action: { select(stream, player: nil) },
                                      onSelectPlayer: { player in select(stream, player: player) }
                                  )
@@ -1403,7 +1403,7 @@ index c91e34d9..ebbc4483 100644
                                  .id(stream.id)
                                  .onAppear {
                                      if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -9346,6 +9391,9 @@ private struct TvStreamCard: View {
+@@ -9492,6 +9537,9 @@ private struct TvStreamCard: View {
                          )
                      }
  
@@ -1413,7 +1413,7 @@ index c91e34d9..ebbc4483 100644
                      Text(primaryName)
                          .font(.system(size: 34, weight: .bold))
                          .foregroundColor(.white)
-@@ -9361,12 +9409,9 @@ private struct TvStreamCard: View {
+@@ -9507,12 +9555,9 @@ private struct TvStreamCard: View {
                      }
  
                      if let description = stream.description, !description.isEmpty {
@@ -1430,7 +1430,7 @@ index c91e34d9..ebbc4483 100644
  
                      if showImportedBadges && badgePlacement == .bottom {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
-index 0e6f6849..91128232 100644
+index 87d2625d..72c378ad 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
 @@ -86,20 +86,25 @@ final class PlaybackStartupBenchmark {
@@ -1506,7 +1506,7 @@ index 7040a4a8..793acf39 100644
          requestID = UUID()
          server.stop()
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
-index 7a7f9923..48918912 100644
+index 8b15f028..896e31ac 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
 @@ -968,6 +968,8 @@ class DetailsViewModel: ObservableObject {
@@ -1519,10 +1519,10 @@ index 7a7f9923..48918912 100644
          if streamDiscoveryMode == .shared {
              prepareSharedStreams(forId: streamId, type: type, forceRefresh: forceRefresh)
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index 7b752665..ccb99e1c 100644
+index e7e81a1a..384e254c 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-@@ -672,7 +672,8 @@ class PlayerViewModel: ObservableObject {
+@@ -758,7 +758,8 @@ class PlayerViewModel: ObservableObject {
      private var loadWatchdogGeneration: UInt64?
      private var loadWatchdogDiscGraceGranted = false
      /// A source that hasn't started within this long is treated as dead.
@@ -1532,7 +1532,7 @@ index 7b752665..ccb99e1c 100644
  
      init(
          sessionCoordinator suppliedCoordinator: PlaybackSessionCoordinator? = nil,
-@@ -2586,7 +2587,24 @@ class PlayerViewModel: ObservableObject {
+@@ -2790,7 +2791,24 @@ class PlayerViewModel: ObservableObject {
          }
          let timeoutSeconds = loadTimeoutSeconds
          loadWatchdogTask = Task { [weak self] in
@@ -1558,7 +1558,7 @@ index 7b752665..ccb99e1c 100644
              guard !Task.isCancelled, let self,
                    self.sessionCoordinator.loadGeneration == targetGeneration,
                    self.sessionCoordinator.lastLoadError == nil,
-@@ -2647,7 +2665,7 @@ class PlayerViewModel: ObservableObject {
+@@ -2851,7 +2869,7 @@ class PlayerViewModel: ObservableObject {
                  LastPlaybackStreamStore.remove(metaId: meta.id, season: numbers?.season, episode: numbers?.episode)
              }
              self.attemptFailover(

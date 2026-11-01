@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift b/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
-index d5c78000..365efa81 100644
+index b0709d07..37075797 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
 @@ -13,6 +13,7 @@ public struct UserProfileView: View {
@@ -16,7 +16,7 @@ index d5c78000..365efa81 100644
  
 -                Text(L10n.string("profile_selection_subtitle", fallback: "Select a profile to continue"))
 +                Text(ForkWhosWatching.greeting()) // Fork: time-of-day greeting
-                     .font(.custom("Inter-Regular", size: 28))
+                     .font(.appFont(size: 28, weight: .regular))
                      .foregroundColor(.white.opacity(0.6))
  
 @@ -83,30 +84,43 @@ public struct UserProfileView: View {
@@ -132,7 +132,7 @@ index d5c78000..365efa81 100644
 +                            .background(Capsule().fill(Color(hex: "#FFD54F")))
 +                    } else if profile.isAdmin {
                          Text(L10n.string("profile_selection_primary_badge", fallback: "PRIMARY"))
-                             .font(.custom("Inter-Bold", size: 16))
+                             .font(.appFont(size: 16, weight: .bold))
                              .tracking(1.5)
 @@ -352,10 +397,9 @@ struct ProfileCard: View {
  

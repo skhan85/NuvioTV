@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 8ae4815b..9fda5a9e 100644
+index cd1a9ea5..e8da3cb8 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 @@ -192,8 +192,8 @@ enum TmdbDetailsService {
@@ -44,10 +44,10 @@ index 8ae4815b..9fda5a9e 100644
  
      static var preferredLanguage: String {
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-index ad84706f..d8831912 100644
+index 8d947380..ac1e7be9 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-@@ -1777,7 +1777,69 @@ final class CinemetaCatalogRepository: CatalogRepository {
+@@ -1771,7 +1771,69 @@ final class CinemetaCatalogRepository: CatalogRepository {
              }
          }
  
@@ -118,7 +118,7 @@ index ad84706f..d8831912 100644
          // with a short deadline (2.5s) so slow/offline add-on hosts never stall search.
          let candidateURLs = Self.configuredStreamAddonManifestURLs
          if !candidateURLs.isEmpty {
-@@ -1821,52 +1883,22 @@ final class CinemetaCatalogRepository: CatalogRepository {
+@@ -1815,52 +1877,22 @@ final class CinemetaCatalogRepository: CatalogRepository {
          // Do not silently re-enable Cinemeta when the user hid every source.
          guard !targets.isEmpty else { return [] }
  
@@ -812,10 +812,10 @@ index 00000000..f7933e1b
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index f474a949..2dcb1861 100644
+index d8ab6d65..ba33fb7a 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-@@ -3482,6 +3482,9 @@ struct TitleActionsMenuContent: View {
+@@ -3527,6 +3527,9 @@ struct TitleActionsMenuContent: View {
              let isItemWatched = libraryWatchedContext == nil
                  ? WatchedStore.contains(meta: meta)
                  : isLibraryWatched
@@ -825,7 +825,7 @@ index f474a949..2dcb1861 100644
  
              Button {
                  scheduleOpenDetails()
-@@ -3489,17 +3492,19 @@ struct TitleActionsMenuContent: View {
+@@ -3534,17 +3537,19 @@ struct TitleActionsMenuContent: View {
                  Label(L10n.string("action_go_to_details", fallback: "Go to details"), systemImage: "info.circle")
              }
  
@@ -855,7 +855,7 @@ index f474a949..2dcb1861 100644
  
              if let onRefreshCatalog {
                  Button {
-@@ -3517,7 +3522,11 @@ struct TitleActionsMenuContent: View {
+@@ -3562,7 +3567,11 @@ struct TitleActionsMenuContent: View {
                          toggleLibrary(currentlyInLibrary: true)
                      }
                  } label: {
@@ -868,7 +868,7 @@ index f474a949..2dcb1861 100644
                  }
              } else {
                  Button {
-@@ -3525,7 +3534,11 @@ struct TitleActionsMenuContent: View {
+@@ -3570,7 +3579,11 @@ struct TitleActionsMenuContent: View {
                          toggleLibrary(currentlyInLibrary: false)
                      }
                  } label: {
@@ -4571,7 +4571,7 @@ index 00000000..28d05454
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-index e9001be4..7f38e0f9 100644
+index cb516441..d2bc7fce 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 @@ -646,7 +646,7 @@ struct TVCatalogRow: View {
@@ -4597,10 +4597,10 @@ index e9001be4..7f38e0f9 100644
          }
          .padding(
 diff --git a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
-index 3dd8198f..dd2ab990 100644
+index c1e9203d..12be61d8 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
-@@ -274,6 +274,8 @@ public struct LibraryView: View {
+@@ -260,6 +260,8 @@ public struct LibraryView: View {
      var onPlayCloudFile: ((URL, NuvioMeta) -> Void)? = nil
  
      @State private var sourceMode: LibrarySourceMode = .saved
@@ -4609,7 +4609,7 @@ index 3dd8198f..dd2ab990 100644
      @State private var openCloudItem: CloudItem? = nil
      @FocusState private var cloudFocusedKey: String?
      @State private var lastFocusedCloudItemID: String?
-@@ -327,13 +329,31 @@ public struct LibraryView: View {
+@@ -313,13 +315,31 @@ public struct LibraryView: View {
      }
      
      public var body: some View {
@@ -4645,10 +4645,10 @@ index 3dd8198f..dd2ab990 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 3aad47ec..acec0a25 100644
+index e3c985ed..c2fa1328 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3295,6 +3295,15 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3354,6 +3354,15 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -4664,7 +4664,7 @@ index 3aad47ec..acec0a25 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3693,6 +3702,56 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3752,6 +3761,56 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -4721,7 +4721,7 @@ index 3aad47ec..acec0a25 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -4827,7 +4886,7 @@ private struct IntegrationSettingsView: View {
+@@ -5165,7 +5224,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -4730,7 +4730,7 @@ index 3aad47ec..acec0a25 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -5147,7 +5206,7 @@ private struct TmdbOptionsSheet: View {
+@@ -5485,7 +5544,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -4739,7 +4739,7 @@ index 3aad47ec..acec0a25 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -13326,8 +13385,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -14206,8 +14265,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs
