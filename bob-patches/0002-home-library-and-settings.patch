@@ -44,10 +44,10 @@ index cd1a9ea5..e8da3cb8 100644
  
      static var preferredLanguage: String {
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-index 8d947380..ac1e7be9 100644
+index a85cbdb2..9569c4c1 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-@@ -1771,7 +1771,69 @@ final class CinemetaCatalogRepository: CatalogRepository {
+@@ -1946,7 +1946,71 @@ final class CinemetaCatalogRepository: CatalogRepository {
              }
          }
  
@@ -55,12 +55,13 @@ index 8d947380..ac1e7be9 100644
 +        // Fork: query the targets known right now (Cinemeta) straight away instead of first
 +        // waiting up to 2.5 s for every add-on manifest; add-on search catalogs found below
 +        // are queried as soon as their manifests arrive. Results keep the original order.
-+        func runTargets(_ list: [SearchTarget], offset: Int) async -> [(Int, [NuvioMeta])] {
++        typealias TargetResult = (index: Int, items: [NuvioMeta], succeeded: Bool)
++        func runTargets(_ list: [SearchTarget], offset: Int) async -> [TargetResult] {
 +            guard !list.isEmpty else { return [] }
-+            return await withTaskGroup(of: (Int, [NuvioMeta]).self, returning: [(Int, [NuvioMeta])].self) { group in
++            return await withTaskGroup(of: TargetResult.self, returning: [TargetResult].self) { group in
 +                for (index, target) in list.enumerated() {
 +                    group.addTask {
-+                        guard !Task.isCancelled else { return (offset + index, []) }
++                        guard !Task.isCancelled else { return (offset + index, [], false) }
 +                        do {
 +                            let items: [NuvioMeta] = try await withThrowingTaskGroup(of: [NuvioMeta].self) { fetchGroup in
 +                                fetchGroup.addTask {
@@ -83,27 +84,28 @@ index 8d947380..ac1e7be9 100644
 +                                return first
 +                            }
 +                            let tagged = target.isAddon ? items.map { $0.withIsFromAddon(true) } : items
-+                            return (offset + index, tagged)
++                            return (offset + index, tagged, true)
 +                        } catch {
-+                            return (offset + index, [])
++                            return (offset + index, [], false)
 +                        }
 +                    }
 +                }
-+                var indexed: [(Int, [NuvioMeta])] = []
++                var indexed: [TargetResult] = []
 +                // Once any source has answered with titles, wait at most 1.5 s more for the
-+                // rest, then show what has arrived. The grace marker is index -1.
++                // rest, then show what has arrived. The grace marker is index -1. Targets cut
++                // off by the grace period are missing from the list and count as not finished.
 +                var graceStarted = false
 +                while let result = await group.next() {
-+                    if result.0 == -1 {
++                    if result.index == -1 {
 +                        group.cancelAll()
 +                        break
 +                    }
 +                    indexed.append(result)
-+                    if !graceStarted, !result.1.isEmpty {
++                    if !graceStarted, !result.items.isEmpty {
 +                        graceStarted = true
 +                        group.addTask {
 +                            try? await Task.sleep(nanoseconds: 1_500_000_000)
-+                            return (-1, [])
++                            return (-1, [], true)
 +                        }
 +                    }
 +                }
@@ -116,19 +118,28 @@ index 8d947380..ac1e7be9 100644
 +
 +        // 2. Meanwhile, discover search-capable targets from configured add-ons in parallel
          // with a short deadline (2.5s) so slow/offline add-on hosts never stall search.
-         let candidateURLs = Self.configuredStreamAddonManifestURLs
          if !candidateURLs.isEmpty {
-@@ -1815,52 +1877,22 @@ final class CinemetaCatalogRepository: CatalogRepository {
-         // Do not silently re-enable Cinemeta when the user hid every source.
-         guard !targets.isEmpty else { return [] }
+             let manifests = await loadSearchManifestsWithinDeadline(urls: candidateURLs, seconds: 2.5)
+@@ -2006,50 +2070,19 @@ final class CinemetaCatalogRepository: CatalogRepository {
+             return CatalogSearchOutcome(results: [], isComplete: isComplete, reason: reason)
+         }
  
--        guard !Task.isCancelled else { return [] }
+-        guard !Task.isCancelled else {
+-            return CatalogSearchOutcome(results: [], isComplete: false)
++        // 3. Query the add-on targets (bounded timeout per target, 5s) while the immediate
++        // Cinemeta search finishes.
++        let addonTargets = Array(targets.dropFirst(immediateTargets.count))
++        var addonResults: [TargetResult] = []
++        if !Task.isCancelled {
++            addonResults = await runTargets(addonTargets, offset: immediateTargets.count)
+         }
 -
 -        // 3. Query all targets concurrently with bounded timeout per target (5s)
--        let rawResults = await withTaskGroup(of: (Int, [NuvioMeta]).self, returning: [NuvioMeta].self) { group in
+-        typealias TargetResult = (index: Int, items: [NuvioMeta], succeeded: Bool)
+-        let targetResults = await withTaskGroup(of: TargetResult.self, returning: [TargetResult].self) { group in
 -            for (index, target) in targets.enumerated() {
 -                group.addTask {
--                    guard !Task.isCancelled else { return (index, []) }
+-                    guard !Task.isCancelled else { return (index, [], false) }
 -                    do {
 -                        let items: [NuvioMeta] = try await withThrowingTaskGroup(of: [NuvioMeta].self) { fetchGroup in
 -                            fetchGroup.addTask {
@@ -151,41 +162,37 @@ index 8d947380..ac1e7be9 100644
 -                            return first
 -                        }
 -                        let tagged = target.isAddon ? items.map { $0.withIsFromAddon(true) } : items
--                        return (index, tagged)
+-                        return (index, tagged, true)
 -                    } catch {
--                        return (index, [])
+-                        return (index, [], false)
 -                    }
 -                }
 -            }
--            var indexed: [(Int, [NuvioMeta])] = []
+-            var completed: [TargetResult] = []
 -            for await result in group {
--                indexed.append(result)
+-                completed.append(result)
 -            }
--            indexed.sort { $0.0 < $1.0 }
-+        let addonTargets = Array(targets.dropFirst(immediateTargets.count))
-+        var addonResults: [(Int, [NuvioMeta])] = []
-+        if !Task.isCancelled {
-+            addonResults = await runTargets(addonTargets, offset: immediateTargets.count)
-+        }
+-            return completed.sorted { $0.index < $1.index }
 +        let immediateResults = await withTaskCancellationHandler {
 +            await immediateSearch.value
 +        } onCancel: {
 +            immediateSearch.cancel()
-+        }
- 
--            var merged: [NuvioMeta] = []
--            for (_, items) in indexed {
--                merged.append(contentsOf: items)
--            }
--            return merged
-+        var indexed = immediateResults + addonResults
-+        indexed.sort { $0.0 < $1.0 }
-+        var rawResults: [NuvioMeta] = []
-+        for (_, items) in indexed {
-+            rawResults.append(contentsOf: items)
          }
++        let targetResults = (immediateResults + addonResults).sorted { $0.index < $1.index }
  
-         guard !Task.isCancelled else { return [] }
+         guard !Task.isCancelled else {
+             return CatalogSearchOutcome(results: [], isComplete: false)
+@@ -2058,7 +2091,9 @@ final class CinemetaCatalogRepository: CatalogRepository {
+         // Return fast, deduplicated search results immediately.
+         // Background enrichment (SearchResultEnrichment) handles artwork & TMDB localization
+         // asynchronously for visible cards without blocking the search spinner.
+-        let failedTargetCount = targetResults.filter { !$0.succeeded }.count
++        // Fork: targets cut off by the search grace period never reported back; count them
++        // as failed too so a partial result is not cached as complete.
++        let failedTargetCount = targets.count - targetResults.filter { $0.succeeded }.count
+         let rawResults = targetResults.flatMap { $0.items }
+         let deduplicated = Self.deduplicatedSearchResults(rawResults)
+         cacheMetadata(deduplicated, context: metadataContext)
 diff --git a/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
 new file mode 100644
 index 00000000..4e8c1b71
@@ -812,7 +819,7 @@ index 00000000..f7933e1b
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index d8ab6d65..ba33fb7a 100644
+index 9a8b17a3..12d40210 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 @@ -3527,6 +3527,9 @@ struct TitleActionsMenuContent: View {
@@ -4645,10 +4652,10 @@ index c1e9203d..12be61d8 100644
                  // Source switch: Saved | Cloud
                  if cloudLibraryAvailable {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index e3c985ed..c2fa1328 100644
+index 0abb6083..5f9c60e6 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3354,6 +3354,15 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3359,6 +3359,15 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.showUnairedNextUp) private var showUnairedNextUp = true
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -4664,7 +4671,7 @@ index e3c985ed..c2fa1328 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3752,6 +3761,56 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3757,6 +3766,56 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -4721,7 +4728,7 @@ index e3c985ed..c2fa1328 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -5165,7 +5224,7 @@ private struct IntegrationSettingsView: View {
+@@ -5170,7 +5229,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -4730,7 +4737,7 @@ index e3c985ed..c2fa1328 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -5485,7 +5544,7 @@ private struct TmdbOptionsSheet: View {
+@@ -5490,7 +5549,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -4739,7 +4746,7 @@ index e3c985ed..c2fa1328 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -14206,8 +14265,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -14250,8 +14309,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs
@@ -4750,10 +4757,10 @@ index e3c985ed..c2fa1328 100644
  
          if let providers = await fetchWatchProviders(apiKey: key) {
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
-index b9b2199a..c01dcd4a 100644
+index 3e45cc56..06eab723 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
-@@ -51,7 +51,7 @@ class NetflixSearchViewModel: ObservableObject {
+@@ -55,7 +55,7 @@ class NetflixSearchViewModel: ObservableObject {
  
          $searchText
              .removeDuplicates()
@@ -4763,10 +4770,10 @@ index b9b2199a..c01dcd4a 100644
                  self?.performSearch(query: text)
              }
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
-index 306f7307..d2bfa102 100644
+index 38468a68..63b4f3cd 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
-@@ -68,7 +68,7 @@ class SearchViewModel: ObservableObject {
+@@ -72,7 +72,7 @@ class SearchViewModel: ObservableObject {
  
          $searchText
              .removeDuplicates()

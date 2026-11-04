@@ -1,11 +1,11 @@
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-index d5e0b786..976f0796 100644
+index bacea524..9419baa8 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-@@ -1899,7 +1899,11 @@ final class CinemetaCatalogRepository: CatalogRepository {
-         // Return fast, deduplicated search results immediately.
-         // Background enrichment (SearchResultEnrichment) handles artwork & TMDB localization
-         // asynchronously for visible cards without blocking the search spinner.
+@@ -2094,7 +2094,11 @@ final class CinemetaCatalogRepository: CatalogRepository {
+         // as failed too so a partial result is not cached as complete.
+         let failedTargetCount = targets.count - targetResults.filter { $0.succeeded }.count
+         let rawResults = targetResults.flatMap { $0.items }
 -        let deduplicated = Self.deduplicatedSearchResults(rawResults)
 +        var deduplicated = Self.deduplicatedSearchResults(rawResults)
 +        // Fork: kids rating limit — wait for the (few) ratings, then drop anything above PG / TV-PG.
@@ -13,8 +13,8 @@ index d5e0b786..976f0796 100644
 +            deduplicated = await ForkKidsFilter.shared.resolvedVisible(deduplicated)
 +        }
          cacheMetadata(deduplicated, context: metadataContext)
-         return deduplicated
-     }
+         let isComplete = missingManifestCount == 0 && failedTargetCount == 0
+         logCatalogSearchOutcome(
 diff --git a/tvosApp/NuvioTV/Sources/Fork/KidsFork.swift b/tvosApp/NuvioTV/Sources/Fork/KidsFork.swift
 new file mode 100644
 index 00000000..91ac5b16
@@ -161,10 +161,10 @@ index 00000000..91ac5b16
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 3ba5a3b6..1928ca46 100644
+index 728dcb79..4b8a0181 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -5131,6 +5131,8 @@ private final class TVHomeFocusWork {
+@@ -5159,6 +5159,8 @@ private final class TVHomeFocusWork {
          let cwLandscape: Bool
          let landscapePosters: Bool
          let calendarToday: [NuvioMeta]
@@ -173,7 +173,7 @@ index 3ba5a3b6..1928ca46 100644
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5458,6 +5460,8 @@ struct TVHomeView: View {
+@@ -5486,6 +5488,8 @@ struct TVHomeView: View {
      @State private var forkTrendingRevision = 0
      @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingEnabled = true
      @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
@@ -182,7 +182,7 @@ index 3ba5a3b6..1928ca46 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -8044,7 +8048,8 @@ struct TVHomeView: View {
+@@ -8072,7 +8076,8 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
@@ -192,7 +192,7 @@ index 3ba5a3b6..1928ca46 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -8104,7 +8109,28 @@ struct TVHomeView: View {
+@@ -8132,7 +8137,28 @@ struct TVHomeView: View {
              }
          }
  
@@ -223,10 +223,10 @@ index 3ba5a3b6..1928ca46 100644
              signature: signature,
              sections: contentSections
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index aa68e4ea..1865d300 100644
+index 349b7f9e..e21747eb 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -3753,6 +3753,10 @@ private enum TvDetailsFocusSection: Hashable {
+@@ -4060,6 +4060,10 @@ private enum TvDetailsFocusSection: Hashable {
  struct TvDetailsContent: View {
      let uiState: DetailsUiState
      var libraryWatchedContext: LibraryWatchedContext? = nil
@@ -237,7 +237,7 @@ index aa68e4ea..1865d300 100644
      var initialPlayRequestID: UInt? = nil
      var initialFocusEpisode: DetailsEpisodeFocus? = nil
      var onInitialPlayRequestConsumed: ((UInt) -> Void)? = nil
-@@ -4195,7 +4199,7 @@ struct TvDetailsContent: View {
+@@ -4502,7 +4506,7 @@ struct TvDetailsContent: View {
              if !uiState.moreLikeThis.isEmpty {
                  TvDetailsRelatedRow(
                      title: L10n.string("settings_tmdb_module_more_like_this", fallback: "More Like This"),
@@ -296,10 +296,10 @@ index 0909133a..16a9a188 100644
                          meta: item,
                          externalFocus: $focusedItemID,
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index f238c0bc..7437c57e 100644
+index ee8083bd..ac4f2873 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3361,6 +3361,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3366,6 +3366,7 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
      @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
      @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
@@ -307,7 +307,7 @@ index f238c0bc..7437c57e 100644
      @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
      @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
      @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
-@@ -3801,6 +3802,12 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3806,6 +3807,12 @@ private struct LayoutDiscoverySettingsView: View {
                      isOn: $forkTrendingRows,
                      accentColor: accentColor
                  )
