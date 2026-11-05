@@ -77,10 +77,10 @@ index 00000000..b03ae552
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 79bbabf1..1e6908ba 100644
+index 4132d8ff..b83e67f4 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -5421,6 +5421,11 @@ struct TVHomeView: View {
+@@ -5423,6 +5423,11 @@ struct TVHomeView: View {
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.heroEnabled) private var heroEnabled = true
      @AppStorage(SettingsKey.fullscreenHeroBackdrop) private var fullscreenHeroBackdrop = true
@@ -92,7 +92,7 @@ index 79bbabf1..1e6908ba 100644
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5588,6 +5593,7 @@ struct TVHomeView: View {
+@@ -5590,6 +5595,7 @@ struct TVHomeView: View {
                      )
                      .equatable()
                      .frame(width: proxy.size.width, height: proxy.size.height)
@@ -100,7 +100,7 @@ index 79bbabf1..1e6908ba 100644
                      .clipped()
                  } else {
                      let backdropWidth = proxy.size.width * 0.65
-@@ -5603,6 +5609,7 @@ struct TVHomeView: View {
+@@ -5605,6 +5611,7 @@ struct TVHomeView: View {
                          )
                          .equatable()
                          .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
@@ -108,7 +108,7 @@ index 79bbabf1..1e6908ba 100644
                          .mask(
                              LinearGradient(
                                  stops: [
-@@ -5707,7 +5714,8 @@ struct TVHomeView: View {
+@@ -5709,7 +5716,8 @@ struct TVHomeView: View {
                          } else if let heroMeta = visibleFocusedMeta ?? visibleHero {
                              TVHeroView(
                                  meta: heroMeta,
@@ -118,7 +118,7 @@ index 79bbabf1..1e6908ba 100644
                              ) {
                                  navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
                              }
-@@ -5776,6 +5784,8 @@ struct TVHomeView: View {
+@@ -5778,6 +5786,8 @@ struct TVHomeView: View {
                                      .frame(maxWidth: .infinity, alignment: .leading)
                                      .padding(.top, TVHomeLayout.rowsTopPadding)
                                      .padding(.bottom, 80)
@@ -127,7 +127,7 @@ index 79bbabf1..1e6908ba 100644
                                      #if os(tvOS)
                                      // Place the configurator inside the scroll content so its
                                      // ancestor is the UIScrollView that owns the row offset.
-@@ -8145,6 +8155,39 @@ struct TVHomeView: View {
+@@ -8172,6 +8182,39 @@ struct TVHomeView: View {
          return focusedMeta
      }
  
@@ -167,7 +167,7 @@ index 79bbabf1..1e6908ba 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -11642,6 +11685,8 @@ private struct TVHeroView: View {
+@@ -11669,6 +11712,8 @@ private struct TVHeroView: View {
      /// say which episode is in progress, how much is left, and show the
      /// episode's own overview instead of the series blurb.
      var continueItem: ContinueWatchingItem? = nil
@@ -176,7 +176,7 @@ index 79bbabf1..1e6908ba 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
  
-@@ -11676,6 +11721,8 @@ private struct TVHeroView: View {
+@@ -11703,6 +11748,8 @@ private struct TVHeroView: View {
                      .lineLimit(4)
                      .frame(maxWidth: 900, alignment: .leading)
                      .padding(.top, 4)
@@ -185,10 +185,10 @@ index 79bbabf1..1e6908ba 100644
              }
          }
          .foregroundColor(.white)
-@@ -11714,6 +11761,7 @@ extension TVHeroView: Equatable {
-             && lhs.continueItem?.meta.id == rhs.continueItem?.meta.id
-             && lhs.continueItem?.episodeLabel == rhs.continueItem?.episodeLabel
-             && lhs.continueItem?.remainingText == rhs.continueItem?.remainingText
+@@ -11744,6 +11791,7 @@ extension TVHeroView: Equatable {
+             && lhs.continueItem?.episodeVideo?.rating == rhs.continueItem?.episodeVideo?.rating
+             && lhs.continueItem?.season == rhs.continueItem?.season
+             && lhs.continueItem?.episode == rhs.continueItem?.episode
 +            && lhs.forkTrailerPlaying == rhs.forkTrailerPlaying
      }
  }
@@ -248,10 +248,10 @@ index 12d40210..500943fc 100644
      }
  
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 5f9c60e6..2eee5099 100644
+index 2a0fc465..ebf7bbb4 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -3362,6 +3362,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3365,6 +3365,7 @@ private struct LayoutDiscoverySettingsView: View {
      // Fork switches (device-local).
      @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
      @AppStorage("fork_top10_numerals") private var forkTop10 = true
@@ -259,7 +259,7 @@ index 5f9c60e6..2eee5099 100644
      @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
      @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
      @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
-@@ -3773,6 +3774,12 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3788,6 +3789,12 @@ private struct LayoutDiscoverySettingsView: View {
                      isOn: $forkBecauseRows,
                      accentColor: accentColor
                  )

@@ -900,7 +900,7 @@ index 00000000..ccdd468e
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index f4b28ffc..79bbabf1 100644
+index ef7d9a28..4132d8ff 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -470,6 +470,10 @@ struct ContentView: View {
@@ -957,7 +957,7 @@ index f4b28ffc..79bbabf1 100644
              switch activeScreen {
              case .login:
                  // `.login` is also the value this state starts at, before
-@@ -1272,7 +1312,7 @@ struct ContentView: View {
+@@ -1274,7 +1314,7 @@ struct ContentView: View {
          let callbackDuration = callback.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
          let duration = callbackDuration
              ?? session.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
@@ -966,7 +966,7 @@ index f4b28ffc..79bbabf1 100644
              guard let duration, position.isFinite, position >= 0 else { return nil }
              let normalizedProgress = position / duration
              guard callbackDuration != nil,
-@@ -1282,6 +1322,20 @@ struct ContentView: View {
+@@ -1284,6 +1324,20 @@ struct ContentView: View {
              }
              return 1
          }
@@ -987,7 +987,7 @@ index f4b28ffc..79bbabf1 100644
          guard let progress, progress.isFinite, (0...1).contains(progress) else { return }
          // External callbacks can underreport EOF position; allow up to two minutes of grace,
          // with an 80% floor, while built-in playback keeps its stream-timed threshold.
-@@ -1360,6 +1414,10 @@ struct ContentView: View {
+@@ -1362,6 +1416,10 @@ struct ContentView: View {
              return
          }
  
@@ -998,7 +998,7 @@ index f4b28ffc..79bbabf1 100644
          if progress >= callbackCompletionCutoff(WatchProgressLedger.completionFraction) {
              if let duration {
                  ContinueWatchingStore.markPlaybackCompleted(
-@@ -1390,6 +1448,129 @@ struct ContentView: View {
+@@ -1392,6 +1450,129 @@ struct ContentView: View {
          }
      }
  
@@ -1128,7 +1128,7 @@ index f4b28ffc..79bbabf1 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1841,6 +2022,15 @@ struct ContentView: View {
+@@ -1843,6 +2024,15 @@ struct ContentView: View {
          }
      }
  
@@ -1144,7 +1144,7 @@ index f4b28ffc..79bbabf1 100644
      private func presentPlayback(
          url: URL,
          meta: NuvioMeta,
-@@ -1857,7 +2047,8 @@ struct ContentView: View {
+@@ -1859,7 +2049,8 @@ struct ContentView: View {
          startupBenchmarkToken: UUID? = nil,
          sourceID: String? = nil,
          collectionContext: CollectionPlaybackContext? = nil,
@@ -1154,7 +1154,7 @@ index f4b28ffc..79bbabf1 100644
      ) {
          // Usenet streams arrive as nuvio-usenet:// URLs: start the local
          // engine first, then play its 127.0.0.1 URL like any other stream.
-@@ -1899,13 +2090,47 @@ struct ContentView: View {
+@@ -1901,13 +2092,47 @@ struct ContentView: View {
          let store = ProfileSettings.store(for: profileViewModel.activeProfile?.id)
          let defaultPlayer = ExternalPlayer.from(store.string(forKey: SettingsKey.externalPlayer))
          let player = customPlayer ?? defaultPlayer
@@ -1204,7 +1204,7 @@ index f4b28ffc..79bbabf1 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -1952,7 +2177,13 @@ struct ContentView: View {
+@@ -1954,7 +2179,13 @@ struct ContentView: View {
          // Hand off to the external app only when it is actually installed
          // (`canOpenURL` needs its scheme in LSApplicationQueriesSchemes); if it
          // isn't, fall through to the built-in player instead of a dead launch.
@@ -1219,7 +1219,7 @@ index f4b28ffc..79bbabf1 100644
              meta: meta,
              season: meta.isSeries ? numbers?.season : nil,
              episode: meta.isSeries ? numbers?.episode : nil,
-@@ -1974,6 +2205,22 @@ struct ContentView: View {
+@@ -1976,6 +2207,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -1242,7 +1242,7 @@ index f4b28ffc..79bbabf1 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -4898,6 +5145,7 @@ enum ProfileDisplayName {
+@@ -4900,6 +5147,7 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -1250,7 +1250,7 @@ index f4b28ffc..79bbabf1 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -5223,6 +5471,10 @@ struct TVHomeView: View {
+@@ -5225,6 +5473,10 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -1261,7 +1261,7 @@ index f4b28ffc..79bbabf1 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -5301,6 +5553,26 @@ struct TVHomeView: View {
+@@ -5303,6 +5555,26 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -1288,7 +1288,7 @@ index f4b28ffc..79bbabf1 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -7751,6 +8023,7 @@ struct TVHomeView: View {
+@@ -7753,6 +8025,7 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -1296,7 +1296,7 @@ index f4b28ffc..79bbabf1 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7792,7 +8065,9 @@ struct TVHomeView: View {
+@@ -7794,7 +8067,9 @@ struct TVHomeView: View {
              + ((calendarToday.isEmpty || !homeCalendarToday) ? [] : [calendarTodaySection])
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
@@ -1307,7 +1307,7 @@ index f4b28ffc..79bbabf1 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -7856,6 +8131,15 @@ struct TVHomeView: View {
+@@ -7883,6 +8158,15 @@ struct TVHomeView: View {
      }
  
  
@@ -1324,12 +1324,12 @@ index f4b28ffc..79bbabf1 100644
          guard let focusedMeta, isVisible(focusedMeta) else { return nil }
          return focusedMeta
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index 2fd87a7f..fa8834ec 100644
+index a6f53e90..c4f118a7 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -452,6 +452,14 @@ struct DetailsScreen: View {
-             finishSmartPlaybackIfPossible()
-             performBackgroundAutoSelectionAndPreResolution()
+@@ -463,6 +463,14 @@ struct DetailsScreen: View {
+                 streamDiscoveryDuration = nil
+             }
          }
 +        // Fork: find the Play/Resume episode's sources ahead, so the picker opens with them.
 +        .onReceive(NotificationCenter.default.publisher(for: ForkDetailPrefetch.episodeNotification)) { note in
@@ -1342,7 +1342,7 @@ index 2fd87a7f..fa8834ec 100644
          .onChange(of: viewModel.uiState.isLoading) { _, isLoading in
              if !isLoading {
                  if let meta = viewModel.uiState.meta, meta.id == id, !meta.isSeries {
-@@ -4816,6 +4824,17 @@ struct TvDetailsContent: View {
+@@ -4835,6 +4843,17 @@ struct TvDetailsContent: View {
              }
              .background(Color.black.ignoresSafeArea())
              .onExitCommand(perform: handleDetailsBack)
@@ -1360,7 +1360,7 @@ index 2fd87a7f..fa8834ec 100644
              // tvOS doesn't re-run default-focus when this content swaps in after
              // the async load finishes, so focus lands nowhere / off the Play
              // button. Move it onto Play explicitly once the content appears
-@@ -8761,6 +8780,8 @@ private struct TvStreamPickerOverlay: View {
+@@ -8823,6 +8842,8 @@ private struct TvStreamPickerOverlay: View {
      @State private var focusedStreamWarmTask: Task<Void, Never>? = nil
      @State private var focusedStreamWarmToken: UUID? = nil
  
@@ -1369,7 +1369,7 @@ index 2fd87a7f..fa8834ec 100644
  
      private let filterAllKey = "filter::all"
      private let sortKey = "filter::sort"
-@@ -8915,6 +8936,16 @@ private struct TvStreamPickerOverlay: View {
+@@ -8977,6 +8998,16 @@ private struct TvStreamPickerOverlay: View {
              // cards before landing on the next one; re-seeding on that blip
              // snaps focus back to the first stream (the reported bug), so we
              // debounce and bail when focus has already landed somewhere.
@@ -1386,7 +1386,7 @@ index 2fd87a7f..fa8834ec 100644
              .onChange(of: focusedItem) { _, newValue in
                  if let newValue, newValue != filterAllKey, !didSeedStreamFocus {
                      didSeedStreamFocus = true
-@@ -9325,6 +9356,20 @@ private struct TvStreamPickerOverlay: View {
+@@ -9389,6 +9420,20 @@ private struct TvStreamPickerOverlay: View {
                                      action: { select(stream, player: nil) },
                                      onSelectPlayer: { player in select(stream, player: player) }
                                  )
@@ -1407,7 +1407,7 @@ index 2fd87a7f..fa8834ec 100644
                                  .id(stream.id)
                                  .onAppear {
                                      if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -9799,6 +9844,9 @@ private struct TvStreamCard: View {
+@@ -9863,6 +9908,9 @@ private struct TvStreamCard: View {
                          )
                      }
  
@@ -1417,7 +1417,7 @@ index 2fd87a7f..fa8834ec 100644
                      Text(primaryName)
                          .font(.system(size: 34, weight: .bold))
                          .foregroundColor(.white)
-@@ -9814,12 +9862,9 @@ private struct TvStreamCard: View {
+@@ -9878,12 +9926,9 @@ private struct TvStreamCard: View {
                      }
  
                      if let description = stream.description, !description.isEmpty {
@@ -1510,10 +1510,10 @@ index 7040a4a8..793acf39 100644
          requestID = UUID()
          server.stop()
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
-index 8b15f028..896e31ac 100644
+index 5d31e180..ed2892dd 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
-@@ -968,6 +968,8 @@ class DetailsViewModel: ObservableObject {
+@@ -1028,6 +1028,8 @@ class DetailsViewModel: ObservableObject {
      func prepareStreams(forId streamId: String, type: String, forceRefresh: Bool = false) {
          requestedStreamId = streamId
          streamObserveTask?.cancel()
@@ -1523,7 +1523,7 @@ index 8b15f028..896e31ac 100644
          if streamDiscoveryMode == .shared {
              prepareSharedStreams(forId: streamId, type: type, forceRefresh: forceRefresh)
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index bb48ba64..d127762e 100644
+index 9189209d..bb4660f6 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 @@ -806,7 +806,8 @@ class PlayerViewModel: ObservableObject {
