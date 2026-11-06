@@ -423,10 +423,10 @@ index 00000000..c59e6366
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
 new file mode 100644
-index 00000000..d0bace62
+index 00000000..116aec06
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
-@@ -0,0 +1,394 @@
+@@ -0,0 +1,401 @@
 +import SwiftUI
 +
 +// MARK: - Fork: Top 10 numerals
@@ -534,11 +534,17 @@ index 00000000..d0bace62
 +        var topShows: TVHomeSection?
 +        var topMovies: TVHomeSection?
 +        var trendingNow: TVHomeSection?
++        /// Fork: films streaming soon and new series premiering in the next 60 days.
++        var comingSoon: TVHomeSection?
 +
-+        var isEmpty: Bool { topShows == nil && topMovies == nil && trendingNow == nil }
++        var isEmpty: Bool { topShows == nil && topMovies == nil && trendingNow == nil && comingSoon == nil }
 +    }
 +
++    static let comingSoonKey = "fork_coming_soon"
++    static let comingSoonId = idPrefix + "coming_soon"
++
 +    static func load(kids: Bool = false) async -> Rows {
++        async let comingSoonList = TmdbDetailsService.fetchComingSoon(kids: kids)
 +        let shows: [NuvioMeta]
 +        let movies: [NuvioMeta]
 +        let week: [NuvioMeta]
@@ -588,7 +594,8 @@ index 00000000..d0bace62
 +        return Rows(
 +            topShows: row("top_shows", "Top 10 Shows Today", shows, min: 5),
 +            topMovies: row("top_movies", "Top 10 Movies Today", movies, min: 5),
-+            trendingNow: row("now", "Trending Now", week, min: 6)
++            trendingNow: row("now", "Trending Now", week, min: 6),
++            comingSoon: row("coming_soon", "Coming Soon", await comingSoonList, min: 4)
 +        )
 +    }
 +}
@@ -1628,8 +1635,57 @@ index 00000000..9aa3f916
 +        .allowsHitTesting(false)
 +    }
 +}
+diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
+new file mode 100644
+index 00000000..0dc75e20
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
+@@ -0,0 +1,43 @@
++import Foundation
++
++// MARK: - Fork: "What's new in your fork"
++
++/// A short note, shown once after an update, listing what's new in this fork. Add an entry (with
++/// a higher id) whenever a fork feature ships; nothing shows until there's an unseen one.
++enum ForkWhatsNew {
++    struct Entry {
++        let id: Int
++        let date: String
++        let items: [String]
++    }
++
++    static let entries: [Entry] = [
++        Entry(
++            id: 1,
++            date: "Nov 5, 2026",
++            items: [
++                "Coming Soon row on Home: films streaming in the next 60 days and new series, soonest first. Hold Select on one for Remind Me (your iPhone sends the notification on the day).",
++                "Card tags (TOP 10, New Episode, Coming Soon) now show straight away: rows are looked up ahead as Home loads.",
++                "Under the hood: the fork's changes are reorganised so updates from Bob's Nuvio break it less often."
++            ]
++        )
++    ]
++
++    private static let seenKey = "fork_whats_new_seen"
++
++    static var unseen: [Entry] {
++        let seen = UserDefaults.standard.integer(forKey: seenKey)
++        return Array(entries.filter { $0.id > seen }.sorted { $0.id > $1.id }.prefix(3))
++    }
++
++    static var message: String {
++        unseen.map { entry in
++            ([entry.date] + entry.items.map { "•  " + $0 }).joined(separator: "\n")
++        }.joined(separator: "\n\n")
++    }
++
++    static func markSeen() {
++        guard let latest = entries.map(\.id).max() else { return }
++        UserDefaults.standard.set(latest, forKey: seenKey)
++    }
++}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index ef7d9a28..202902f1 100644
+index ef7d9a28..930dac95 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -470,6 +470,10 @@ struct ContentView: View {
@@ -1999,7 +2055,7 @@ index ef7d9a28..202902f1 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -4912,6 +5173,12 @@ private final class TVHomeFocusWork {
+@@ -4912,6 +5173,13 @@ private final class TVHomeFocusWork {
          let cwLandscape: Bool
          let landscapePosters: Bool
          let calendarToday: [NuvioMeta]
@@ -2007,12 +2063,13 @@ index ef7d9a28..202902f1 100644
 +        var kidsRevision: Int = -1
 +        /// Fork: the profile-named Continue Watching title.
 +        var forkCWTitle: String = ""
++        var forkComingSoon: Bool = true
 +        /// Fork: cinema-only verdicts (-1 when Hide unreleased is off), bumped as TMDB answers.
 +        var cinemaOnlyRevision: Int = -1
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5175,6 +5442,15 @@ struct TVHomeView: View {
+@@ -5175,6 +5443,20 @@ struct TVHomeView: View {
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.heroEnabled) private var heroEnabled = true
      @AppStorage(SettingsKey.fullscreenHeroBackdrop) private var fullscreenHeroBackdrop = true
@@ -2023,12 +2080,17 @@ index ef7d9a28..202902f1 100644
 +    @State private var forkBillboardPlayingId: String?
 +    // Fork: Netflix Style ("Continue Watching for <name>").
 +    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixUI = false
++    // Fork: "What's new in your fork", once after an update.
++    @State private var forkWhatsNewVisible = false
++    @State private var forkWhatsNewMessage = ""
++    // Fork: Coming Soon row (Settings → Layout).
++    @AppStorage(ForkTrendingRows.comingSoonKey) private var forkComingSoonEnabled = true
 +    // Fork: Disney+ look for a Kids profile (studio tiles above the rows).
 +    @AppStorage(ForkDisneyKids.enabledKey) private var forkDisneyStyle = false
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5225,6 +5501,19 @@ struct TVHomeView: View {
+@@ -5225,6 +5507,19 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -2048,7 +2110,7 @@ index ef7d9a28..202902f1 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -5303,6 +5592,46 @@ struct TVHomeView: View {
+@@ -5303,6 +5598,46 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -2095,7 +2157,7 @@ index ef7d9a28..202902f1 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -5318,6 +5647,7 @@ struct TVHomeView: View {
+@@ -5318,6 +5653,7 @@ struct TVHomeView: View {
                      )
                      .equatable()
                      .frame(width: proxy.size.width, height: proxy.size.height)
@@ -2103,7 +2165,7 @@ index ef7d9a28..202902f1 100644
                      .clipped()
                  } else {
                      let backdropWidth = proxy.size.width * 0.65
-@@ -5333,6 +5663,7 @@ struct TVHomeView: View {
+@@ -5333,6 +5669,7 @@ struct TVHomeView: View {
                          )
                          .equatable()
                          .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
@@ -2111,7 +2173,7 @@ index ef7d9a28..202902f1 100644
                          .mask(
                              LinearGradient(
                                  stops: [
-@@ -5437,7 +5768,8 @@ struct TVHomeView: View {
+@@ -5437,7 +5774,8 @@ struct TVHomeView: View {
                          } else if let heroMeta = visibleFocusedMeta ?? visibleHero {
                              TVHeroView(
                                  meta: heroMeta,
@@ -2121,7 +2183,7 @@ index ef7d9a28..202902f1 100644
                              ) {
                                  navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
                              }
-@@ -5483,6 +5815,10 @@ struct TVHomeView: View {
+@@ -5483,6 +5821,10 @@ struct TVHomeView: View {
                                              .padding(.horizontal, horizontalEdgeInset)
                                          }
  
@@ -2132,12 +2194,26 @@ index ef7d9a28..202902f1 100644
                                          ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                                              let isNearFocusedRow = abs(index - focusedRowIndex) <= 2
                                              if isNearFocusedRow {
-@@ -5506,6 +5842,12 @@ struct TVHomeView: View {
+@@ -5506,6 +5848,26 @@ struct TVHomeView: View {
                                      .frame(maxWidth: .infinity, alignment: .leading)
                                      .padding(.top, TVHomeLayout.rowsTopPadding)
                                      .padding(.bottom, 80)
 +                                    // Fork: the billboard plays trailers, so cards keep their artwork.
 +                                    .environment(\.forkBillboardOwnsCardTrailers, forkBillboardOwnsTrailers)
++                                    // Fork: "What's new" once Home has settled after an update.
++                                    .task {
++                                        guard !ForkWhatsNew.unseen.isEmpty else { return }
++                                        try? await Task.sleep(nanoseconds: 2_500_000_000)
++                                        forkWhatsNewMessage = ForkWhatsNew.message
++                                        guard !forkWhatsNewMessage.isEmpty else { return }
++                                        ForkWhatsNew.markSeen() // shown once, however it's dismissed
++                                        forkWhatsNewVisible = true
++                                    }
++                                    .alert("What's new in your Nuvio", isPresented: $forkWhatsNewVisible) {
++                                        Button("Got it") {}
++                                    } message: {
++                                        Text(forkWhatsNewMessage)
++                                    }
 +                                    // Fork: card tags for every row's first titles, fetched as rows arrive.
 +                                    .task(id: "\(store.sectionsRevision)-\(sections.count)-\(forkTrendingRevision)") {
 +                                        ForkCardBadges.shared.prefetch(sections)
@@ -2145,7 +2221,7 @@ index ef7d9a28..202902f1 100644
                                      #if os(tvOS)
                                      // Place the configurator inside the scroll content so its
                                      // ancestor is the UIScrollView that owns the row offset.
-@@ -7753,6 +8095,8 @@ struct TVHomeView: View {
+@@ -7753,6 +8115,8 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -2154,7 +2230,7 @@ index ef7d9a28..202902f1 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7764,7 +8108,10 @@ struct TVHomeView: View {
+@@ -7764,7 +8128,11 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
@@ -2162,11 +2238,12 @@ index ef7d9a28..202902f1 100644
 +            calendarToday: homeCalendarToday ? calendarToday.metas : [],
 +            kidsRevision: forkKidsLimit ? forkKids.revision : -1,
 +            forkCWTitle: forkNetflixUI ? ForkNetflixUI.continueWatchingTitle : "",
++            forkComingSoon: forkComingSoonEnabled,
 +            cinemaOnlyRevision: hideUnreleased ? cinemaOnly.revision : -1
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -7773,7 +8120,9 @@ struct TVHomeView: View {
+@@ -7773,7 +8141,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -2177,7 +2254,7 @@ index ef7d9a28..202902f1 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster"
          )
-@@ -7794,7 +8143,14 @@ struct TVHomeView: View {
+@@ -7794,7 +8164,16 @@ struct TVHomeView: View {
              + ((calendarToday.isEmpty || !homeCalendarToday) ? [] : [calendarTodaySection])
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
@@ -2188,21 +2265,31 @@ index ef7d9a28..202902f1 100644
 +                + (forkBecauseEnabled ? forkBecauseSections : [])
 +                // Fork: no Trending Now row (Trending / New covers it).
 +                + (forkTrendingEnabled ? [forkTrending.topMovies].compactMap { $0 } : [])
++                // Fork: Coming Soon, with Remind Me on each title (hold Select).
++                + (forkTrendingEnabled && forkComingSoonEnabled ? [forkTrending.comingSoon].compactMap { $0 } : [])
 +                + store.sections
 +            : store.sections
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -7812,12 +8168,34 @@ struct TVHomeView: View {
+@@ -7806,18 +8185,41 @@ struct TVHomeView: View {
+                 if !section.collectionFolders.isEmpty
+                     || section.id == TVHomeSection.localTitlesId
+                     || section.id == TVHomeSection.jellyfinId
++                    || section.id == ForkTrendingRows.comingSoonId // Fork: the point of the row
+                     || section.id.hasPrefix(TVHomeSection.jellyfinLibraryIdPrefix) {
+                     return section
+                 }
                  var copy = section
                  copy.items = section.items.filter {
                      !ContentReleasePolicy.isUnreleased($0, today: today)
 +                        && !cinemaOnly.isCinemaOnly($0, today: today)
-+                }
-+                return copy
-+            }
-+        }
-+
+                 }
+                 return copy
+             }
+         }
+ 
+-        let contentSections = result.filter(\.hasContent)
 +        // Fork: kids rating limit — only titles rated up to PG / TV-PG (your own Continue
 +        // Watching, collection folders and local/Jellyfin rows are left as they are).
 +        let kidsFiltered: [TVHomeSection]
@@ -2215,21 +2302,20 @@ index ef7d9a28..202902f1 100644
 +                    || section.id == TVHomeSection.jellyfinId
 +                    || section.id.hasPrefix(TVHomeSection.jellyfinLibraryIdPrefix) {
 +                    return section
-                 }
++                }
 +                var copy = section
 +                copy.items = forkKids.visible(section.items)
-                 return copy
-             }
++                return copy
++            }
 +        } else {
 +            kidsFiltered = result
-         }
- 
--        let contentSections = result.filter(\.hasContent)
++        }
++
 +        let contentSections = kidsFiltered.filter(\.hasContent)
          focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
              signature: signature,
              sections: contentSections
-@@ -7883,11 +8261,53 @@ struct TVHomeView: View {
+@@ -7883,11 +8285,53 @@ struct TVHomeView: View {
      }
  
  
@@ -2283,7 +2369,7 @@ index ef7d9a28..202902f1 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -11380,11 +11800,14 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -11380,11 +11824,14 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -2298,7 +2384,7 @@ index ef7d9a28..202902f1 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
  
-@@ -11403,6 +11826,14 @@ private struct TVHeroView: View {
+@@ -11403,6 +11850,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
@@ -2313,7 +2399,7 @@ index ef7d9a28..202902f1 100644
              TVHeroMetaLine(meta: meta, episodeLine: episodeLine, continueItem: continueItem)
  
              if let continueItem {
-@@ -11419,6 +11850,8 @@ private struct TVHeroView: View {
+@@ -11419,6 +11874,8 @@ private struct TVHeroView: View {
                      .lineLimit(4)
                      .frame(maxWidth: 900, alignment: .leading)
                      .padding(.top, 4)
@@ -2322,7 +2408,7 @@ index ef7d9a28..202902f1 100644
              }
          }
          .foregroundColor(.white)
-@@ -11460,6 +11893,7 @@ extension TVHeroView: Equatable {
+@@ -11460,6 +11917,7 @@ extension TVHeroView: Equatable {
              && lhs.continueItem?.episodeVideo?.rating == rhs.continueItem?.episodeVideo?.rating
              && lhs.continueItem?.season == rhs.continueItem?.season
              && lhs.continueItem?.episode == rhs.continueItem?.episode

@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index cfc9fc8d..7f0ba8c5 100644
+index cfc9fc8d..3e64615e 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 @@ -1148,11 +1148,13 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
@@ -24,7 +24,7 @@ index cfc9fc8d..7f0ba8c5 100644
          }
      }
  
-@@ -3362,6 +3365,24 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3362,6 +3365,25 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.continueWatchingEpisodeRatings) private var continueWatchingEpisodeRatings = true
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -39,6 +39,7 @@ index cfc9fc8d..7f0ba8c5 100644
 +    @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
 +    @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
 +    @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
++    @AppStorage(ForkTrendingRows.comingSoonKey) private var forkComingSoon = true
 +    @AppStorage(ForkKidsFilter.enabledKey) private var forkKidsLimit = false
 +    @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
 +    @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
@@ -49,7 +50,7 @@ index cfc9fc8d..7f0ba8c5 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3772,6 +3793,124 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3772,6 +3794,132 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -114,6 +115,14 @@ index cfc9fc8d..7f0ba8c5 100644
 +                    isOn: $forkTrendingRows,
 +                    accentColor: accentColor
 +                )
++                if forkTrendingRows {
++                    SettingsToggleRow(
++                        title: "Coming Soon",
++                        subtitle: "A row of films streaming in the next 60 days and new series premiering, soonest first. Hold Select on one for Remind Me",
++                        isOn: $forkComingSoon,
++                        accentColor: accentColor
++                    )
++                }
 +                SettingsToggleRow(
 +                    title: "Kids Rating Limit",
 +                    subtitle: "This profile only sees titles rated up to PG / TV-PG on Home, in collections, search and More Like This. Unrated titles are hidden too",
@@ -174,7 +183,7 @@ index cfc9fc8d..7f0ba8c5 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -5267,7 +5406,7 @@ private struct IntegrationSettingsView: View {
+@@ -5267,7 +5415,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -183,7 +192,7 @@ index cfc9fc8d..7f0ba8c5 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -5587,7 +5726,7 @@ private struct TmdbOptionsSheet: View {
+@@ -5587,7 +5735,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -192,7 +201,7 @@ index cfc9fc8d..7f0ba8c5 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -8760,6 +8899,7 @@ private struct PlaybackSettingsView: View {
+@@ -8760,6 +8908,7 @@ private struct PlaybackSettingsView: View {
      @AppStorage(SettingsKey.autoSkipRecap) private var autoSkipRecap = false
      @AppStorage(SettingsKey.autoSkipOutro) private var autoSkipOutro = false
      @AppStorage(SettingsKey.autoSkipMovieCredits) private var autoSkipMovieCredits = false
@@ -200,7 +209,7 @@ index cfc9fc8d..7f0ba8c5 100644
      @AppStorage(SettingsKey.streamAutoPlayPreferBingeGroup) private var streamAutoPlayPreferBingeGroup = true
      @AppStorage(SettingsKey.streamAutoPlayReuseBingeGroup) private var streamAutoPlayReuseBingeGroup = true
      @AppStorage(SettingsKey.seekPreviewEnabled) private var seekPreviewEnabled = true
-@@ -9267,6 +9407,16 @@ private struct PlaybackSettingsView: View {
+@@ -9267,6 +9416,16 @@ private struct PlaybackSettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -217,7 +226,7 @@ index cfc9fc8d..7f0ba8c5 100644
                  SettingsToggleRow(
                      title: L10n.string("tvos_settings_autoplay_trailers", fallback: "Autoplay Trailers"),
                      subtitle: L10n.string("tvos_settings_start_previews_after_focus_settles", fallback: "Start previews after focus settles"),
-@@ -14347,8 +14497,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -14347,8 +14506,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs

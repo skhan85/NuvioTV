@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 171cf70d..2c8f7330 100644
+index 171cf70d..99cd8ac5 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 @@ -192,8 +192,8 @@ enum TmdbDetailsService {
@@ -43,7 +43,7 @@ index 171cf70d..2c8f7330 100644
      }
  
      static var preferredLanguage: String {
-@@ -506,6 +509,260 @@ enum TmdbDetailsService {
+@@ -506,6 +509,418 @@ enum TmdbDetailsService {
          )
      }
  
@@ -129,6 +129,142 @@ index 171cf70d..2c8f7330 100644
 +            .compactMap { mapDiscoverItemFast($0, defaultType: defaultType) }
 +    }
 +
++    /// Fork: Coming Soon — films whose streaming (digital or disc) release falls in the next
++    /// 60 days, plus new series premiering then, soonest first. Each title's `released` is that
++    /// date, so it counts as unreleased (Remind Me) and keeps its date when saved to the library.
++    static func fetchComingSoon(kids: Bool, limit: Int = 20) async -> [NuvioMeta] {
++        if requestContext == nil {
++            return await withRequestContext { await fetchComingSoon(kids: kids, limit: limit) }
++        }
++        guard let apiKey else { return [] }
++        var calendar = Calendar(identifier: .gregorian)
++        calendar.timeZone = .current
++        let dayFormatter = DateFormatter()
++        dayFormatter.calendar = calendar
++        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
++        dayFormatter.timeZone = .current
++        dayFormatter.dateFormat = "yyyy-MM-dd"
++        let today = calendar.startOfDay(for: Date())
++        let tomorrow = dayFormatter.string(from: calendar.date(byAdding: .day, value: 1, to: today) ?? today)
++        let until = dayFormatter.string(from: calendar.date(byAdding: .day, value: 60, to: today) ?? today)
++
++        func discover(_ path: String, _ extra: [URLQueryItem]) async -> [TmdbListItem] {
++            var components = URLComponents(url: apiBase.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
++            components.queryItems = [
++                URLQueryItem(name: "api_key", value: apiKey),
++                URLQueryItem(name: "language", value: preferredLanguage),
++                URLQueryItem(name: "sort_by", value: "popularity.desc"),
++                URLQueryItem(name: "include_adult", value: "false")
++            ] + extra
++            guard let url = components.url,
++                  let (body, response) = try? await data(for: url),
++                  let http = response as? HTTPURLResponse,
++                  (200...299).contains(http.statusCode),
++                  let decoded = try? JSONDecoder().decode(TmdbPagedResults.self, from: body) else {
++                return []
++            }
++            return decoded.results.filter { $0.posterPath != nil }
++        }
++
++        var movieParams = [
++            URLQueryItem(name: "region", value: "US"),
++            URLQueryItem(name: "with_release_type", value: "4|5"),
++            URLQueryItem(name: "release_date.gte", value: tomorrow),
++            URLQueryItem(name: "release_date.lte", value: until)
++        ]
++        var showParams = [
++            URLQueryItem(name: "first_air_date.gte", value: tomorrow),
++            URLQueryItem(name: "first_air_date.lte", value: until)
++        ]
++        if kids {
++            movieParams += [
++                URLQueryItem(name: "certification_country", value: "US"),
++                URLQueryItem(name: "certification.lte", value: "PG"),
++                URLQueryItem(name: "with_genres", value: "10751|16")
++            ]
++            showParams += [URLQueryItem(name: "with_genres", value: "10762|10751")]
++        }
++        async let moviesList = discover("discover/movie", movieParams)
++        async let showsList = discover("discover/tv", showParams)
++        let movies = Array(await moviesList.prefix(14))
++        let shows = Array(await showsList.prefix(8))
++
++        // The streaming date for each film (discover only filters by it; its release_date is the
++        // cinema date). US first, otherwise the earliest anywhere.
++        struct ReleaseDate: Decodable { let type: Int?; let release_date: String? }
++        struct Country: Decodable { let iso_3166_1: String; let release_dates: [ReleaseDate] }
++        struct Releases: Decodable { let results: [Country] }
++        let homeDates: [Int: String] = await withTaskGroup(of: (Int, String?).self) { group in
++            for movie in movies {
++                group.addTask {
++                    var components = URLComponents(
++                        url: apiBase.appendingPathComponent("movie/\(movie.id)/release_dates"),
++                        resolvingAgainstBaseURL: false
++                    )!
++                    components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
++                    guard let url = components.url,
++                          let (body, response) = try? await data(for: url),
++                          let http = response as? HTTPURLResponse,
++                          (200...299).contains(http.statusCode),
++                          let releases = try? JSONDecoder().decode(Releases.self, from: body) else {
++                        return (movie.id, nil)
++                    }
++                    func homeDays(_ countries: [Country]) -> [String] {
++                        countries.flatMap(\.release_dates)
++                            .filter { ($0.type ?? 0) >= 4 }
++                            .compactMap { $0.release_date.map { String($0.prefix(10)) } }
++                            .filter { $0 >= tomorrow }
++                            .sorted()
++                    }
++                    let us = homeDays(releases.results.filter { $0.iso_3166_1 == "US" })
++                    return (movie.id, us.first ?? homeDays(releases.results).first)
++                }
++            }
++            var out: [Int: String] = [:]
++            for await (id, date) in group { if let date { out[id] = date } }
++            return out
++        }
++
++        func meta(_ item: TmdbListItem, type: String, date: String) -> NuvioMeta? {
++            let name = (item.title ?? item.name)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
++            guard !name.isEmpty else { return nil }
++            return NuvioMeta(
++                id: "tmdb:\(item.id)",
++                name: name,
++                description: item.overview?.trimmingCharacters(in: .whitespacesAndNewlines),
++                posterUrl: imageURL(item.posterPath, size: "w500"),
++                backgroundUrl: imageURL(item.backdropPath, size: "w1280"),
++                logoUrl: nil,
++                imdbId: nil,
++                tmdbId: item.id,
++                type: type,
++                year: Int(date.prefix(4)),
++                genres: nil,
++                rating: nil,
++                releaseInfo: date,
++                runtime: nil,
++                cast: nil,
++                director: nil,
++                writer: nil,
++                certification: nil,
++                country: nil,
++                released: date,
++                status: nil,
++                videos: nil,
++                trailerYtIds: nil
++            )
++        }
++        var dated: [(date: String, meta: NuvioMeta)] = []
++        for movie in movies {
++            if let date = homeDates[movie.id], let m = meta(movie, type: "movie", date: date) { dated.append((date, m)) }
++        }
++        for show in shows {
++            if let date = show.firstAirDate.map({ String($0.prefix(10)) }), date >= tomorrow,
++               let m = meta(show, type: "series", date: date) { dated.append((date, m)) }
++        }
++        return dated.sorted { $0.date < $1.date }.prefix(limit).map(\.meta)
++    }
++
 +    /// Fork: a studio's or TV network's logo path on TMDB (for the Kids brand tiles).
 +    static func fetchBrandLogoPath(tmdbId: Int, isNetwork: Bool) async -> String? {
 +        if requestContext == nil {
@@ -210,6 +346,15 @@ index 171cf70d..2c8f7330 100644
 +            }
 +            if let next = show.next_episode_to_air, let airs = day(next.air_date) {
 +                let daysAhead = daysFromToday(airs)
++                // Fork: a show premiering (or a new season starting) later on: "Coming Soon" /
++                // "New Season" with the date.
++                if primary == nil, daysAhead > 6, daysAhead <= 60, next.episode_number == 1 {
++                    let label = DateFormatter()
++                    label.locale = Locale.current
++                    label.setLocalizedDateFormatFromTemplate("MMM d")
++                    let isPremiere = show.last_episode_to_air == nil || (next.season_number ?? 1) <= 1
++                    return (isPremiere ? "Coming Soon" : "New Season", label.string(from: airs))
++                }
 +                if daysAhead >= 0 && daysAhead <= 6 {
 +                    if primary == nil, next.episode_number == 1, (next.season_number ?? 1) > 1 {
 +                        primary = "New Season"
@@ -256,6 +401,19 @@ index 171cf70d..2c8f7330 100644
 +            if let homeRelease {
 +                let daysAgo = -daysFromToday(homeRelease)
 +                if daysAgo >= 0 && daysAgo <= 30 { return ("Recently Added", nil) }
++            }
++            // Fork: streaming soon — "Coming Soon" with the day (this week) or the date.
++            let upcoming = releases.results
++                .flatMap(\.release_dates)
++                .filter { ($0.type ?? 0) >= 4 }
++                .compactMap { day($0.release_date) }
++                .filter { daysFromToday($0) > 0 }
++                .min()
++            if let upcoming, daysFromToday(upcoming) <= 60 {
++                let label = DateFormatter()
++                label.locale = Locale.current
++                if daysFromToday(upcoming) <= 6 { label.dateFormat = "EEEE" } else { label.setLocalizedDateFormatFromTemplate("MMM d") }
++                return ("Coming Soon", label.string(from: upcoming))
 +            }
 +            return (nil, nil)
 +        }
