@@ -1397,12 +1397,150 @@ index 00000000..91ac5b16
 +        UserDefaults.standard.set(verdicts, forKey: Self.storeKey)
 +    }
 +}
+diff --git a/tvosApp/NuvioTV/Sources/Fork/LanguagesFork.swift b/tvosApp/NuvioTV/Sources/Fork/LanguagesFork.swift
+new file mode 100644
+index 00000000..51a64959
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/LanguagesFork.swift
+@@ -0,0 +1,132 @@
++import Foundation
++import SwiftUI
++
++// MARK: - Fork: language tags and audio-language-first sources
++
++/// Audio languages a source says it has, read from its name, text and file name ("Hindi",
++/// "Dual Audio", "🇮🇳 Hindi | English", "MULTi"). Shown as small tags on the source card; and
++/// when the profile's audio language isn't English, sources in that language move to the top
++/// of the list, so Infuse (which can't be told which audio track to pick) gets the right file.
++enum ForkStreamLanguages {
++    struct Tags: Equatable, Sendable {
++        /// Non-English audio languages, Indian languages first.
++        var languages: [String] = []
++        var multiAudio = false
++        var isEmpty: Bool { languages.isEmpty && !multiAudio }
++    }
++
++    /// Name and the words or flags that mean it. Order is the order tags are shown in.
++    private static let table: [(name: String, pattern: String)] = [
++        ("Hindi", #"\bhindi\b|\bhin\b|🇮🇳"#),
++        ("Tamil", #"\btamil\b"#),
++        ("Telugu", #"\btelugu\b"#),
++        ("Malayalam", #"\bmalayalam\b"#),
++        ("Kannada", #"\bkannada\b"#),
++        ("Punjabi", #"\bpunjabi\b"#),
++        ("Bengali", #"\bbengali\b"#),
++        ("Marathi", #"\bmarathi\b"#),
++        ("Urdu", #"\burdu\b"#),
++        ("Spanish", #"\bspanish\b|\blatino\b|\bcastellano\b|🇪🇸|🇲🇽"#),
++        ("French", #"\bfrench\b|\btruefrench\b|\bvff\b|🇫🇷"#),
++        ("German", #"\bgerman\b|🇩🇪"#),
++        ("Italian", #"\bitalian\b|🇮🇹"#),
++        ("Portuguese", #"\bportuguese\b|🇵🇹|🇧🇷"#),
++        ("Russian", #"\brussian\b|🇷🇺"#),
++        ("Arabic", #"\barabic\b|🇸🇦"#),
++        ("Turkish", #"\bturkish\b|🇹🇷"#),
++        ("Japanese", #"\bjapanese\b|🇯🇵"#),
++        ("Korean", #"\bkorean\b|🇰🇷"#),
++        ("Chinese", #"\bchinese\b|\bmandarin\b|\bcantonese\b|🇨🇳"#)
++    ]
++    private static let compiled: [(name: String, regex: NSRegularExpression)] = table.compactMap { entry in
++        guard let regex = try? NSRegularExpression(pattern: entry.pattern, options: [.caseInsensitive]) else { return nil }
++        return (name: entry.name, regex: regex)
++    }
++    private static let english = try? NSRegularExpression(pattern: #"\benglish\b|\beng\b|🇬🇧|🇺🇸"#, options: [.caseInsensitive])
++    /// "Multi Audio", "Dual-Audio", "multi lang", or a bare "MULTi" (not "multi sub").
++    private static let multi = try? NSRegularExpression(
++        pattern: #"\b(multi|dual)[ ._-]?(audio|lang|language)s?\b|\bmulti\b(?![ ._-]?subs?\b)"#,
++        options: [.caseInsensitive]
++    )
++
++    private static func found(_ regex: NSRegularExpression?, in text: String) -> Bool {
++        guard let regex else { return false }
++        return regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
++    }
++
++    static func tags(for stream: NuvioStream) -> Tags {
++        let text = [stream.name, stream.description, stream.filename]
++            .compactMap { $0 }
++            .joined(separator: "\n")
++        return tags(text: text)
++    }
++
++    static func tags(text: String) -> Tags {
++        guard !text.isEmpty else { return Tags() }
++        let languages = compiled.filter { found($0.regex, in: text) }.map(\.name)
++        let hasEnglish = found(english, in: text)
++        let multiAudio = found(multi, in: text) || languages.count + (hasEnglish ? 1 : 0) >= 2
++        return Tags(languages: languages, multiAudio: multiAudio)
++    }
++
++    /// The profile's audio language when sources should be reordered for it: set and not English.
++    /// With "Original", the title's own language (a Bollywood film: Hindi).
++    static func boostLanguage(meta: NuvioMeta?) -> String? {
++        guard let language = SubtitleLanguagePreferences.preferredAudioLanguage(meta: meta),
++              language.caseInsensitiveCompare("English") != .orderedSame,
++              table.contains(where: { $0.name == language }) else { return nil }
++        return language
++    }
++
++    /// Sources that list `language` first, keeping everything else in its order.
++    static func boosted(_ streams: [NuvioStream], meta: NuvioMeta?) -> [NuvioStream] {
++        guard let language = boostLanguage(meta: meta), streams.count > 1 else { return streams }
++        var first: [NuvioStream] = []
++        var rest: [NuvioStream] = []
++        for stream in streams {
++            if tags(for: stream).languages.contains(language) { first.append(stream) } else { rest.append(stream) }
++        }
++        return first.isEmpty ? streams : first + rest
++    }
++}
++
++/// Small tags beside a source's name: "Hindi", "Tamil", "Multi-audio".
++struct ForkStreamLanguageChips: View {
++    let tags: ForkStreamLanguages.Tags
++
++    var body: some View {
++        HStack(spacing: 10) {
++            ForEach(tags.languages.prefix(2), id: \.self) { language in
++                chip(language, highlighted: true)
++            }
++            if tags.multiAudio { chip("Multi-audio", highlighted: false) }
++        }
++        .fixedSize()
++    }
++
++    private func chip(_ text: String, highlighted: Bool) -> some View {
++        Text(text)
++            .font(.system(size: 22, weight: .bold))
++            .foregroundColor(highlighted ? .black : .white)
++            .padding(.horizontal, 12)
++            .padding(.vertical, 3)
++            .background(
++                Capsule().fill(highlighted ? ForkOriginalLanguage.tagColor : Color.white.opacity(0.18))
++            )
++    }
++}
++
++/// The original language of Indian titles, for a small tag on Home cards ("HINDI").
++enum ForkOriginalLanguage {
++    static let tagColor = Color(red: 1.0, green: 0.71, blue: 0.27)
++    private static let names: [String: String] = [
++        "hi": "Hindi", "ta": "Tamil", "te": "Telugu", "ml": "Malayalam", "kn": "Kannada",
++        "pa": "Punjabi", "bn": "Bengali", "mr": "Marathi", "ur": "Urdu"
++    ]
++
++    /// "Hindi" for TMDB's "hi"; nil for languages that don't get a tag.
++    static func label(forCode code: String?) -> String? {
++        guard let code = code?.lowercased(), !code.isEmpty else { return nil }
++        return names[code]
++    }
++}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..9aa3f916
+index 00000000..16b96ce9
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
-@@ -0,0 +1,232 @@
+@@ -0,0 +1,253 @@
 +import Foundation
 +import SwiftUI
 +
@@ -1435,6 +1573,8 @@ index 00000000..9aa3f916
 +    struct Entry: Codable, Equatable {
 +        var primary: String?
 +        var secondary: String?
++        /// Original language when it gets a tag ("Hindi"), see `ForkOriginalLanguage`.
++        var language: String?
 +        var at: Double
 +    }
 +
@@ -1447,7 +1587,7 @@ index 00000000..9aa3f916
 +    private var running = 0
 +    private var publishScheduled = false
 +    private static let maxConcurrent = 6
-+    private static let storeKey = "fork_card_badges_v1"
++    private static let storeKey = "fork_card_badges_v2"
 +    private static let ttl: Double = 12 * 3600
 +
 +    private init() {
@@ -1506,6 +1646,7 @@ index 00000000..9aa3f916
 +                entries[meta.id] = Entry(
 +                    primary: result?.primary,
 +                    secondary: result?.secondary,
++                    language: ForkOriginalLanguage.label(forCode: result?.language),
 +                    at: Date().timeIntervalSince1970
 +                )
 +                inFlight.remove(meta.id)
@@ -1557,14 +1698,18 @@ index 00000000..9aa3f916
 +                HStack(alignment: .top, spacing: 8) {
 +                    if isTop10 { top10Tag }
 +                    if let primary = entry?.primary { pill(primary, entry?.secondary) }
++                    if let language = entry?.language { languageTag(language) }
 +                }
 +                .padding(14)
 +                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 +            } else {
-+                if isTop10 {
-+                    top10Tag
-+                        .padding(10)
-+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
++                if isTop10 || entry?.language != nil {
++                    VStack(alignment: .leading, spacing: 6) {
++                        if isTop10 { top10Tag }
++                        if let language = entry?.language { languageTag(language) }
++                    }
++                    .padding(10)
++                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 +                }
 +                if let primary = entry?.primary {
 +                    pill(primary, entry?.secondary)
@@ -1574,6 +1719,20 @@ index 00000000..9aa3f916
 +            }
 +        }
 +        .allowsHitTesting(false)
++    }
++
++    /// Fork: "HINDI" on Indian titles.
++    private func languageTag(_ language: String) -> some View {
++        Text(language.uppercased())
++            .font(.system(size: 14, weight: .heavy))
++            .kerning(0.6)
++            .foregroundColor(.black)
++            .padding(.horizontal, 8)
++            .padding(.vertical, 4)
++            .background(
++                RoundedRectangle(cornerRadius: 4, style: .continuous).fill(ForkOriginalLanguage.tagColor)
++            )
++            .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
 +    }
 +
 +    private var top10Tag: some View {
@@ -1635,12 +1794,106 @@ index 00000000..9aa3f916
 +        .allowsHitTesting(false)
 +    }
 +}
+diff --git a/tvosApp/NuvioTV/Sources/Fork/PlaySomethingFork.swift b/tvosApp/NuvioTV/Sources/Fork/PlaySomethingFork.swift
+new file mode 100644
+index 00000000..1e20a812
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/PlaySomethingFork.swift
+@@ -0,0 +1,88 @@
++import Foundation
++import SwiftUI
++
++// MARK: - Fork: Play Something (Netflix)
++
++/// A button at the top of Home that starts something without browsing: half the time a title
++/// you're in the middle of (resumed where you left off), otherwise an unwatched title from your
++/// Library or today's Top 10. Never the same title twice in a row. Per profile, on by default.
++enum ForkPlaySomething {
++    static let enabledKey = "fork_play_something"
++
++    enum Pick {
++        case resume(ContinueWatchingItem)
++        case title(NuvioMeta)
++    }
++
++    @MainActor private static var lastPickedId: String?
++
++    @MainActor
++    static func pick(continueWatching: [ContinueWatchingItem], sections: [TVHomeSection]) -> Pick? {
++        let today = ContentReleasePolicy.todayIsoDay()
++        // Up Next for an episode that hasn't aired can't be played yet.
++        let resumable = continueWatching.filter { item in
++            !(item.isUpNextEntry && !item.hasAired && !item.isAiringToday) && item.id != lastPickedId
++        }
++
++        var seen = Set<String>()
++        var fresh: [NuvioMeta] = []
++        func consider(_ meta: NuvioMeta) {
++            guard meta.id != lastPickedId,
++                  !continueWatching.contains(where: { $0.meta.id == meta.id }),
++                  !ContentReleasePolicy.isUnreleased(meta, today: today),
++                  !WatchedStore.contains(meta: meta),
++                  seen.insert(meta.id).inserted else { return }
++            fresh.append(meta)
++        }
++        LibraryStore.items().map(\.meta).forEach(consider)
++        sections.flatMap(\.items)
++            .filter { ForkTrendingRows.ranks[$0.id] != nil }
++            .forEach(consider)
++        fresh = ForkKidsFilter.shared.visible(fresh)
++
++        let pick: Pick?
++        if let item = resumable.randomElement(), fresh.isEmpty || Bool.random() {
++            pick = .resume(item)
++        } else if let meta = fresh.randomElement() {
++            pick = .title(meta)
++        } else {
++            pick = nil
++        }
++        switch pick {
++        case .resume(let item)?: lastPickedId = item.id
++        case .title(let meta)?: lastPickedId = meta.id
++        case nil: break
++        }
++        return pick
++    }
++}
++
++struct ForkPlaySomethingButton: View {
++    let action: () -> Void
++    @FocusState private var focused: Bool
++
++    var body: some View {
++        Button(action: action) {
++            HStack(spacing: 14) {
++                Image(systemName: "shuffle")
++                    .font(.system(size: 26, weight: .bold))
++                Text("Play Something")
++                    .font(.system(size: 28, weight: .semibold))
++            }
++            .foregroundColor(focused ? .black : .white)
++            .padding(.horizontal, 30)
++            .padding(.vertical, 14)
++            .background(
++                Capsule().fill(focused ? Color.white : Color.white.opacity(0.16))
++            )
++            .scaleEffect(focused ? 1.06 : 1)
++            .shadow(color: .black.opacity(focused ? 0.45 : 0), radius: 12, y: 4)
++            .animation(.easeOut(duration: 0.16), value: focused)
++        }
++        .buttonStyle(.plain)
++        .focused($focused)
++        .nuvioFocusEffectDisabledIfAvailable()
++        .padding(.leading, TVLayout.rowLeading)
++        .focusSection()
++    }
++}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..0dc75e20
+index 00000000..31207be5
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,53 @@
 +import Foundation
 +
 +// MARK: - Fork: "What's new in your fork"
@@ -1655,6 +1908,16 @@ index 00000000..0dc75e20
 +    }
 +
 +    static let entries: [Entry] = [
++        Entry(
++            id: 2,
++            date: "Nov 6, 2026",
++            items: [
++                "Play Something: a shuffle button at the top of Home that resumes something you're watching or starts an unwatched title from your Library or the Top 10.",
++                "Language tags: sources show Hindi, Tamil, Multi-audio and so on, and Indian titles get a HINDI (or Tamil, Telugu…) tag on Home.",
++                "Set a profile's Preferred Audio to Hindi (Settings > Playback) and Hindi sources are listed first, so Infuse gets the Hindi file.",
++                "Remind Me from any row now sends the full release date, so your iPhone can notify on the day."
++            ]
++        ),
 +        Entry(
 +            id: 1,
 +            date: "Nov 5, 2026",
@@ -1685,7 +1948,7 @@ index 00000000..0dc75e20
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index ef7d9a28..930dac95 100644
+index ef7d9a28..9966849d 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -470,6 +470,10 @@ struct ContentView: View {
@@ -2069,7 +2332,7 @@ index ef7d9a28..930dac95 100644
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5175,6 +5443,20 @@ struct TVHomeView: View {
+@@ -5175,6 +5443,21 @@ struct TVHomeView: View {
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.heroEnabled) private var heroEnabled = true
      @AppStorage(SettingsKey.fullscreenHeroBackdrop) private var fullscreenHeroBackdrop = true
@@ -2087,10 +2350,11 @@ index ef7d9a28..930dac95 100644
 +    @AppStorage(ForkTrendingRows.comingSoonKey) private var forkComingSoonEnabled = true
 +    // Fork: Disney+ look for a Kids profile (studio tiles above the rows).
 +    @AppStorage(ForkDisneyKids.enabledKey) private var forkDisneyStyle = false
++    @AppStorage(ForkPlaySomething.enabledKey) private var forkPlaySomething = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5225,6 +5507,19 @@ struct TVHomeView: View {
+@@ -5225,6 +5508,19 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -2110,7 +2374,7 @@ index ef7d9a28..930dac95 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -5303,6 +5598,46 @@ struct TVHomeView: View {
+@@ -5303,6 +5599,46 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -2157,7 +2421,7 @@ index ef7d9a28..930dac95 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -5318,6 +5653,7 @@ struct TVHomeView: View {
+@@ -5318,6 +5654,7 @@ struct TVHomeView: View {
                      )
                      .equatable()
                      .frame(width: proxy.size.width, height: proxy.size.height)
@@ -2165,7 +2429,7 @@ index ef7d9a28..930dac95 100644
                      .clipped()
                  } else {
                      let backdropWidth = proxy.size.width * 0.65
-@@ -5333,6 +5669,7 @@ struct TVHomeView: View {
+@@ -5333,6 +5670,7 @@ struct TVHomeView: View {
                          )
                          .equatable()
                          .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
@@ -2173,7 +2437,7 @@ index ef7d9a28..930dac95 100644
                          .mask(
                              LinearGradient(
                                  stops: [
-@@ -5437,7 +5774,8 @@ struct TVHomeView: View {
+@@ -5437,7 +5775,8 @@ struct TVHomeView: View {
                          } else if let heroMeta = visibleFocusedMeta ?? visibleHero {
                              TVHeroView(
                                  meta: heroMeta,
@@ -2183,10 +2447,15 @@ index ef7d9a28..930dac95 100644
                              ) {
                                  navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
                              }
-@@ -5483,6 +5821,10 @@ struct TVHomeView: View {
+@@ -5483,6 +5822,15 @@ struct TVHomeView: View {
                                              .padding(.horizontal, horizontalEdgeInset)
                                          }
  
++                                        // Fork: Play Something (shuffle).
++                                        if forkPlaySomething && !sections.isEmpty {
++                                            ForkPlaySomethingButton { forkStartPlaySomething(sections: sections) }
++                                        }
++
 +                                        if forkDisneyStyle {
 +                                            ForkKidsBrandRow()
 +                                        }
@@ -2194,7 +2463,7 @@ index ef7d9a28..930dac95 100644
                                          ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                                              let isNearFocusedRow = abs(index - focusedRowIndex) <= 2
                                              if isNearFocusedRow {
-@@ -5506,6 +5848,26 @@ struct TVHomeView: View {
+@@ -5506,6 +5854,26 @@ struct TVHomeView: View {
                                      .frame(maxWidth: .infinity, alignment: .leading)
                                      .padding(.top, TVHomeLayout.rowsTopPadding)
                                      .padding(.bottom, 80)
@@ -2221,7 +2490,31 @@ index ef7d9a28..930dac95 100644
                                      #if os(tvOS)
                                      // Place the configurator inside the scroll content so its
                                      // ancestor is the UIScrollView that owns the row offset.
-@@ -7753,6 +8115,8 @@ struct TVHomeView: View {
+@@ -7682,6 +8050,23 @@ struct TVHomeView: View {
+             : estimatedCollectionRowHeight(for: section)
+     }
+ 
++    /// Fork: resumes something you're watching, or starts an unwatched Library / Top 10 title.
++    private func forkStartPlaySomething(sections: [TVHomeSection]) {
++        switch ForkPlaySomething.pick(
++            continueWatching: Array(continueWatchingByMetaId.values),
++            sections: sections
++        ) {
++        case .resume(let item)?:
++            prepareForOverlayPresentation()
++            onResumePlayback(item)
++        case .title(let meta)?:
++            prepareForOverlayPresentation()
++            onPlayTitle(meta.id, meta.type)
++        case nil:
++            break
++        }
++    }
++
+     private func prepareForOverlayPresentation(restoreCardID: String? = nil) {
+         focusWork.defersOverlayPreparation = true
+         focusWork.pendingOverlayRestoreCardID = restoreCardID
+@@ -7753,6 +8138,8 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -2230,7 +2523,7 @@ index ef7d9a28..930dac95 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7764,7 +8128,11 @@ struct TVHomeView: View {
+@@ -7764,7 +8151,11 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
@@ -2243,7 +2536,7 @@ index ef7d9a28..930dac95 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -7773,7 +8141,9 @@ struct TVHomeView: View {
+@@ -7773,7 +8164,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -2254,7 +2547,7 @@ index ef7d9a28..930dac95 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster"
          )
-@@ -7794,7 +8164,16 @@ struct TVHomeView: View {
+@@ -7794,7 +8187,16 @@ struct TVHomeView: View {
              + ((calendarToday.isEmpty || !homeCalendarToday) ? [] : [calendarTodaySection])
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
@@ -2272,7 +2565,7 @@ index ef7d9a28..930dac95 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -7806,18 +8185,41 @@ struct TVHomeView: View {
+@@ -7806,18 +8208,41 @@ struct TVHomeView: View {
                  if !section.collectionFolders.isEmpty
                      || section.id == TVHomeSection.localTitlesId
                      || section.id == TVHomeSection.jellyfinId
@@ -2315,7 +2608,7 @@ index ef7d9a28..930dac95 100644
          focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
              signature: signature,
              sections: contentSections
-@@ -7883,11 +8285,53 @@ struct TVHomeView: View {
+@@ -7883,11 +8308,53 @@ struct TVHomeView: View {
      }
  
  
@@ -2369,7 +2662,7 @@ index ef7d9a28..930dac95 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -11380,11 +11824,14 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -11380,11 +11847,14 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -2384,7 +2677,7 @@ index ef7d9a28..930dac95 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
  
-@@ -11403,6 +11850,14 @@ private struct TVHeroView: View {
+@@ -11403,6 +11873,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
@@ -2399,7 +2692,7 @@ index ef7d9a28..930dac95 100644
              TVHeroMetaLine(meta: meta, episodeLine: episodeLine, continueItem: continueItem)
  
              if let continueItem {
-@@ -11419,6 +11874,8 @@ private struct TVHeroView: View {
+@@ -11419,6 +11897,8 @@ private struct TVHeroView: View {
                      .lineLimit(4)
                      .frame(maxWidth: 900, alignment: .leading)
                      .padding(.top, 4)
@@ -2408,7 +2701,7 @@ index ef7d9a28..930dac95 100644
              }
          }
          .foregroundColor(.white)
-@@ -11460,6 +11917,7 @@ extension TVHeroView: Equatable {
+@@ -11460,6 +11940,7 @@ extension TVHeroView: Equatable {
              && lhs.continueItem?.episodeVideo?.rating == rhs.continueItem?.episodeVideo?.rating
              && lhs.continueItem?.season == rhs.continueItem?.season
              && lhs.continueItem?.episode == rhs.continueItem?.episode

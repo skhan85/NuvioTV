@@ -1,8 +1,38 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-index 25e68cb0..e1d03332 100644
+index 25e68cb0..5afe59eb 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-@@ -4809,8 +4809,7 @@ enum EpisodeMetadataEnrichment {
+@@ -3827,6 +3827,20 @@ final class NuvioAPIClient {
+         }
+     }
+ 
++    /// Fork: an unreleased title saved with Remind Me sends its full release date, so the
++    /// iPhone can notify on the day; everything else keeps the year as before.
++    private static func forkReleaseInfo(_ meta: NuvioMeta) -> String? {
++        let isFullDate: (String?) -> Bool = { value in
++            guard let value, value.count >= 10 else { return false }
++            return value.prefix(10).range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil
++        }
++        if !isFullDate(meta.releaseInfo), let released = meta.released, isFullDate(released),
++           ContentReleasePolicy.isUnreleased(meta, today: ContentReleasePolicy.todayIsoDay()) {
++            return String(released.prefix(10))
++        }
++        return meta.releaseInfo ?? meta.year.map(String.init)
++    }
++
+     func pushLibrary(
+         session: AuthSession,
+         remoteProfileId: Int,
+@@ -3842,7 +3856,7 @@ final class NuvioAPIClient {
+                 "poster_shape": "POSTER",
+                 "background": Self.jsonValue(item.meta.backgroundUrl),
+                 "description": Self.jsonValue(item.meta.description),
+-                "release_info": Self.jsonValue(item.meta.releaseInfo ?? item.meta.year.map(String.init)),
++                "release_info": Self.jsonValue(Self.forkReleaseInfo(item.meta)),
+                 "genres": item.meta.genres ?? [],
+                 "addon_base_url": NSNull(),
+                 "added_at": Self.milliseconds(from: item.addedAt)
+@@ -4809,8 +4823,7 @@ enum EpisodeMetadataEnrichment {
              return nil
          }
  

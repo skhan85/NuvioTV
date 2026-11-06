@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index cfc9fc8d..3e64615e 100644
+index cfc9fc8d..ac12058a 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 @@ -1148,11 +1148,13 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
@@ -24,7 +24,7 @@ index cfc9fc8d..3e64615e 100644
          }
      }
  
-@@ -3362,6 +3365,25 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3362,6 +3365,26 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.continueWatchingEpisodeRatings) private var continueWatchingEpisodeRatings = true
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -33,6 +33,7 @@ index cfc9fc8d..3e64615e 100644
 +    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixDetails = false
 +    @AppStorage(ForkNetflixUI.cardBadgesKey) private var forkCardBadges = true
 +    @AppStorage(ForkDisneyKids.enabledKey) private var forkDisneyStyle = false
++    @AppStorage(ForkPlaySomething.enabledKey) private var forkPlaySomething = true
 +    @AppStorage(SettingsKey.bodyColor) private var forkBodyColor = SettingsBackground.charcoal.rawValue
 +    @AppStorage(SettingsKey.theme) private var forkTheme = SettingsAccent.white.rawValue
 +    @AppStorage("fork_top10_numerals") private var forkTop10 = true
@@ -50,7 +51,7 @@ index cfc9fc8d..3e64615e 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3772,6 +3794,132 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3772,6 +3795,138 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -92,8 +93,14 @@ index cfc9fc8d..3e64615e 100644
 +                    accentColor: accentColor
 +                )
 +                SettingsToggleRow(
++                    title: "Play Something",
++                    subtitle: "A shuffle button at the top of Home: resumes something you're watching or starts an unwatched title from your Library or today's Top 10",
++                    isOn: $forkPlaySomething,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
 +                    title: "Card Tags",
-+                    subtitle: "Netflix TOP 10 tags and New Episode / New Season / Recently Added tags on posters (from TMDB)",
++                    subtitle: "Netflix TOP 10 tags, New Episode / New Season / Recently Added tags, and a HINDI (or Tamil, Telugu…) tag on Indian titles, from TMDB",
 +                    isOn: $forkCardBadges,
 +                    accentColor: accentColor
 +                )
@@ -183,7 +190,7 @@ index cfc9fc8d..3e64615e 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -5267,7 +5415,7 @@ private struct IntegrationSettingsView: View {
+@@ -5267,7 +5422,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -192,7 +199,7 @@ index cfc9fc8d..3e64615e 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -5587,7 +5735,7 @@ private struct TmdbOptionsSheet: View {
+@@ -5587,7 +5742,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -201,7 +208,7 @@ index cfc9fc8d..3e64615e 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -8760,6 +8908,7 @@ private struct PlaybackSettingsView: View {
+@@ -8760,6 +8915,7 @@ private struct PlaybackSettingsView: View {
      @AppStorage(SettingsKey.autoSkipRecap) private var autoSkipRecap = false
      @AppStorage(SettingsKey.autoSkipOutro) private var autoSkipOutro = false
      @AppStorage(SettingsKey.autoSkipMovieCredits) private var autoSkipMovieCredits = false
@@ -209,7 +216,7 @@ index cfc9fc8d..3e64615e 100644
      @AppStorage(SettingsKey.streamAutoPlayPreferBingeGroup) private var streamAutoPlayPreferBingeGroup = true
      @AppStorage(SettingsKey.streamAutoPlayReuseBingeGroup) private var streamAutoPlayReuseBingeGroup = true
      @AppStorage(SettingsKey.seekPreviewEnabled) private var seekPreviewEnabled = true
-@@ -9267,6 +9416,16 @@ private struct PlaybackSettingsView: View {
+@@ -9267,6 +9423,16 @@ private struct PlaybackSettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -226,7 +233,20 @@ index cfc9fc8d..3e64615e 100644
                  SettingsToggleRow(
                      title: L10n.string("tvos_settings_autoplay_trailers", fallback: "Autoplay Trailers"),
                      subtitle: L10n.string("tvos_settings_start_previews_after_focus_settles", fallback: "Start previews after focus settles"),
-@@ -14347,8 +14506,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -9458,10 +9624,8 @@ private struct PlaybackSettingsView: View {
+             ) {
+                 SettingsActionRow(
+                     title: L10n.string("tvos_playback_preferred_audio", fallback: "Preferred Audio"),
+-                    subtitle: L10n.string(
+-                        "tvos_playback_preferred_audio_subtitle",
+-                        fallback: "Default audio language"
+-                    ),
++                    // Fork: the language also puts matching sources first (for Infuse).
++                    subtitle: "Default audio language for this profile. When it isn't English, sources in that language are listed first",
+                     value: audioLanguageSummary,
+                     accentColor: accentColor
+                 ) {
+@@ -14347,8 +14511,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs

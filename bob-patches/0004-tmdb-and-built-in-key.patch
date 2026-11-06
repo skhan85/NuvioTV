@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 171cf70d..99cd8ac5 100644
+index 171cf70d..ead39172 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 @@ -192,8 +192,8 @@ enum TmdbDetailsService {
@@ -43,7 +43,7 @@ index 171cf70d..99cd8ac5 100644
      }
  
      static var preferredLanguage: String {
-@@ -506,6 +509,418 @@ enum TmdbDetailsService {
+@@ -506,6 +509,429 @@ enum TmdbDetailsService {
          )
      }
  
@@ -292,7 +292,7 @@ index 171cf70d..99cd8ac5 100644
 +    /// episode aired in the last 10 days (or a new season starts within the week), with
 +    /// "Watch Now" or the next air day beside it. Movies: "Recently Added" when the digital
 +    /// release was in the last 30 days. nil when TMDB can't be reached.
-+    static func fetchFreshness(for meta: NuvioMeta) async -> (primary: String?, secondary: String?)? {
++    static func fetchFreshness(for meta: NuvioMeta) async -> (primary: String?, secondary: String?, language: String?)? {
 +        if requestContext == nil {
 +            return await withRequestContext { await fetchFreshness(for: meta) }
 +        }
@@ -321,6 +321,7 @@ index 171cf70d..99cd8ac5 100644
 +                let season_number: Int?
 +            }
 +            struct Show: Decodable {
++                let original_language: String?
 +                let last_episode_to_air: Episode?
 +                let next_episode_to_air: Episode?
 +            }
@@ -353,7 +354,7 @@ index 171cf70d..99cd8ac5 100644
 +                    label.locale = Locale.current
 +                    label.setLocalizedDateFormatFromTemplate("MMM d")
 +                    let isPremiere = show.last_episode_to_air == nil || (next.season_number ?? 1) <= 1
-+                    return (isPremiere ? "Coming Soon" : "New Season", label.string(from: airs))
++                    return (isPremiere ? "Coming Soon" : "New Season", label.string(from: airs), show.original_language)
 +                }
 +                if daysAhead >= 0 && daysAhead <= 6 {
 +                    if primary == nil, next.episode_number == 1, (next.season_number ?? 1) > 1 {
@@ -368,7 +369,7 @@ index 171cf70d..99cd8ac5 100644
 +                }
 +            }
 +            if primary != nil && secondary == nil { secondary = "Watch Now" }
-+            return (primary, secondary)
++            return (primary, secondary, show.original_language)
 +        } else {
 +            struct ReleaseDate: Decodable {
 +                let type: Int?
@@ -380,18 +381,28 @@ index 171cf70d..99cd8ac5 100644
 +            struct Releases: Decodable {
 +                let results: [Country]
 +            }
++            // Fork: the details (for the original language) with the release dates in one call.
++            struct Movie: Decodable {
++                let original_language: String?
++                let release_dates: Releases?
++            }
 +            var components = URLComponents(
-+                url: apiBase.appendingPathComponent("movie/\(resolved.id)/release_dates"),
++                url: apiBase.appendingPathComponent("movie/\(resolved.id)"),
 +                resolvingAgainstBaseURL: false
 +            )!
-+            components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
++            components.queryItems = [
++                URLQueryItem(name: "api_key", value: apiKey),
++                URLQueryItem(name: "append_to_response", value: "release_dates")
++            ]
 +            guard let url = components.url,
 +                  let (body, response) = try? await data(for: url),
 +                  let http = response as? HTTPURLResponse,
 +                  (200...299).contains(http.statusCode),
-+                  let releases = try? JSONDecoder().decode(Releases.self, from: body) else {
++                  let movie = try? JSONDecoder().decode(Movie.self, from: body) else {
 +                return nil
 +            }
++            let releases = movie.release_dates ?? Releases(results: [])
++            let language = movie.original_language
 +            // Digital (4) or physical (5): when it became watchable at home.
 +            let homeRelease = releases.results
 +                .flatMap(\.release_dates)
@@ -400,7 +411,7 @@ index 171cf70d..99cd8ac5 100644
 +                .min()
 +            if let homeRelease {
 +                let daysAgo = -daysFromToday(homeRelease)
-+                if daysAgo >= 0 && daysAgo <= 30 { return ("Recently Added", nil) }
++                if daysAgo >= 0 && daysAgo <= 30 { return ("Recently Added", nil, language) }
 +            }
 +            // Fork: streaming soon — "Coming Soon" with the day (this week) or the date.
 +            let upcoming = releases.results
@@ -413,9 +424,9 @@ index 171cf70d..99cd8ac5 100644
 +                let label = DateFormatter()
 +                label.locale = Locale.current
 +                if daysFromToday(upcoming) <= 6 { label.dateFormat = "EEEE" } else { label.setLocalizedDateFormatFromTemplate("MMM d") }
-+                return ("Coming Soon", label.string(from: upcoming))
++                return ("Coming Soon", label.string(from: upcoming), language)
 +            }
-+            return (nil, nil)
++            return (nil, nil, language)
 +        }
 +    }
 +
