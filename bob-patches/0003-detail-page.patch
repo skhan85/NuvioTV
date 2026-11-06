@@ -1,0 +1,256 @@
+diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
+index a6f53e90..5c561604 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
+@@ -463,6 +463,14 @@ struct DetailsScreen: View {
+                 streamDiscoveryDuration = nil
+             }
+         }
++        // Fork: find the Play/Resume episode's sources ahead, so the picker opens with them.
++        .onReceive(NotificationCenter.default.publisher(for: ForkDetailPrefetch.episodeNotification)) { note in
++            guard !isStreamPickerPresented, !isPreparingPlayback,
++                  let request = note.object as? ForkDetailPrefetch.Request,
++                  let meta = viewModel.uiState.meta, meta.id == request.metaId,
++                  ForkDetailPrefetch.shouldRun(key: "\(meta.id)|\(request.episode.id)") else { return }
++            viewModel.prepareStreams(forId: canonicalEpisodeStreamId(for: request.episode, meta: meta), type: "series")
++        }
+         .onChange(of: viewModel.uiState.isLoading) { _, isLoading in
+             if !isLoading {
+                 if let meta = viewModel.uiState.meta, meta.id == id, !meta.isSeries {
+@@ -4071,6 +4079,10 @@ private enum TvDetailsFocusSection: Hashable {
+ struct TvDetailsContent: View {
+     let uiState: DetailsUiState
+     var libraryWatchedContext: LibraryWatchedContext? = nil
++    /// Fork: re-filter More Like This as kids ratings arrive.
++    @ObservedObject private var forkKids = ForkKidsFilter.shared
++    /// Fork: kids rating limit (everything when it's off).
++    private var forkVisibleMoreLikeThis: [RelatedTitle] { forkKids.visible(uiState.moreLikeThis) }
+     var initialPlayRequestID: UInt? = nil
+     var initialFocusEpisode: DetailsEpisodeFocus? = nil
+     var onInitialPlayRequestConsumed: ((UInt) -> Void)? = nil
+@@ -4513,7 +4525,7 @@ struct TvDetailsContent: View {
+             if !uiState.moreLikeThis.isEmpty {
+                 TvDetailsRelatedRow(
+                     title: L10n.string("settings_tmdb_module_more_like_this", fallback: "More Like This"),
+-                    items: uiState.moreLikeThis,
++                    items: forkVisibleMoreLikeThis,
+                     entryLocked: focusedDetailsSection != .related,
+                     onSelect: { item in
+                         stopBackgroundTrailer(manual: false)
+@@ -4736,6 +4748,9 @@ struct TvDetailsContent: View {
+ 
+                                     TvDetailsLogo(meta: meta)
+ 
++                                    // Fork: Netflix "TOP 10 · #3 in Movies Today" under the title.
++                                    TvDetailsTop10Badge(metaId: meta.id)
++
+                                     if detailsActionsBelowInfo {
+                                         TvDetailsSummary(
+                                             meta: meta,
+@@ -4835,6 +4850,17 @@ struct TvDetailsContent: View {
+             }
+             .background(Color.black.ignoresSafeArea())
+             .onExitCommand(perform: handleDetailsBack)
++            // Fork: a series page starts finding sources for its Play/Resume episode once the
++            // page has settled (movies already do this when the page opens).
++            .task(id: playTarget.isPlayable ? (playTarget.episode?.id ?? "") : "") {
++                guard let episode = playTarget.episode, playTarget.isPlayable else { return }
++                try? await Task.sleep(nanoseconds: UInt64(ForkDetailPrefetch.dwellSeconds * 1_000_000_000))
++                guard !Task.isCancelled else { return }
++                NotificationCenter.default.post(
++                    name: ForkDetailPrefetch.episodeNotification,
++                    object: ForkDetailPrefetch.Request(metaId: meta.id, episode: episode)
++                )
++            }
+             // tvOS doesn't re-run default-focus when this content swaps in after
+             // the async load finishes, so focus lands nowhere / off the Play
+             // button. Move it onto Play explicitly once the content appears
+@@ -5595,9 +5621,39 @@ private struct TvDetailsActionButton: View {
+     var onBack: (() -> Void)? = nil
+ 
+     @State private var didTriggerHold = false
++    @AppStorage(ForkNetflixDetails.enabledKey) private var netflixStyle = false
+     private var isFocused: Bool { focus.wrappedValue == tag }
+ 
++    /// Fork: Netflix-style caption under each round icon button.
++    private var netflixCaption: String? {
++        guard netflixStyle, !isPrimary else { return nil }
++        switch tag {
++        case .watchlist: return "My List"
++        case .watched: return systemName == "eye.fill" ? "Watched" : "Mark Watched"
++        case .trailer: return "Trailer"
++        case .rate: return "Rate"
++        case .party: return "Watch Party"
++        case .play: return nil
++        }
++    }
++
+     var body: some View {
++        if let netflixCaption {
++            VStack(spacing: 10) {
++                actionButton
++                Text(netflixCaption)
++                    .font(.system(size: 20, weight: .medium))
++                    .foregroundColor(.white.opacity(isFocused ? 1 : 0.7))
++                    .lineLimit(1)
++                    .fixedSize()
++                    .accessibilityHidden(true)
++            }
++        } else {
++            actionButton
++        }
++    }
++
++    private var actionButton: some View {
+         Button(action: {
+             if didTriggerHold {
+                 didTriggerHold = false
+@@ -5619,9 +5675,12 @@ private struct TvDetailsActionButton: View {
+             }
+             .foregroundColor(foregroundColor)
+             .padding(.horizontal, isPrimary ? 44 : 0)
+-            .frame(minWidth: isPrimary ? 228 : 98, maxWidth: isPrimary ? nil : 98, minHeight: 98)
+-            .frame(height: 98)
+-            .modifier(TvDetailsGlassBackground(filled: isPrimary || isFocused, shape: Capsule()))
++            .frame(minWidth: isPrimary ? (netflixStyle ? 380 : 228) : 98, maxWidth: isPrimary ? nil : 98, minHeight: 98)
++            .frame(height: isPrimary && netflixStyle ? 88 : 98)
++            .modifier(TvNetflixOrGlassBackground(
++                netflix: isPrimary && netflixStyle,
++                filled: isPrimary || isFocused
++            ))
+             .shadow(color: .black.opacity(isFocused ? 0.35 : 0.18), radius: isFocused ? 18 : 7, y: 8)
+         }
+         .buttonStyle(TvPlayActionButtonStyle(onHold: longPressAction, didTriggerHold: $didTriggerHold))
+@@ -5650,6 +5709,46 @@ private struct TvDetailsActionButton: View {
+     }
+ }
+ 
++/// Fork: Netflix's solid white, gently rounded Play button; the usual glass capsule otherwise.
++private struct TvNetflixOrGlassBackground: ViewModifier {
++    let netflix: Bool
++    let filled: Bool
++
++    @ViewBuilder
++    func body(content: Content) -> some View {
++        if netflix {
++            content.background(Color.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
++        } else {
++            content.modifier(TvDetailsGlassBackground(filled: filled, shape: Capsule()))
++        }
++    }
++}
++
++/// Fork: Netflix-style "TOP 10 · #3 in Movies Today" line for titles in today's Top 10 rows.
++private struct TvDetailsTop10Badge: View {
++    let metaId: String
++    @AppStorage(ForkNetflixDetails.enabledKey) private var netflixStyle = false
++    @AppStorage(ForkTrendingRows.enabledKey) private var trendingEnabled = true
++
++    var body: some View {
++        if netflixStyle, trendingEnabled, let entry = ForkTrendingRows.ranks[metaId] {
++            HStack(spacing: 14) {
++                VStack(spacing: -2) {
++                    Text("TOP").font(.system(size: 11, weight: .bold))
++                    Text("10").font(.system(size: 22, weight: .black))
++                }
++                .foregroundColor(.white)
++                .frame(width: 40, height: 40)
++                .background(Color(red: 0.90, green: 0.04, blue: 0.08), in: RoundedRectangle(cornerRadius: 4))
++                Text("#\(entry.rank) in \(entry.list) Today")
++                    .font(.system(size: 30, weight: .bold))
++                    .foregroundColor(.white)
++            }
++            .accessibilityElement(children: .combine)
++        }
++    }
++}
++
+ private struct OptionalAccessibilityHint: ViewModifier {
+     let hint: String?
+ 
+@@ -8823,6 +8922,8 @@ private struct TvStreamPickerOverlay: View {
+     @State private var focusedStreamWarmTask: Task<Void, Never>? = nil
+     @State private var focusedStreamWarmToken: UUID? = nil
+ 
++    /// Fork: link warm-up and dead-link marks for this picker.
++    @ObservedObject private var warmup = ForkStreamWarmup.shared
+ 
+     private let filterAllKey = "filter::all"
+     private let sortKey = "filter::sort"
+@@ -8977,6 +9078,16 @@ private struct TvStreamPickerOverlay: View {
+             // cards before landing on the next one; re-seeding on that blip
+             // snaps focus back to the first stream (the reported bug), so we
+             // debounce and bail when focus has already landed somewhere.
++            // Fork: the stream that keeps focus for half a second gets its link opened ahead
++            // (see ForkStreamWarmup), so playback starts sooner and dead links show up.
++            .task(id: focusedItem ?? "") {
++                guard let focusedItem, !focusedItem.hasPrefix("filter::"),
++                      let stream = displayedStreams.first(where: { $0.id == focusedItem }),
++                      let url = stream.directURL else { return }
++                try? await Task.sleep(nanoseconds: 150_000_000)
++                guard !Task.isCancelled else { return }
++                warmup.warm(url, headers: stream.httpHeaders ?? [:])
++            }
+             .onChange(of: focusedItem) { _, newValue in
+                 if let newValue, newValue != filterAllKey, !didSeedStreamFocus {
+                     didSeedStreamFocus = true
+@@ -9389,6 +9500,20 @@ private struct TvStreamPickerOverlay: View {
+                                     action: { select(stream, player: nil) },
+                                     onSelectPlayer: { player in select(stream, player: player) }
+                                 )
++                                // Fork: a link the warm-up found dead (see ForkStreamWarmup).
++                                .overlay(alignment: .topTrailing) {
++                                    if warmup.dead.contains(stream.directURL ?? "\u{0}") {
++                                        Text("Dead link")
++                                            .font(.system(size: 20, weight: .bold))
++                                            .foregroundColor(.white)
++                                            .padding(.horizontal, 12)
++                                            .padding(.vertical, 4)
++                                            .background(Color.red.opacity(0.85), in: Capsule())
++                                            .padding(12)
++                                            .allowsHitTesting(false)
++                                    }
++                                }
++                                .opacity(warmup.dead.contains(stream.directURL ?? "\u{0}") ? 0.5 : 1)
+                                 .id(stream.id)
+                                 .onAppear {
+                                     if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
+@@ -9863,6 +9988,9 @@ private struct TvStreamCard: View {
+                         )
+                     }
+ 
++                    // Fork: no size pill next to the source name. It counted in binary units (28.2 GB for a
++                    // 30.3 GB file) and showed even with the size badges turned off. The size is in the
++                    // add-on's own text and in the size badge when that is on.
+                     Text(primaryName)
+                         .font(.system(size: 34, weight: .bold))
+                         .foregroundColor(.white)
+@@ -9878,12 +10006,9 @@ private struct TvStreamCard: View {
+                     }
+ 
+                     if let description = stream.description, !description.isEmpty {
+-                        Text(description)
+-                            .font(.system(size: 26, weight: .regular))
+-                            .foregroundColor(.white.opacity(0.62))
+-                            .lineSpacing(5)
+-                            .lineLimit(6)
+-                            .fixedSize(horizontal: false, vertical: true)
++                        // Fork: every line of the add-on's text, laid out in two columns so the
++                        // card stays compact (was cut off after six lines).
++                        ForkStreamCardDetails(description: description)
+                     }
+ 
+                     if showImportedBadges && badgePlacement == .bottom {
+diff --git a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
+index 5d31e180..ed2892dd 100644
+--- a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
++++ b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
+@@ -1028,6 +1028,8 @@ class DetailsViewModel: ObservableObject {
+     func prepareStreams(forId streamId: String, type: String, forceRefresh: Bool = false) {
+         requestedStreamId = streamId
+         streamObserveTask?.cancel()
++        // Fork: fetch the add-on subtitles alongside the sources, so an Infuse hand-off has them.
++        ForkSubtitlePrefetch.shared.prefetch(contentId: streamId, type: type)
+ 
+         if streamDiscoveryMode == .shared {
+             prepareSharedStreams(forId: streamId, type: type, forceRefresh: forceRefresh)

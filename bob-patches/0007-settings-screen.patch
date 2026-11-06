@@ -1,0 +1,229 @@
+diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+index cfc9fc8d..7f0ba8c5 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
+@@ -1148,11 +1148,13 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
+     case crimson = "Crimson"
+     case rust = "Rust"
+     case teal = "Teal"
++    case disney = "Disney" // Fork: Disney+ navy for the Kids look
+ 
+     var id: String { rawValue }
+ 
+     var color: Color {
+         switch self {
++        case .disney: return Color(red: 0.067, green: 0.090, blue: 0.200)
+         case .charcoal: return Color(red: 13.0 / 255.0, green: 13.0 / 255.0, blue: 13.0 / 255.0)
+         case .black: return .black
+         case .midnight: return Color(red: 0.020, green: 0.030, blue: 0.065)
+@@ -1183,6 +1185,7 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
+         case .crimson: return Color(red: 0.64, green: 0.11, blue: 0.14)
+         case .rust: return Color(red: 0.56, green: 0.27, blue: 0.09)
+         case .teal: return Color(red: 0.07, green: 0.42, blue: 0.39)
++        case .disney: return Color(red: 0.16, green: 0.22, blue: 0.46)
+         }
+     }
+ 
+@@ -3362,6 +3365,24 @@ private struct LayoutDiscoverySettingsView: View {
+     @AppStorage(SettingsKey.continueWatchingEpisodeRatings) private var continueWatchingEpisodeRatings = true
+     @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
+     @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
++    // Fork switches (device-local).
++    @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseRows = true
++    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixDetails = false
++    @AppStorage(ForkNetflixUI.cardBadgesKey) private var forkCardBadges = true
++    @AppStorage(ForkDisneyKids.enabledKey) private var forkDisneyStyle = false
++    @AppStorage(SettingsKey.bodyColor) private var forkBodyColor = SettingsBackground.charcoal.rawValue
++    @AppStorage(SettingsKey.theme) private var forkTheme = SettingsAccent.white.rawValue
++    @AppStorage("fork_top10_numerals") private var forkTop10 = true
++    @AppStorage(ForkBillboard.enabledKey) private var forkBillboard = true
++    @AppStorage(ForkTrendingRows.enabledKey) private var forkTrendingRows = true
++    @AppStorage(ForkTrendingRows.kidsKey) private var forkKidsTrending = false
++    @AppStorage(ForkKidsFilter.enabledKey) private var forkKidsLimit = false
++    @AppStorage("fork_cw_episodes_left") private var forkEpisodesLeft = true
++    @AppStorage(ForkDetailPrefetch.enabledKey) private var forkPrefetch = true
++    @AppStorage(ForkStreamWarmup.enabledKey) private var forkWarmup = true
++    @AppStorage("fork_upnext_same_source") private var forkUpNextSameSource = true
++    @AppStorage(InfuseForkSubtitles.sendKey) private var forkInfuseSendSubtitle = false
++    @AppStorage("fork_more_like_this_after_movie") private var forkMoreLikeThis = true
+     @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
+     @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
+     @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
+@@ -3772,6 +3793,124 @@ private struct LayoutDiscoverySettingsView: View {
+                     accentColor: accentColor
+                 )
+ 
++                // Fork
++                SettingsToggleRow(
++                    title: "Netflix Style",
++                    subtitle: "Netflix look: genre line on the billboard, \"Continue Watching for\" your name with play buttons and red progress, and the Netflix details page. Turning it on also sets Modern home, Billboard Trailer, Top 10 rows and numbers, card tags, and Netflix search",
++                    isOn: Binding(
++                        get: { forkNetflixDetails },
++                        set: { on in
++                            forkNetflixDetails = on
++                            guard on else { return }
++                            homeLayout = "Modern"
++                            forkBillboard = true
++                            forkTrendingRows = true
++                            forkTop10 = true
++                            forkCardBadges = true
++                            searchStyle = "Netflix"
++                        }
++                    ),
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Disney+ Style",
++                    subtitle: "For a Kids profile: Disney navy background, blue accents, and Disney, Pixar, DreamWorks, Illumination, Nickelodeon and Cartoon Network tiles above the rows",
++                    isOn: Binding(
++                        get: { forkDisneyStyle },
++                        set: { on in
++                            forkDisneyStyle = on
++                            if on {
++                                forkBodyColor = SettingsBackground.disney.rawValue
++                                forkTheme = SettingsAccent.sky.rawValue
++                            } else {
++                                if forkBodyColor == SettingsBackground.disney.rawValue { forkBodyColor = SettingsBackground.charcoal.rawValue }
++                                if forkTheme == SettingsAccent.sky.rawValue { forkTheme = SettingsAccent.white.rawValue }
++                            }
++                        }
++                    ),
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Card Tags",
++                    subtitle: "Netflix TOP 10 tags and New Episode / New Season / Recently Added tags on posters (from TMDB)",
++                    isOn: $forkCardBadges,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Because You Watched",
++                    subtitle: "Rows of titles like the ones you watched last, under Continue Watching",
++                    isOn: $forkBecauseRows,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Billboard Trailer",
++                    subtitle: "Play the focused title's trailer behind Home, like Netflix, instead of inside the card. Uses the Trailers settings in Playback",
++                    isOn: $forkBillboard,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Top 10 & Trending",
++                    subtitle: "Netflix-style Top 10 Shows Today, Top 10 Movies Today and Trending Now rows from TMDB",
++                    isOn: $forkTrendingRows,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Kids Rating Limit",
++                    subtitle: "This profile only sees titles rated up to PG / TV-PG on Home, in collections, search and More Like This. Unrated titles are hidden too",
++                    isOn: $forkKidsLimit,
++                    accentColor: accentColor
++                )
++                if forkTrendingRows {
++                    SettingsToggleRow(
++                        title: "Kids-Friendly Top 10",
++                        subtitle: "Only family and kids titles in Top 10 and Trending, for this profile",
++                        isOn: $forkKidsTrending,
++                        accentColor: accentColor
++                    )
++                }
++                SettingsToggleRow(
++                    title: "Top 10 Numbers",
++                    subtitle: "Big rank numbers on rows whose name says Top 10",
++                    isOn: $forkTop10,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Episodes Left",
++                    subtitle: "Show how many aired episodes are left on Continue Watching cards",
++                    isOn: $forkEpisodesLeft,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Find Sources Ahead",
++                    subtitle: "Start searching sources when a show page or Continue Watching card is focused",
++                    isOn: $forkPrefetch,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Warm Up Links",
++                    subtitle: "Open the focused source link ahead and mark dead links",
++                    isOn: $forkWarmup,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Up Next on Same Source",
++                    subtitle: "After Infuse, play the next episode from the same kind of source instead of opening the source list",
++                    isOn: $forkUpNextSameSource,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "Send Subtitle to Infuse",
++                    subtitle: "Off: Infuse uses the file's own subtitles. On: also send the best add-on subtitle",
++                    isOn: $forkInfuseSendSubtitle,
++                    accentColor: accentColor
++                )
++                SettingsToggleRow(
++                    title: "More Like This After Movies",
++                    subtitle: "When a movie finishes in Infuse, show recommendations",
++                    isOn: $forkMoreLikeThis,
++                    accentColor: accentColor
++                )
++
+                 SettingsToggleRow(
+                     title: L10n.string(
+                         "tvos_layout_full_dates",
+@@ -5267,7 +5406,7 @@ private struct IntegrationSettingsView: View {
+     }
+ 
+     private var tmdbHasApiKey: Bool {
+-        !tmdbApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
++        !ForkSecrets.tmdbKey(tmdbApiKey).isEmpty // Fork: the built-in key counts
+     }
+ 
+     private var mdbListHasApiKey: Bool {
+@@ -5587,7 +5726,7 @@ private struct TmdbOptionsSheet: View {
+     }
+ 
+     private var tmdbHasApiKey: Bool {
+-        !tmdbApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
++        !ForkSecrets.tmdbKey(tmdbApiKey).isEmpty // Fork: the built-in key counts
+     }
+ 
+     private var tmdbControlsEnabled: Bool {
+@@ -8760,6 +8899,7 @@ private struct PlaybackSettingsView: View {
+     @AppStorage(SettingsKey.autoSkipRecap) private var autoSkipRecap = false
+     @AppStorage(SettingsKey.autoSkipOutro) private var autoSkipOutro = false
+     @AppStorage(SettingsKey.autoSkipMovieCredits) private var autoSkipMovieCredits = false
++    @AppStorage(ForkStillWatching.enabledKey) private var forkStillWatching = true
+     @AppStorage(SettingsKey.streamAutoPlayPreferBingeGroup) private var streamAutoPlayPreferBingeGroup = true
+     @AppStorage(SettingsKey.streamAutoPlayReuseBingeGroup) private var streamAutoPlayReuseBingeGroup = true
+     @AppStorage(SettingsKey.seekPreviewEnabled) private var seekPreviewEnabled = true
+@@ -9267,6 +9407,16 @@ private struct PlaybackSettingsView: View {
+                     accentColor: accentColor
+                 )
+ 
++                if autoPlayNext {
++                    // Fork: Netflix-style check-in.
++                    SettingsToggleRow(
++                        title: "Ask If Still Watching",
++                        subtitle: "After \(ForkStillWatching.episodeLimit) episodes in a row with no remote input, ask before playing the next one.",
++                        isOn: $forkStillWatching,
++                        accentColor: accentColor
++                    )
++                }
++
+                 SettingsToggleRow(
+                     title: L10n.string("tvos_settings_autoplay_trailers", fallback: "Autoplay Trailers"),
+                     subtitle: L10n.string("tvos_settings_start_previews_after_focus_settles", fallback: "Start previews after focus settles"),
+@@ -14347,8 +14497,7 @@ private enum StreamingServicesCollectionTemplate {
+ 
+     static func resolveLogoURLs() async -> [Int: String] {
+         var resolved = fallbackLogoURLs
+-        let key = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
+-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
++        let key = ForkSecrets.tmdbKey(ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey))
+         guard !key.isEmpty else { return resolved }
+ 
+         if let providers = await fetchWatchProviders(apiKey: key) {

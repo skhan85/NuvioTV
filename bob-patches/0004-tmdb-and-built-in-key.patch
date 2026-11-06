@@ -1,0 +1,317 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
+index 171cf70d..2c8f7330 100644
+--- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
++++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
+@@ -192,8 +192,8 @@ enum TmdbDetailsService {
+     ) async -> T {
+         if requestContext != nil { return await operation() }
+         let store = defaults ?? ProfileSettings.current
+-        let rawKey = store.string(forKey: SettingsKey.tmdbApiKey)?
+-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
++        // Fork: the snapshot also falls back to the built-in TMDB key.
++        let rawKey = ForkSecrets.tmdbKey(store.string(forKey: SettingsKey.tmdbApiKey))
+         let keys = [
+             SettingsKey.tmdbUseTrailers, SettingsKey.tmdbUseArtwork,
+             SettingsKey.tmdbUseBasicInfo, SettingsKey.tmdbUseDetails,
+@@ -207,7 +207,8 @@ enum TmdbDetailsService {
+         })
+         let context = RequestContext(
+             apiKey: rawKey.isEmpty ? nil : rawKey,
+-            isEnabled: (store.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? false,
++            // Fork: TMDB is on by default when a built-in key exists.
++            isEnabled: (store.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? !ForkSecrets.tmdbApiKey.isEmpty,
+             language: TmdbMetadataLanguage.resolvedLanguage(in: store),
+             flags: flags
+         )
+@@ -247,14 +248,16 @@ enum TmdbDetailsService {
+     static var currentApiKey: String? { apiKey }
+     private static var apiKey: String? {
+         if let requestContext { return requestContext.apiKey }
+-        let key = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
+-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
++        // Fork: falls back to the TMDB key built into this fork (repository secret), so no key
++        // has to be typed on the remote.
++        let key = ForkSecrets.tmdbKey(ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey))
+         return key.isEmpty ? nil : key
+     }
+ 
+     private static var isEnabled: Bool {
+         if let requestContext { return requestContext.isEnabled }
+-        return (ProfileSettings.current.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? false
++        // Fork: TMDB is on by default when a built-in key exists.
++        return (ProfileSettings.current.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? !ForkSecrets.tmdbApiKey.isEmpty
+     }
+ 
+     static var preferredLanguage: String {
+@@ -506,6 +509,260 @@ enum TmdbDetailsService {
+         )
+     }
+ 
++    /// Fork: TMDB's trending list for `mediaType` ("movie", "tv" or "all") over `window`
++    /// ("day" or "week"), in TMDB's order, people left out. Empty without a key or on failure.
++    static func fetchTrending(mediaType: String, window: String, limit: Int = 20) async -> [RelatedTitle] {
++        if requestContext == nil {
++            return await withRequestContext {
++                await fetchTrending(mediaType: mediaType, window: window, limit: limit)
++            }
++        }
++        guard let apiKey else { return [] }
++        var components = URLComponents(
++            url: apiBase.appendingPathComponent("trending/\(mediaType)/\(window)"),
++            resolvingAgainstBaseURL: false
++        )!
++        components.queryItems = [
++            URLQueryItem(name: "api_key", value: apiKey),
++            URLQueryItem(name: "language", value: preferredLanguage)
++        ]
++        guard let url = components.url,
++              let (data, response) = try? await data(for: url),
++              let http = response as? HTTPURLResponse,
++              (200...299).contains(http.statusCode),
++              let decoded = try? JSONDecoder().decode(TmdbPagedResults.self, from: data) else {
++            return []
++        }
++        let defaultType = mediaType == "tv" ? "series" : "movie"
++        return decoded.results
++            .filter { item in
++                let type = item.mediaType?.lowercased()
++                return type == nil || type == "movie" || type == "tv"
++            }
++            .prefix(limit)
++            .compactMap { mapDiscoverItemFast($0, defaultType: defaultType) }
++    }
++
++    /// Fork: kid-friendly stand-in for `fetchTrending` on a kids profile: TMDB's most popular
++    /// Family / Animation films rated PG or lower in the US, or Kids / Family shows
++    /// (crime, drama and war-politics shows left out). `mediaType` is "movie" or "tv".
++    static func fetchKidsPopular(mediaType: String, limit: Int = 20) async -> [RelatedTitle] {
++        if requestContext == nil {
++            return await withRequestContext {
++                await fetchKidsPopular(mediaType: mediaType, limit: limit)
++            }
++        }
++        guard let apiKey else { return [] }
++        var components = URLComponents(
++            url: apiBase.appendingPathComponent("discover/\(mediaType)"),
++            resolvingAgainstBaseURL: false
++        )!
++        var items = [
++            URLQueryItem(name: "api_key", value: apiKey),
++            URLQueryItem(name: "language", value: preferredLanguage),
++            URLQueryItem(name: "sort_by", value: "popularity.desc"),
++            URLQueryItem(name: "include_adult", value: "false")
++        ]
++        if mediaType == "movie" {
++            items += [
++                URLQueryItem(name: "certification_country", value: "US"),
++                URLQueryItem(name: "certification.lte", value: "PG"),
++                URLQueryItem(name: "with_genres", value: "10751|16"),
++                URLQueryItem(name: "vote_count.gte", value: "50")
++            ]
++        } else {
++            items += [
++                URLQueryItem(name: "with_genres", value: "10762|10751"),
++                URLQueryItem(name: "without_genres", value: "80|18|10768"),
++                URLQueryItem(name: "vote_count.gte", value: "20")
++            ]
++        }
++        components.queryItems = items
++        guard let url = components.url,
++              let (data, response) = try? await data(for: url),
++              let http = response as? HTTPURLResponse,
++              (200...299).contains(http.statusCode),
++              let decoded = try? JSONDecoder().decode(TmdbPagedResults.self, from: data) else {
++            return []
++        }
++        let defaultType = mediaType == "tv" ? "series" : "movie"
++        return decoded.results
++            .prefix(limit)
++            .compactMap { mapDiscoverItemFast($0, defaultType: defaultType) }
++    }
++
++    /// Fork: a studio's or TV network's logo path on TMDB (for the Kids brand tiles).
++    static func fetchBrandLogoPath(tmdbId: Int, isNetwork: Bool) async -> String? {
++        if requestContext == nil {
++            return await withRequestContext { await fetchBrandLogoPath(tmdbId: tmdbId, isNetwork: isNetwork) }
++        }
++        guard let apiKey else { return nil }
++        struct Brand: Decodable { let logo_path: String? }
++        var components = URLComponents(
++            url: apiBase.appendingPathComponent("\(isNetwork ? "network" : "company")/\(tmdbId)"),
++            resolvingAgainstBaseURL: false
++        )!
++        components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
++        guard let url = components.url,
++              let (body, response) = try? await data(for: url),
++              let http = response as? HTTPURLResponse,
++              (200...299).contains(http.statusCode),
++              let brand = try? JSONDecoder().decode(Brand.self, from: body),
++              let path = brand.logo_path, !path.isEmpty else {
++            return nil
++        }
++        return path
++    }
++
++    /// Fork: Netflix card tag for a title. Series: "New Episode" / "New Season" when an
++    /// episode aired in the last 10 days (or a new season starts within the week), with
++    /// "Watch Now" or the next air day beside it. Movies: "Recently Added" when the digital
++    /// release was in the last 30 days. nil when TMDB can't be reached.
++    static func fetchFreshness(for meta: NuvioMeta) async -> (primary: String?, secondary: String?)? {
++        if requestContext == nil {
++            return await withRequestContext { await fetchFreshness(for: meta) }
++        }
++        guard let apiKey, let resolved = await resolveTmdbId(for: meta) else { return nil }
++
++        var calendar = Calendar(identifier: .gregorian)
++        calendar.timeZone = .current
++        let today = calendar.startOfDay(for: Date())
++        let dayFormatter = DateFormatter()
++        dayFormatter.calendar = calendar
++        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
++        dayFormatter.timeZone = .current
++        dayFormatter.dateFormat = "yyyy-MM-dd"
++        func day(_ raw: String?) -> Date? {
++            guard let raw, raw.count >= 10 else { return nil }
++            return dayFormatter.date(from: String(raw.prefix(10)))
++        }
++        func daysFromToday(_ date: Date) -> Int {
++            calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: date)).day ?? 0
++        }
++
++        if resolved.mediaType == "tv" {
++            struct Episode: Decodable {
++                let air_date: String?
++                let episode_number: Int?
++                let season_number: Int?
++            }
++            struct Show: Decodable {
++                let last_episode_to_air: Episode?
++                let next_episode_to_air: Episode?
++            }
++            var components = URLComponents(
++                url: apiBase.appendingPathComponent("tv/\(resolved.id)"),
++                resolvingAgainstBaseURL: false
++            )!
++            components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
++            guard let url = components.url,
++                  let (body, response) = try? await data(for: url),
++                  let http = response as? HTTPURLResponse,
++                  (200...299).contains(http.statusCode),
++                  let show = try? JSONDecoder().decode(Show.self, from: body) else {
++                return nil
++            }
++            var primary: String?
++            var secondary: String?
++            if let last = show.last_episode_to_air, let aired = day(last.air_date) {
++                let daysAgo = -daysFromToday(aired)
++                if daysAgo >= 0 && daysAgo <= 10 {
++                    primary = (last.episode_number == 1 && (last.season_number ?? 1) > 1) ? "New Season" : "New Episode"
++                }
++            }
++            if let next = show.next_episode_to_air, let airs = day(next.air_date) {
++                let daysAhead = daysFromToday(airs)
++                if daysAhead >= 0 && daysAhead <= 6 {
++                    if primary == nil, next.episode_number == 1, (next.season_number ?? 1) > 1 {
++                        primary = "New Season"
++                    }
++                    if primary != nil {
++                        let weekday = DateFormatter()
++                        weekday.locale = Locale.current
++                        weekday.dateFormat = "EEEE"
++                        secondary = daysAhead == 0 ? "Today" : weekday.string(from: airs)
++                    }
++                }
++            }
++            if primary != nil && secondary == nil { secondary = "Watch Now" }
++            return (primary, secondary)
++        } else {
++            struct ReleaseDate: Decodable {
++                let type: Int?
++                let release_date: String?
++            }
++            struct Country: Decodable {
++                let release_dates: [ReleaseDate]
++            }
++            struct Releases: Decodable {
++                let results: [Country]
++            }
++            var components = URLComponents(
++                url: apiBase.appendingPathComponent("movie/\(resolved.id)/release_dates"),
++                resolvingAgainstBaseURL: false
++            )!
++            components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
++            guard let url = components.url,
++                  let (body, response) = try? await data(for: url),
++                  let http = response as? HTTPURLResponse,
++                  (200...299).contains(http.statusCode),
++                  let releases = try? JSONDecoder().decode(Releases.self, from: body) else {
++                return nil
++            }
++            // Digital (4) or physical (5): when it became watchable at home.
++            let homeRelease = releases.results
++                .flatMap(\.release_dates)
++                .filter { ($0.type ?? 0) >= 4 }
++                .compactMap { day($0.release_date) }
++                .min()
++            if let homeRelease {
++                let daysAgo = -daysFromToday(homeRelease)
++                if daysAgo >= 0 && daysAgo <= 30 { return ("Recently Added", nil) }
++            }
++            return (nil, nil)
++        }
++    }
++
++    /// Fork: every TMDB release of a film as (type, "yyyy-MM-dd…"), all countries — 1 premiere,
++    /// 2 limited theatrical, 3 theatrical, 4 digital, 5 physical, 6 TV. nil when the film can't
++    /// be matched or TMDB can't be reached (see `CinemaOnlyReleases`).
++    static func fetchMovieReleaseDates(for meta: NuvioMeta) async -> [(type: Int, date: String)]? {
++        if requestContext == nil {
++            return await withRequestContext { await fetchMovieReleaseDates(for: meta) }
++        }
++        guard let apiKey, let resolved = await resolveTmdbId(for: meta),
++              resolved.mediaType == "movie" else { return nil }
++        struct ReleaseDate: Decodable {
++            let type: Int?
++            let release_date: String?
++        }
++        struct Country: Decodable {
++            let release_dates: [ReleaseDate]
++        }
++        struct Releases: Decodable {
++            let results: [Country]
++        }
++        var components = URLComponents(
++            url: apiBase.appendingPathComponent("movie/\(resolved.id)/release_dates"),
++            resolvingAgainstBaseURL: false
++        )!
++        components.queryItems = [URLQueryItem(name: "api_key", value: apiKey)]
++        guard let url = components.url,
++              let (body, response) = try? await data(for: url),
++              let http = response as? HTTPURLResponse,
++              (200...299).contains(http.statusCode),
++              let releases = try? JSONDecoder().decode(Releases.self, from: body) else {
++            return nil
++        }
++        return releases.results
++            .flatMap(\.release_dates)
++            .compactMap { release in
++                guard let type = release.type,
++                      let date = release.release_date, date.count >= 10 else { return nil }
++                return (type: type, date: date)
++            }
++    }
++
+     /// Fetches full season and episode listings from TMDB, enabling unreleased/TBD episodes
+     /// and accurate episode thumbnails/titles for ongoing and announced TV series.
+     static func fetchEpisodes(for meta: NuvioMeta) async -> [NuvioVideo]? {
+diff --git a/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
+new file mode 100644
+index 00000000..4e8c1b71
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
+@@ -0,0 +1,5 @@
++// Fork: build-time values. The release workflow rewrites `tmdbApiKey` from the repository secret;
++// the checked-in copy is empty so the project builds without it.
++enum ForkSecrets {
++    static let tmdbApiKey = ""
++}

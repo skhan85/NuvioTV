@@ -899,540 +899,78 @@ index 00000000..ccdd468e
 +        }
 +    }
 +}
-diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index ef7d9a28..4132d8ff 100644
---- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-+++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -470,6 +470,10 @@ struct ContentView: View {
-     @State private var reopenStreamPickerResumePosition: Double?
-     /// Episode to select when Details opens from the calendar.
-     @State private var detailsFocusEpisode: DetailsEpisodeFocus?
-+    /// Fork: the next episode offered after Infuse handed back an episode at its end.
-+    @State private var infuseUpNext: InfuseUpNext.Offer?
-+    @State private var infuseUpNextTask: Task<Void, Never>?
-+    @State private var infuseMoreLikeThis: InfuseMoreLikeThis.Offer?
-     /// Title whose liquid-glass quick-actions menu is showing (long-press on a
-     /// card). Presented as an overlay over the tab view, like Details/Player.
-     @State private var cardMenuMeta: NuvioMeta?
-@@ -529,6 +533,42 @@ struct ContentView: View {
-         ZStack {
-             ProfileScopedRootBackground()
- 
-+            // Fork: Up Next after Infuse (see `offerInfuseUpNext`).
-+            Color.clear
-+                .frame(width: 0, height: 0)
-+                .alert(infuseUpNext?.title ?? "Up Next",
-+                       isPresented: Binding(get: { infuseUpNext != nil },
-+                                            set: { if !$0 { infuseUpNext = nil } })) {
-+                    Button("Play Now") {
-+                        if let offer = infuseUpNext { startInfuseUpNext(offer) }
+diff --git a/tvosApp/NuvioTV/Sources/Fork/StillWatchingFork.swift b/tvosApp/NuvioTV/Sources/Fork/StillWatchingFork.swift
+new file mode 100644
+index 00000000..1603ec76
+--- /dev/null
++++ b/tvosApp/NuvioTV/Sources/Fork/StillWatchingFork.swift
+@@ -0,0 +1,66 @@
++import SwiftUI
++
++// MARK: - Fork: "Are you still watching?" (Netflix-style)
++
++/// After `episodeLimit` episodes auto-play in a row with no remote input, the player asks
++/// before starting the next one instead of playing on all night. Per profile, on by default.
++enum ForkStillWatching {
++    static let enabledKey = "fork_still_watching"
++    static let episodeLimit = 3
++
++    static var isEnabled: Bool {
++        ProfileSettings.current.object(forKey: enabledKey) as? Bool ?? true
++    }
++}
++
++struct ForkStillWatchingPrompt: View {
++    let title: String
++    let onContinue: () -> Void
++    let onExit: () -> Void
++
++    private enum Choice: Hashable { case keepWatching, exit }
++    @FocusState private var focused: Choice?
++
++    var body: some View {
++        ZStack {
++            Color.black.opacity(0.82).ignoresSafeArea()
++
++            VStack(alignment: .leading, spacing: 20) {
++                Text(title.isEmpty ? "Are you still watching?" : "Are you still watching \(title)?")
++                    .font(.system(size: 52, weight: .bold))
++                    .foregroundColor(.white)
++                    .lineLimit(2)
++                    .fixedSize(horizontal: false, vertical: true)
++
++                Text("Playback paused so episodes don't keep playing while no one's watching.")
++                    .font(.system(size: 26))
++                    .foregroundColor(.white.opacity(0.65))
++
++                VStack(alignment: .leading, spacing: 18) {
++                    Button(action: onContinue) {
++                        Label("Continue Watching", systemImage: "play.fill")
++                            .font(.system(size: 28, weight: .semibold))
++                            .frame(width: 520, alignment: .leading)
 +                    }
-+                    Button("Cancel", role: .cancel) {
-+                        infuseUpNextTask?.cancel()
-+                        infuseUpNextTask = nil
-+                        infuseUpNext = nil
++                    .focused($focused, equals: .keepWatching)
++
++                    Button(action: onExit) {
++                        Label("Exit", systemImage: "xmark")
++                            .font(.system(size: 28, weight: .semibold))
++                            .frame(width: 520, alignment: .leading)
 +                    }
-+                } message: {
-+                    Text("Starts automatically in \(InfuseUpNext.countdownSeconds) seconds.")
++                    .focused($focused, equals: .exit)
 +                }
-+
-+            // Fork: More like this after an Infuse movie (see `offerInfuseMoreLikeThis`).
-+            Color.clear
-+                .frame(width: 0, height: 0)
-+                .fullScreenCover(item: $infuseMoreLikeThis) { offer in
-+                    InfuseMoreLikeThisView(
-+                        offer: offer,
-+                        onOpen: { title in
-+                            infuseMoreLikeThis = nil
-+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-+                                withAnimation(.easeInOut(duration: 0.28)) {
-+                                    openDetailsRoot(id: title.id, type: title.type)
-+                                }
-+                            }
-+                        },
-+                        onClose: { infuseMoreLikeThis = nil }
-+                    )
-+                }
-+
-             switch activeScreen {
-             case .login:
-                 // `.login` is also the value this state starts at, before
-@@ -1274,7 +1314,7 @@ struct ContentView: View {
-         let callbackDuration = callback.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
-         let duration = callbackDuration
-             ?? session.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
--        let progress = callback.progress ?? callback.position.flatMap { position in
-+        let reportedProgress = callback.progress ?? callback.position.flatMap { position in
-             guard let duration, position.isFinite, position >= 0 else { return nil }
-             let normalizedProgress = position / duration
-             guard callbackDuration != nil,
-@@ -1284,6 +1324,20 @@ struct ContentView: View {
-             }
-             return 1
-         }
-+        // Fork: a title stopped at its end (90% in, or the last 5 minutes) counts as 100%. Infuse
-+        // reports a position against the metadata runtime, so a full watch often came back as
-+        // more than 100% and was dropped below: not marked watched, nothing synced, and other
-+        // devices kept the last position.
-+        let finished = InfuseUpNext.reachedEnd(progress: reportedProgress, position: callback.position, duration: duration)
-+        let progress = finished ? 1.0 : reportedProgress
-+        // Fork: Up Next / More like this after a finished title.
-+        if finished {
-+            if session.meta.isSeries, let season = session.season, let episode = session.episode {
-+                offerInfuseUpNext(meta: session.meta, season: season, episode: episode)
-+            } else if !session.meta.isSeries {
-+                offerInfuseMoreLikeThis(meta: session.meta)
++                .padding(.top, 24)
++                .focusSection()
 +            }
++            .frame(maxWidth: 1200, alignment: .leading)
++            .padding(.horizontal, 120)
++            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
 +        }
-         guard let progress, progress.isFinite, (0...1).contains(progress) else { return }
-         // External callbacks can underreport EOF position; allow up to two minutes of grace,
-         // with an 80% floor, while built-in playback keeps its stream-timed threshold.
-@@ -1362,6 +1416,10 @@ struct ContentView: View {
-             return
-         }
- 
-+        // Fork: upload the position Infuse handed back right away (not on the next heartbeat), so
-+        // the iPhone and other devices see it as soon as Infuse closes.
-+        defer { Task { @MainActor in _ = await NuvioSyncManager.current?.pushWatchProgressNow() } }
-+
-         if progress >= callbackCompletionCutoff(WatchProgressLedger.completionFraction) {
-             if let duration {
-                 ContinueWatchingStore.markPlaybackCompleted(
-@@ -1392,6 +1450,129 @@ struct ContentView: View {
-         }
-     }
- 
-+    /// Fork: finds the next aired episode and offers it; it opens by itself after the countdown.
-+    private func offerInfuseMoreLikeThis(meta: NuvioMeta) {
-+        guard InfuseMoreLikeThis.enabled else { return }
-+        Task { @MainActor in
-+            let titles = await TmdbDetailsService.fetchMoreLikeThis(for: meta, limit: 16)
-+                .filter { $0.id != meta.id }
-+            guard !titles.isEmpty else { return }
-+            // Let Home settle after Infuse hands back before the row appears.
-+            try? await Task.sleep(nanoseconds: 700_000_000)
-+            infuseMoreLikeThis = InfuseMoreLikeThis.Offer(finished: meta, titles: titles)
++        .defaultFocus($focused, .keepWatching)
++        .onAppear {
++            DispatchQueue.main.async { focused = .keepWatching }
 +        }
 +    }
-+
-+    private func offerInfuseUpNext(meta: NuvioMeta, season: Int, episode: Int) {
-+        infuseUpNextTask?.cancel()
-+        infuseUpNextTask = Task { @MainActor in
-+            var videos = meta.videos ?? []
-+            if InfuseUpNext.nextEpisode(in: videos, season: season, episode: episode) == nil,
-+               let full = try? await CinemetaCatalogRepository().getMetadata(id: meta.id, type: meta.type) {
-+                videos = full.videos ?? []
-+            }
-+            guard !Task.isCancelled,
-+                  let next = InfuseUpNext.nextEpisode(in: videos, season: season, episode: episode) else { return }
-+            // Let Home settle after Infuse hands back before the prompt appears.
-+            try? await Task.sleep(nanoseconds: 700_000_000)
-+            guard !Task.isCancelled else { return }
-+            let offer = InfuseUpNext.Offer(meta: meta, video: next)
-+            infuseUpNext = offer
-+            try? await Task.sleep(nanoseconds: UInt64(InfuseUpNext.countdownSeconds) * 1_000_000_000)
-+            guard !Task.isCancelled, infuseUpNext?.id == offer.id else { return }
-+            startInfuseUpNext(offer)
-+        }
-+    }
-+
-+    /// Plays the offered episode on the same kind of source as the last one (release group /
-+    /// binge group, quality, debrid), the way the iPhone fork's Up Next does. If no source is
-+    /// found automatically, or `fork_upnext_same_source` is off, its source list opens instead.
-+    private func startInfuseUpNext(_ offer: InfuseUpNext.Offer) {
-+        infuseUpNextTask?.cancel()
-+        infuseUpNextTask = nil
-+        infuseUpNext = nil
-+        guard UserDefaults.standard.object(forKey: InfuseUpNext.sameSourceKey) as? Bool ?? true else {
-+            openInfuseUpNextPicker(offer)
-+            return
-+        }
-+        let item = ContinueWatchingItem(
-+            meta: offer.meta,
-+            streamUrl: "",
-+            position: 1,
-+            duration: 120,
-+            lastWatchedAt: Date(),
-+            season: offer.video.season,
-+            episode: offer.video.episode,
-+            released: offer.video.released,
-+            isUpNext: true
-+        )
-+        let profileId = profileViewModel.activeProfile?.id
-+        resolvingContinueWatchingItem = item
-+        continueWatchingLoadingMessage = L10n.string("player_searching_sources", fallback: "Searching sources…")
-+        let startupToken = PlaybackStartupTiming.start(title: offer.meta.name)
-+        continueWatchingStartupBenchmarkToken = startupToken
-+        isResolvingContinueWatchingStream = true
-+        continueWatchingPlaybackTask = Task {
-+            let prepared = await Self.resolveNextEpisodeStream(
-+                episode: offer.video,
-+                seriesMeta: offer.meta,
-+                profileId: profileId,
-+                startupToken: startupToken
-+            )
-+            guard !Task.isCancelled, PlaybackStartupTiming.isActive(token: startupToken) else {
-+                PlaybackStartupTiming.cancel(token: startupToken)
-+                if continueWatchingStartupBenchmarkToken == startupToken { continueWatchingStartupBenchmarkToken = nil }
-+                return
-+            }
-+            continueWatchingPlaybackTask = nil
-+            if let prepared {
-+                continueWatchingLoadingMessage = L10n.string("player_loading_building", fallback: "Building player…")
-+                playbackEpisodes = offer.meta.videos ?? []
-+                playbackCurrentEpisode = offer.video
-+                presentPlayback(
-+                    url: prepared.url,
-+                    meta: offer.meta,
-+                    subtitle: prepared.subtitleLine,
-+                    externalSubtitles: prepared.subtitles,
-+                    resumeFrom: nil,
-+                    httpHeaders: prepared.httpHeaders,
-+                    filename: prepared.filename,
-+                    videoSize: prepared.videoSize,
-+                    videoHash: prepared.videoHash,
-+                    startupBenchmarkToken: startupToken
-+                )
-+                if continueWatchingStartupBenchmarkToken == startupToken { continueWatchingStartupBenchmarkToken = nil }
-+                isResolvingContinueWatchingStream = false
-+                resolvingContinueWatchingItem = nil
-+            } else {
-+                PlaybackStartupTiming.cancel(token: startupToken)
-+                if continueWatchingStartupBenchmarkToken == startupToken { continueWatchingStartupBenchmarkToken = nil }
-+                isResolvingContinueWatchingStream = false
-+                resolvingContinueWatchingItem = nil
-+                openInfuseUpNextPicker(offer)
-+            }
-+        }
-+    }
-+
-+    /// Opens the offered episode's sources, the same way a Continue Watching card does.
-+    private func openInfuseUpNextPicker(_ offer: InfuseUpNext.Offer) {
-+        if case .details(let id, _) = activeScreen, id == offer.meta.id {
-+            // Same title already open: leave Details first so it reopens on the new episode.
-+            activeScreen = .main
-+            DispatchQueue.main.async {
-+                reopenStreamPickerOnDetails = true
-+                reopenStreamPickerEpisode = offer.video
-+                openDetailsRoot(id: offer.meta.id, type: offer.meta.type)
-+            }
-+            return
-+        }
-+        withAnimation(.easeInOut(duration: 0.28)) {
-+            reopenStreamPickerOnDetails = true
-+            reopenStreamPickerEpisode = offer.video
-+            openDetailsRoot(id: offer.meta.id, type: offer.meta.type)
-+        }
-+    }
-+
-     /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
-     private func handleStremioInstallDeepLink(_ url: URL) {
-         switch activeScreen {
-@@ -1843,6 +2024,15 @@ struct ContentView: View {
-         }
-     }
- 
-+    /// Fork: the release file name when it looks real and, for an episode, carries its SxxEyy.
-+    static func releaseFilename(_ raw: String, matchesSeason season: Int?, episode: Int?) -> String? {
-+        let name = (raw.components(separatedBy: "/").last ?? raw).trimmingCharacters(in: .whitespacesAndNewlines)
-+        guard name.count >= 8, name.contains(".") else { return nil }
-+        guard let season, let episode else { return name }
-+        let pattern = "(?i)S0*\(season)[ ._-]?E0*\(episode)(\\D|$)"
-+        return name.range(of: pattern, options: .regularExpression) != nil ? name : nil
-+    }
-+
-     private func presentPlayback(
-         url: URL,
-         meta: NuvioMeta,
-@@ -1859,7 +2049,8 @@ struct ContentView: View {
-         startupBenchmarkToken: UUID? = nil,
-         sourceID: String? = nil,
-         collectionContext: CollectionPlaybackContext? = nil,
--        isActionPlaybackSession: Bool = false
-+        isActionPlaybackSession: Bool = false,
-+        forkSubtitlesReady: Bool = false
-     ) {
-         // Usenet streams arrive as nuvio-usenet:// URLs: start the local
-         // engine first, then play its 127.0.0.1 URL like any other stream.
-@@ -1901,13 +2092,47 @@ struct ContentView: View {
-         let store = ProfileSettings.store(for: profileViewModel.activeProfile?.id)
-         let defaultPlayer = ExternalPlayer.from(store.string(forKey: SettingsKey.externalPlayer))
-         let player = customPlayer ?? defaultPlayer
--        let forwardSubtitles = (store.object(forKey: SettingsKey.externalPlayerForwardSubtitles) as? Bool) ?? true
-+        // Fork: Infuse gets no subtitle from us unless "Send Subtitle to Infuse" is on, so it uses the file's
-+        // own tracks (in sync) or its own downloads.
-+        let forwardSubtitles = ((store.object(forKey: SettingsKey.externalPlayerForwardSubtitles) as? Bool) ?? true)
-+            && (player != .infuse || InfuseForkSubtitles.sendEnabled)
-+
-+        // Fork: Infuse also gets the best add-on subtitle (OpenSubtitles and the like) through
-+        // Kuiper's relay, synced to this video. The add-on results were usually fetched when the
-+        // sources were; if not, this waits at most 0.8 s for them, then hands off.
-+        if player == .infuse, !isTrailer, forwardSubtitles, !forkSubtitlesReady,
-+           url.scheme?.lowercased() != "smb", !url.isFileURL {
-+            let numbers = Self.episodeNumbers(fromSubtitle: subtitle)
-+            let season = playbackCurrentEpisode?.season ?? numbers?.season
-+            let episode = playbackCurrentEpisode?.episode ?? numbers?.episode
-+            let contentId = playbackCurrentEpisode.map { meta.canonicalEpisodeStreamId(for: $0) }
-+                ?? ForkSubtitlePrefetch.contentId(meta: meta, season: season, episode: episode)
-+            Task { @MainActor in
-+                let addon = await ForkSubtitlePrefetch.shared.subtitles(
-+                    contentId: contentId, type: meta.isSeries ? "series" : "movie", wait: 0.8)
-+                let subtitles = InfuseForkSubtitles.subtitles(
-+                    streamSubtitles: externalSubtitles, addonSubtitles: addon, videoURL: url.absoluteString)
-+                Task.detached { await InfuseForkSubtitles.warmUpSync(subtitles.map(\.url)) }
-+                presentPlayback(
-+                    url: url, meta: meta, subtitle: subtitle, externalSubtitles: subtitles,
-+                    resumeFrom: resumeFrom, httpHeaders: httpHeaders, origin: origin,
-+                    customPlayer: customPlayer, cacheFileIdentity: cacheFileIdentity, filename: filename,
-+                    videoSize: videoSize, videoHash: videoHash, startupBenchmarkToken: startupBenchmarkToken,
-+                    sourceID: sourceID, collectionContext: provenance,
-+                    isActionPlaybackSession: isActionPlaybackSession, forkSubtitlesReady: true
-+                )
-+            }
-+            return
-+        }
-         // Put the best complete (non-forced) preferred-language subtitle first: players
-         // that read only the first `sub=` then get the full dialogue track, not a forced one.
-         let subtitleURLs = forwardSubtitles
-             ? SubtitleLanguagePreferences.bestCompleteFirst(
-                 externalSubtitles,
--                preferredLanguages: SubtitleLanguagePreferences.orderedFromDefaults(defaults: store)
-+                // Fork: with "System", the Apple TV's language (as the Infuse hand-off picks it).
-+                preferredLanguages: player == .infuse
-+                    ? InfuseForkSubtitles.preferredLanguages()
-+                    : SubtitleLanguagePreferences.orderedFromDefaults(defaults: store)
-               ).compactMap { URL(string: $0.url) }
-             : []
- 
-@@ -1954,7 +2179,13 @@ struct ContentView: View {
-         // Hand off to the external app only when it is actually installed
-         // (`canOpenURL` needs its scheme in LSApplicationQueriesSchemes); if it
-         // isn't, fall through to the built-in player instead of a dead launch.
--        let mediaFilename = filename ?? ExternalPlayer.mediaFilename(
-+        // Fork: only hand Infuse the release file name when it describes this episode; a season
-+        // pack's file name (wrong SxxEyy) would make Infuse label and search the wrong episode.
-+        let releaseFilename = filename.flatMap { name in
-+            Self.releaseFilename(name, matchesSeason: meta.isSeries ? numbers?.season : nil,
-+                                 episode: meta.isSeries ? numbers?.episode : nil)
-+        }
-+        let mediaFilename = releaseFilename ?? ExternalPlayer.mediaFilename(
-             meta: meta,
-             season: meta.isSeries ? numbers?.season : nil,
-             episode: meta.isSeries ? numbers?.episode : nil,
-@@ -1976,6 +2207,22 @@ struct ContentView: View {
-             PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
-             if let externalSession {
-                 ExternalPlaybackSessionStore.save(externalSession)
-+                // Fork (Trakt bridge on the home Pi): stamp this title on the active profile in
-+                // Nuvio Sync before Infuse starts, so the bridge saves Infuse's positions to the
-+                // profile that pressed Play rather than the default one. The resume point is kept.
-+                if player == .infuse,
-+                   let duration = externalSession.duration ?? ContinueWatchingStore.item(for: meta.id)?.duration,
-+                   duration >= 60 {
-+                    ContinueWatchingStore.save(
-+                        meta: meta,
-+                        streamUrl: url.absoluteString,
-+                        position: max(resumeFrom ?? 0, 2),
-+                        duration: duration,
-+                        season: externalSession.season,
-+                        episode: externalSession.episode
-+                    )
-+                    Task { @MainActor in _ = await NuvioSyncManager.current?.pushWatchProgressNow() }
-+                }
-             }
-             UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
-             return
-@@ -4900,6 +5147,7 @@ enum ProfileDisplayName {
- 
- private final class TVHomeFocusWork {
-     struct VisibleSectionsSignature: Equatable {
-+        let forkRevision: Int
-         let cwVisible: Bool
-         let cwCount: Int
-         let cwFirstId: String?
-@@ -5225,6 +5473,10 @@ struct TVHomeView: View {
-     @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
-     @State private var appliedContinueWatchingSort: String?
-     @State private var continueWatching: [ContinueWatchingItem] = []
-+    /// Fork: "Because you watched …" rows (see `ForkBecauseYouWatched`).
-+    @State private var forkBecauseSections: [TVHomeSection] = []
-+    @State private var forkBecauseRevision = 0
-+    @AppStorage(ForkBecauseYouWatched.enabledKey) private var forkBecauseEnabled = true
-     @State private var upcomingItems: [ContinueWatchingItem] = []
-     @State private var calendarToday = CalendarHomeToday()
-     /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -5303,6 +5555,26 @@ struct TVHomeView: View {
-     // views, same modifiers, same order, just a `some View` boundary in the middle.
-     @ViewBuilder private var homeBodyFirstHalf: some View {
-         ZStack(alignment: .topLeading) {
-+            // Fork: rebuild the "Because you watched" rows when the last-watched titles change.
-+            Color.clear
-+                .frame(width: 0, height: 0)
-+                .task(id: forkBecauseEnabled ? ForkBecauseYouWatched.seedKey(continueWatching) : "off") {
-+                    guard forkBecauseEnabled else { return }
-+                    let sections = await ForkBecauseYouWatched.sections(seeds: continueWatching)
-+                    guard !Task.isCancelled else { return }
-+                    forkBecauseSections = sections
-+                    forkBecauseRevision &+= 1
-+                }
-+            // Fork: a Continue Watching card that keeps focus for a second starts finding its
-+            // sources (and subtitles), so pressing it opens a full picker.
-+            Color.clear
-+                .frame(width: 0, height: 0)
-+                .task(id: forkFocusedContinueItem.map { "\($0.meta.id)|\($0.season ?? 0)|\($0.episode ?? 0)" } ?? "") {
-+                    guard let item = forkFocusedContinueItem else { return }
-+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-+                    guard !Task.isCancelled else { return }
-+                    ForkDetailPrefetch.prefetch(item: item)
-+                }
-             // Keep TVHomeView mounted in TabView across tab switches so that
-             // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
-             // 1. Bottom Layer: Crossfading Backdrop
-@@ -7753,6 +8025,7 @@ struct TVHomeView: View {
- 
-     private var visibleSections: [TVHomeSection] {
-         let signature = TVHomeFocusWork.VisibleSectionsSignature(
-+            forkRevision: forkBecauseEnabled ? forkBecauseRevision : -1,
-             cwVisible: continueWatchingVisible,
-             cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
-             cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7794,7 +8067,9 @@ struct TVHomeView: View {
-             + ((calendarToday.isEmpty || !homeCalendarToday) ? [] : [calendarTodaySection])
-             + [localTitlesSection].compactMap { $0 }
-             + jellyfinSections
--        let allSections = collectionHome == nil ? pinnedSections + store.sections : store.sections
-+        let allSections = collectionHome == nil
-+            ? pinnedSections + (forkBecauseEnabled ? forkBecauseSections : []) + store.sections
-+            : store.sections
- 
-         let result: [TVHomeSection]
-         if !hideUnreleased {
-@@ -7883,6 +8158,15 @@ struct TVHomeView: View {
-     }
- 
- 
-+    /// Fork: the Continue Watching / Upcoming item under focus, if any.
-+    private var forkFocusedContinueItem: ContinueWatchingItem? {
-+        guard isActive, let meta = visibleFocusedMeta,
-+              focusedSectionId == TVHomeSection.continueWatchingId || focusedSectionId == TVHomeSection.upcomingId
-+        else { return nil }
-+        let item = continueWatchingByMetaId[meta.id]
-+        return item?.isUpNextEntry == true && item?.hasAired == false ? nil : item
-+    }
-+
-     private var visibleFocusedMeta: NuvioMeta? {
-         guard let focusedMeta, isVisible(focusedMeta) else { return nil }
-         return focusedMeta
-diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index a6f53e90..c4f118a7 100644
---- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-+++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -463,6 +463,14 @@ struct DetailsScreen: View {
-                 streamDiscoveryDuration = nil
-             }
-         }
-+        // Fork: find the Play/Resume episode's sources ahead, so the picker opens with them.
-+        .onReceive(NotificationCenter.default.publisher(for: ForkDetailPrefetch.episodeNotification)) { note in
-+            guard !isStreamPickerPresented, !isPreparingPlayback,
-+                  let request = note.object as? ForkDetailPrefetch.Request,
-+                  let meta = viewModel.uiState.meta, meta.id == request.metaId,
-+                  ForkDetailPrefetch.shouldRun(key: "\(meta.id)|\(request.episode.id)") else { return }
-+            viewModel.prepareStreams(forId: canonicalEpisodeStreamId(for: request.episode, meta: meta), type: "series")
-+        }
-         .onChange(of: viewModel.uiState.isLoading) { _, isLoading in
-             if !isLoading {
-                 if let meta = viewModel.uiState.meta, meta.id == id, !meta.isSeries {
-@@ -4835,6 +4843,17 @@ struct TvDetailsContent: View {
-             }
-             .background(Color.black.ignoresSafeArea())
-             .onExitCommand(perform: handleDetailsBack)
-+            // Fork: a series page starts finding sources for its Play/Resume episode once the
-+            // page has settled (movies already do this when the page opens).
-+            .task(id: playTarget.isPlayable ? (playTarget.episode?.id ?? "") : "") {
-+                guard let episode = playTarget.episode, playTarget.isPlayable else { return }
-+                try? await Task.sleep(nanoseconds: UInt64(ForkDetailPrefetch.dwellSeconds * 1_000_000_000))
-+                guard !Task.isCancelled else { return }
-+                NotificationCenter.default.post(
-+                    name: ForkDetailPrefetch.episodeNotification,
-+                    object: ForkDetailPrefetch.Request(metaId: meta.id, episode: episode)
-+                )
-+            }
-             // tvOS doesn't re-run default-focus when this content swaps in after
-             // the async load finishes, so focus lands nowhere / off the Play
-             // button. Move it onto Play explicitly once the content appears
-@@ -8823,6 +8842,8 @@ private struct TvStreamPickerOverlay: View {
-     @State private var focusedStreamWarmTask: Task<Void, Never>? = nil
-     @State private var focusedStreamWarmToken: UUID? = nil
- 
-+    /// Fork: link warm-up and dead-link marks for this picker.
-+    @ObservedObject private var warmup = ForkStreamWarmup.shared
- 
-     private let filterAllKey = "filter::all"
-     private let sortKey = "filter::sort"
-@@ -8977,6 +8998,16 @@ private struct TvStreamPickerOverlay: View {
-             // cards before landing on the next one; re-seeding on that blip
-             // snaps focus back to the first stream (the reported bug), so we
-             // debounce and bail when focus has already landed somewhere.
-+            // Fork: the stream that keeps focus for half a second gets its link opened ahead
-+            // (see ForkStreamWarmup), so playback starts sooner and dead links show up.
-+            .task(id: focusedItem ?? "") {
-+                guard let focusedItem, !focusedItem.hasPrefix("filter::"),
-+                      let stream = displayedStreams.first(where: { $0.id == focusedItem }),
-+                      let url = stream.directURL else { return }
-+                try? await Task.sleep(nanoseconds: 150_000_000)
-+                guard !Task.isCancelled else { return }
-+                warmup.warm(url, headers: stream.httpHeaders ?? [:])
-+            }
-             .onChange(of: focusedItem) { _, newValue in
-                 if let newValue, newValue != filterAllKey, !didSeedStreamFocus {
-                     didSeedStreamFocus = true
-@@ -9389,6 +9420,20 @@ private struct TvStreamPickerOverlay: View {
-                                     action: { select(stream, player: nil) },
-                                     onSelectPlayer: { player in select(stream, player: player) }
-                                 )
-+                                // Fork: a link the warm-up found dead (see ForkStreamWarmup).
-+                                .overlay(alignment: .topTrailing) {
-+                                    if warmup.dead.contains(stream.directURL ?? "\u{0}") {
-+                                        Text("Dead link")
-+                                            .font(.system(size: 20, weight: .bold))
-+                                            .foregroundColor(.white)
-+                                            .padding(.horizontal, 12)
-+                                            .padding(.vertical, 4)
-+                                            .background(Color.red.opacity(0.85), in: Capsule())
-+                                            .padding(12)
-+                                            .allowsHitTesting(false)
-+                                    }
-+                                }
-+                                .opacity(warmup.dead.contains(stream.directURL ?? "\u{0}") ? 0.5 : 1)
-                                 .id(stream.id)
-                                 .onAppear {
-                                     if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -9863,6 +9908,9 @@ private struct TvStreamCard: View {
-                         )
-                     }
- 
-+                    // Fork: no size pill next to the source name. It counted in binary units (28.2 GB for a
-+                    // 30.3 GB file) and showed even with the size badges turned off. The size is in the
-+                    // add-on's own text and in the size badge when that is on.
-                     Text(primaryName)
-                         .font(.system(size: 34, weight: .bold))
-                         .foregroundColor(.white)
-@@ -9878,12 +9926,9 @@ private struct TvStreamCard: View {
-                     }
- 
-                     if let description = stream.description, !description.isEmpty {
--                        Text(description)
--                            .font(.system(size: 26, weight: .regular))
--                            .foregroundColor(.white.opacity(0.62))
--                            .lineSpacing(5)
--                            .lineLimit(6)
--                            .fixedSize(horizontal: false, vertical: true)
-+                        // Fork: every line of the add-on's text, laid out in two columns so the
-+                        // card stays compact (was cut off after six lines).
-+                        ForkStreamCardDetails(description: description)
-                     }
- 
-                     if showImportedBadges && badgePlacement == .bottom {
++}
 diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
 index 87d2625d..72c378ad 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
@@ -1468,6 +1006,67 @@ index 87d2625d..72c378ad 100644
          default:
              break
          }
+diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
+index f94ef525..c03dd372 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
+@@ -57,6 +57,24 @@ extension PlayerView {
+             settingsPanelLayer
+             sidePanelLayer
+             debugOverlayLayer
++            forkStillWatchingLayer
++                .zIndex(30)
++        }
++    }
++
++    /// Fork: Netflix-style "Are you still watching?" prompt.
++    @ViewBuilder
++    var forkStillWatchingLayer: some View {
++        if viewModel.forkStillWatchingVisible {
++            ForkStillWatchingPrompt(
++                title: viewModel.activeMeta?.name ?? "",
++                onContinue: { viewModel.forkConfirmStillWatching() },
++                onExit: {
++                    viewModel.forkDismissStillWatching()
++                    onBack()
++                }
++            )
++            .transition(.opacity)
+         }
+     }
+ 
+@@ -237,6 +255,7 @@ extension PlayerView {
+                     && !viewModel.isSceneDetailVisible
+                     && viewModel.sidePanel == nil
+                     && !viewModel.postPlayState.isVisible
++                    && !viewModel.forkStillWatchingVisible
+                     && !viewModel.isHoldingSeek
+                     && viewModel.pendingSeekDelta == 0
+                     && (!viewModel.showControls || viewModel.isScrubbing || viewModel.isTimelineFocused)
+@@ -279,6 +298,7 @@ extension PlayerView {
+                 && viewModel.sidePanel == nil
+                 && !viewModel.isScrubbing
+                 && !viewModel.postPlayState.isVisible
++                && !viewModel.forkStillWatchingVisible
+                 && (!viewModel.showControls || viewModel.isTimelineFocused)
+                 && !isGestureCaptureActive,
+                 isNextEpisodeFocused: nextEpisodeFocused,
+diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift
+index 886801c7..ab91c0d8 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift
+@@ -23,6 +23,11 @@ extension PlayerView {
+     /// Back / Menu during playback (also from the remote-gesture layer, which takes the remote).
+     func handleRemoteBack() {
+         PlaybackTimelineRecorder.record(.backPressed, engine: viewModel.activeEngineKind)
++        if viewModel.forkStillWatchingVisible { // Fork: Back on the prompt leaves the player
++            viewModel.forkDismissStillWatching()
++            onBack()
++            return
++        }
+         if viewModel.isSceneDetailVisible {
+             withAnimation(.easeInOut(duration: 0.2)) {
+                 viewModel.closeSceneDetail()
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
 index 7040a4a8..793acf39 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
@@ -1509,24 +1108,22 @@ index 7040a4a8..793acf39 100644
      func stopExport() {
          requestID = UUID()
          server.stop()
-diff --git a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
-index 5d31e180..ed2892dd 100644
---- a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
-+++ b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
-@@ -1028,6 +1028,8 @@ class DetailsViewModel: ObservableObject {
-     func prepareStreams(forId streamId: String, type: String, forceRefresh: Bool = false) {
-         requestedStreamId = streamId
-         streamObserveTask?.cancel()
-+        // Fork: fetch the add-on subtitles alongside the sources, so an Infuse hand-off has them.
-+        ForkSubtitlePrefetch.shared.prefetch(contentId: streamId, type: type)
- 
-         if streamDiscoveryMode == .shared {
-             prepareSharedStreams(forId: streamId, type: type, forceRefresh: forceRefresh)
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index 9189209d..bb4660f6 100644
+index 9189209d..eb315863 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-@@ -806,7 +806,8 @@ class PlayerViewModel: ObservableObject {
+@@ -412,6 +412,10 @@ class PlayerViewModel: ObservableObject {
+     @Published var nextEpisodeCountdown: Int?
+     /// Cancellation applies only to the currently configured episode.
+     @Published private(set) var isAutoPlayCancelled = false
++    /// Fork: "Are you still watching?" — shown instead of auto-playing after several
++    /// episodes in a row with no remote input.
++    @Published private(set) var forkStillWatchingVisible = false
++    private var forkAutoAdvanceCount = 0
+     /// True while the next episode's stream is being resolved and loaded, so the
+     /// card can show a spinner instead of a Play button.
+     @Published var isAdvancingEpisode: Bool = false
+@@ -806,7 +810,8 @@ class PlayerViewModel: ObservableObject {
      private var loadWatchdogGeneration: UInt64?
      private var loadWatchdogDiscGraceGranted = false
      /// A source that hasn't started within this long is treated as dead.
@@ -1536,7 +1133,32 @@ index 9189209d..bb4660f6 100644
  
      init(
          sessionCoordinator suppliedCoordinator: PlaybackSessionCoordinator? = nil,
-@@ -3038,7 +3039,24 @@ class PlayerViewModel: ObservableObject {
+@@ -2735,9 +2740,24 @@ class PlayerViewModel: ObservableObject {
+     /// Play the next episode now (the card's Play button).
+     func playNextEpisode() {
+         guard !isAdvanceInFlight, !isAwaitingStreamStart else { return }
++        forkAutoAdvanceCount = 0 // Fork: picked by hand
+         advance()
+     }
+ 
++    /// Fork: "Continue Watching" on the still-watching prompt.
++    func forkConfirmStillWatching() {
++        forkStillWatchingVisible = false
++        forkAutoAdvanceCount = 0
++        advance()
++    }
++
++    /// Fork: the prompt was dismissed without continuing.
++    func forkDismissStillWatching() {
++        forkStillWatchingVisible = false
++        forkAutoAdvanceCount = 0
++        cancelAutoPlay()
++    }
++
+     func cancelAutoPlay() {
+         isAutoPlayCancelled = true
+         nextEpisodeCountdown = nil
+@@ -3038,7 +3058,24 @@ class PlayerViewModel: ObservableObject {
          }
          let timeoutSeconds = loadTimeoutSeconds
          loadWatchdogTask = Task { [weak self] in
@@ -1562,7 +1184,7 @@ index 9189209d..bb4660f6 100644
              guard !Task.isCancelled, let self,
                    self.sessionCoordinator.loadGeneration == targetGeneration,
                    self.sessionCoordinator.lastLoadError == nil,
-@@ -3099,7 +3117,7 @@ class PlayerViewModel: ObservableObject {
+@@ -3099,7 +3136,7 @@ class PlayerViewModel: ObservableObject {
                  LastPlaybackStreamStore.remove(metaId: meta.id, season: numbers?.season, episode: numbers?.episode)
              }
              self.attemptFailover(
@@ -1571,3 +1193,44 @@ index 9189209d..bb4660f6 100644
                  toast: nil
              )
          }
+@@ -4127,6 +4164,14 @@ class PlayerViewModel: ObservableObject {
+                     }
+                 }
+                 if autoPlayNextEnabled && !isAutoPlayCancelled {
++                    // Fork: after a few auto-played episodes with no input, ask first.
++                    if ForkStillWatching.isEnabled,
++                       nextEpisode != nil,
++                       forkAutoAdvanceCount >= ForkStillWatching.episodeLimit {
++                        if !forkStillWatchingVisible { forkStillWatchingVisible = true }
++                        return
++                    }
++                    if nextEpisode != nil { forkAutoAdvanceCount += 1 }
+                     advance()
+                     return
+                 }
+@@ -4835,6 +4880,7 @@ class PlayerViewModel: ObservableObject {
+     }
+ 
+     func togglePlayPause() {
++        forkAutoAdvanceCount = 0 // Fork: play/pause counts as "still watching"
+         recordWatchPartyTransportIntent()
+         if isScrubbing {
+             commitScrub(andPlay: true)
+@@ -6055,6 +6101,8 @@ class PlayerViewModel: ObservableObject {
+     }
+ 
+     func dpadSample(x: Double, y: Double) {
++        forkAutoAdvanceCount = 0 // Fork: any touch counts as "still watching"
++        guard !forkStillWatchingVisible else { return } // the prompt's buttons own input
+         for observer in gesturePadObservers.values { observer(x, y) }
+         guard !showScenePanel, !isSceneDetailVisible else { return }
+         if isScrubbing {
+@@ -6092,6 +6140,8 @@ class PlayerViewModel: ObservableObject {
+     /// Handles GameController buttonA (physical click on Siri Remote touchpad).
+     /// On 1st Gen Siri Remotes (black remote), clicks on the left/right sides trigger discrete seek or hold-to-seek.
+     func handleGCButtonA(isPressed: Bool, pad: GCMicroGamepad? = nil, touchX: Double? = nil) {
++        forkAutoAdvanceCount = 0 // Fork: a click counts as "still watching"
++        guard !forkStillWatchingVisible else { return } // the prompt's buttons own input
+         let currentTouchX = touchX ?? gcLastTouchX ?? pad.map { Double($0.dpad.xAxis.value) } ?? 0
+ 
+         if isPressed {

@@ -1,0 +1,98 @@
+diff --git a/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
+index ed14000e..cc435950 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
+@@ -253,6 +253,7 @@ struct NativeSearchView: View {
+     @AppStorage(SettingsKey.amoled) private var amoled = false
+     @AppStorage(SettingsKey.bodyColor) private var bodyColor = SettingsBackground.charcoal.rawValue
+     @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
++    @ObservedObject private var cinemaOnly = CinemaOnlyReleases.shared
+ 
+     var effectiveLayoutMode: TVOSKeyboardLayoutMode {
+         if let forced = forcedLayoutMode {
+@@ -678,7 +679,10 @@ struct NativeSearchView: View {
+ 
+     private var visibleResults: [NuvioMeta] {
+         guard hideUnreleased else { return viewModel.results }
+-        return viewModel.results.filter { !ContentReleasePolicy.isUnreleased($0) }
++        let today = ContentReleasePolicy.todayIsoDay()
++        return viewModel.results.filter {
++            !ContentReleasePolicy.isUnreleased($0, today: today) && !cinemaOnly.isCinemaOnly($0, today: today)
++        }
+     }
+ 
+     private var gridSuggestionTitles: [String] {
+diff --git a/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
+index 4fdb5cfd..32ea52b7 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
+@@ -65,6 +65,7 @@ struct NetflixSearchView: View {
+     @AppStorage(SettingsKey.amoled) private var amoled = false
+     @AppStorage(SettingsKey.bodyColor) private var bodyColor = SettingsBackground.charcoal.rawValue
+     @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
++    @ObservedObject private var cinemaOnly = CinemaOnlyReleases.shared
+ 
+     @AppStorage("nuvio.keyboard.detectedLayout") private var detectedKeyboardMode: TVOSKeyboardLayoutMode = .linear
+ 
+@@ -546,7 +547,10 @@ struct NetflixSearchView: View {
+ 
+     private var visibleResults: [NuvioMeta] {
+         guard hideUnreleased else { return viewModel.results }
+-        return viewModel.results.filter { !ContentReleasePolicy.isUnreleased($0) }
++        let today = ContentReleasePolicy.todayIsoDay()
++        return viewModel.results.filter {
++            !ContentReleasePolicy.isUnreleased($0, today: today) && !cinemaOnly.isCinemaOnly($0, today: today)
++        }
+     }
+ 
+     private var resultsCountLabel: String {
+diff --git a/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift
+index 4130c3a9..62f549c6 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift
+@@ -47,6 +47,7 @@ struct SearchView: View {
+     @AppStorage(SettingsKey.amoled) private var amoled = false
+     @AppStorage(SettingsKey.bodyColor) private var bodyColor = SettingsBackground.charcoal.rawValue
+     @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
++    @ObservedObject private var cinemaOnly = CinemaOnlyReleases.shared
+ 
+     init(viewModel: SearchViewModel, showDiscover: Bool = true, onContentClick: @escaping (String, String) -> Void, onLongPress: ((NuvioMeta) -> Void)? = nil) {
+         _viewModel = StateObject(wrappedValue: viewModel)
+@@ -254,7 +255,10 @@ struct SearchView: View {
+ 
+     private var visibleResults: [NuvioMeta] {
+         guard hideUnreleased else { return viewModel.results }
+-        return viewModel.results.filter { !ContentReleasePolicy.isUnreleased($0) }
++        let today = ContentReleasePolicy.todayIsoDay()
++        return viewModel.results.filter {
++            !ContentReleasePolicy.isUnreleased($0, today: today) && !cinemaOnly.isCinemaOnly($0, today: today)
++        }
+     }
+ 
+     @ViewBuilder
+diff --git a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
+index 3e45cc56..06eab723 100644
+--- a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
++++ b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
+@@ -55,7 +55,7 @@ class NetflixSearchViewModel: ObservableObject {
+ 
+         $searchText
+             .removeDuplicates()
+-            .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
++            .debounce(for: .milliseconds(700), scheduler: DispatchQueue.main) // Fork: 0.7 s (was 350 ms) so remote typing does not search every letter, without the full second's wait
+             .sink { [weak self] text in
+                 self?.performSearch(query: text)
+             }
+diff --git a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
+index 38468a68..63b4f3cd 100644
+--- a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
++++ b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
+@@ -72,7 +72,7 @@ class SearchViewModel: ObservableObject {
+ 
+         $searchText
+             .removeDuplicates()
+-            .debounce(for: .milliseconds(350), scheduler: DispatchQueue.main)
++            .debounce(for: .milliseconds(700), scheduler: DispatchQueue.main) // Fork: 0.7 s (was 350 ms) so remote typing does not search every letter, without the full second's wait
+             .sink { [weak self] text in
+                 self?.performSearch(query: text)
+             }

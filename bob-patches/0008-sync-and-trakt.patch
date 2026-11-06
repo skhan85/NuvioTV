@@ -28,16 +28,3 @@ index c0267030..1e5c1a45 100644
              let useMoreLikeThis = (store.object(forKey: SettingsKey.tmdbUseMoreLikeThis) as? Bool) ?? true
              return enabled && !apiKey.isEmpty && useMoreLikeThis
          }
-diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift
-index fa9063c4..ee5574aa 100644
---- a/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift
-+++ b/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift
-@@ -103,7 +103,7 @@ struct CollectionSourceResolver {
-     // MARK: - TMDB
- 
-     private func browseTmdb(_ source: NuvioCollectionSource, page: Int) async throws -> CatalogPage {
--        guard let apiKey = nonEmpty(settings.string(forKey: SettingsKey.tmdbApiKey)) else {
-+        guard let apiKey = nonEmpty(ForkSecrets.tmdbKey(settings.string(forKey: SettingsKey.tmdbApiKey))) else {
-             throw CollectionSourceError.missingTmdbAPIKey
-         }
- 
