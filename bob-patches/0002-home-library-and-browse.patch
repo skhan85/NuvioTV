@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-index a85cbdb2..9419baa8 100644
+index ca71983b..124f36d6 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CatalogRepository.swift
-@@ -1427,8 +1427,7 @@ final class CinemetaCatalogRepository: CatalogRepository {
+@@ -1447,8 +1447,7 @@ final class CinemetaCatalogRepository: CatalogRepository {
          if let cached = cachedImdb(forTmdbId: tmdbId, type: primaryMedia) {
              return cached
          }
@@ -12,7 +12,7 @@ index a85cbdb2..9419baa8 100644
          // A TMDB-backed collection is an explicit source choice, independent
          // of whether optional Details enrichment is enabled.
          guard !apiKey.isEmpty else { return nil }
-@@ -1946,7 +1945,71 @@ final class CinemetaCatalogRepository: CatalogRepository {
+@@ -1992,7 +1991,71 @@ final class CinemetaCatalogRepository: CatalogRepository {
              }
          }
  
@@ -85,7 +85,7 @@ index a85cbdb2..9419baa8 100644
          // with a short deadline (2.5s) so slow/offline add-on hosts never stall search.
          if !candidateURLs.isEmpty {
              let manifests = await loadSearchManifestsWithinDeadline(urls: candidateURLs, seconds: 2.5)
-@@ -2006,50 +2069,19 @@ final class CinemetaCatalogRepository: CatalogRepository {
+@@ -2052,50 +2115,19 @@ final class CinemetaCatalogRepository: CatalogRepository {
              return CatalogSearchOutcome(results: [], isComplete: isComplete, reason: reason)
          }
  
@@ -147,7 +147,7 @@ index a85cbdb2..9419baa8 100644
  
          guard !Task.isCancelled else {
              return CatalogSearchOutcome(results: [], isComplete: false)
-@@ -2058,9 +2090,15 @@ final class CinemetaCatalogRepository: CatalogRepository {
+@@ -2104,9 +2136,15 @@ final class CinemetaCatalogRepository: CatalogRepository {
          // Return fast, deduplicated search results immediately.
          // Background enrichment (SearchResultEnrichment) handles artwork & TMDB localization
          // asynchronously for visible cards without blocking the search spinner.
@@ -165,7 +165,7 @@ index a85cbdb2..9419baa8 100644
          cacheMetadata(deduplicated, context: metadataContext)
          let isComplete = missingManifestCount == 0 && failedTargetCount == 0
          logCatalogSearchOutcome(
-@@ -2711,15 +2749,25 @@ final class CinemetaCatalogRepository: CatalogRepository {
+@@ -2757,15 +2795,25 @@ final class CinemetaCatalogRepository: CatalogRepository {
                  contentType: source.type,
                  catalogId: source.catalogId
              ) else { continue }
@@ -194,10 +194,10 @@ index a85cbdb2..9419baa8 100644
                      guard seen.insert(meta.id).inserted else { continue }
                      cacheCatalogMetadata(meta)
 diff --git a/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift b/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift
-index fa9063c4..ee5574aa 100644
+index 5e0f7935..74667f03 100644
 --- a/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift
 +++ b/tvosApp/NuvioTV/Sources/Data/Repository/CollectionSourceResolver.swift
-@@ -103,7 +103,7 @@ struct CollectionSourceResolver {
+@@ -117,7 +117,7 @@ struct CollectionSourceResolver {
      // MARK: - TMDB
  
      private func browseTmdb(_ source: NuvioCollectionSource, page: Int) async throws -> CatalogPage {
@@ -1948,10 +1948,10 @@ index 00000000..31207be5
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index ef7d9a28..9966849d 100644
+index 5d3c9898..5c5dd97e 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -470,6 +470,10 @@ struct ContentView: View {
+@@ -481,6 +481,10 @@ struct ContentView: View {
      @State private var reopenStreamPickerResumePosition: Double?
      /// Episode to select when Details opens from the calendar.
      @State private var detailsFocusEpisode: DetailsEpisodeFocus?
@@ -1962,7 +1962,7 @@ index ef7d9a28..9966849d 100644
      /// Title whose liquid-glass quick-actions menu is showing (long-press on a
      /// card). Presented as an overlay over the tab view, like Details/Player.
      @State private var cardMenuMeta: NuvioMeta?
-@@ -529,6 +533,42 @@ struct ContentView: View {
+@@ -540,6 +544,42 @@ struct ContentView: View {
          ZStack {
              ProfileScopedRootBackground()
  
@@ -2005,7 +2005,7 @@ index ef7d9a28..9966849d 100644
              switch activeScreen {
              case .login:
                  // `.login` is also the value this state starts at, before
-@@ -670,6 +710,18 @@ struct ContentView: View {
+@@ -681,6 +721,18 @@ struct ContentView: View {
                  }
              }
          }
@@ -2024,7 +2024,7 @@ index ef7d9a28..9966849d 100644
          // Backing out of the switch must not leave the cover behind.
          .onChange(of: isOnProfileSelection) { _, isSelecting in
              if isSelecting, isPreparingProfile {
-@@ -1274,7 +1326,7 @@ struct ContentView: View {
+@@ -1292,7 +1344,7 @@ struct ContentView: View {
          let callbackDuration = callback.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
          let duration = callbackDuration
              ?? session.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
@@ -2033,7 +2033,7 @@ index ef7d9a28..9966849d 100644
              guard let duration, position.isFinite, position >= 0 else { return nil }
              let normalizedProgress = position / duration
              guard callbackDuration != nil,
-@@ -1284,6 +1336,20 @@ struct ContentView: View {
+@@ -1302,6 +1354,20 @@ struct ContentView: View {
              }
              return 1
          }
@@ -2054,7 +2054,7 @@ index ef7d9a28..9966849d 100644
          guard let progress, progress.isFinite, (0...1).contains(progress) else { return }
          // External callbacks can underreport EOF position; allow up to two minutes of grace,
          // with an 80% floor, while built-in playback keeps its stream-timed threshold.
-@@ -1362,6 +1428,10 @@ struct ContentView: View {
+@@ -1380,6 +1446,10 @@ struct ContentView: View {
              return
          }
  
@@ -2065,7 +2065,7 @@ index ef7d9a28..9966849d 100644
          if progress >= callbackCompletionCutoff(WatchProgressLedger.completionFraction) {
              if let duration {
                  ContinueWatchingStore.markPlaybackCompleted(
-@@ -1392,6 +1462,129 @@ struct ContentView: View {
+@@ -1410,6 +1480,129 @@ struct ContentView: View {
          }
      }
  
@@ -2195,7 +2195,7 @@ index ef7d9a28..9966849d 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1843,6 +2036,15 @@ struct ContentView: View {
+@@ -1861,6 +2054,15 @@ struct ContentView: View {
          }
      }
  
@@ -2211,7 +2211,7 @@ index ef7d9a28..9966849d 100644
      private func presentPlayback(
          url: URL,
          meta: NuvioMeta,
-@@ -1859,7 +2061,8 @@ struct ContentView: View {
+@@ -1877,7 +2079,8 @@ struct ContentView: View {
          startupBenchmarkToken: UUID? = nil,
          sourceID: String? = nil,
          collectionContext: CollectionPlaybackContext? = nil,
@@ -2221,7 +2221,7 @@ index ef7d9a28..9966849d 100644
      ) {
          // Usenet streams arrive as nuvio-usenet:// URLs: start the local
          // engine first, then play its 127.0.0.1 URL like any other stream.
-@@ -1901,13 +2104,47 @@ struct ContentView: View {
+@@ -1919,13 +2122,47 @@ struct ContentView: View {
          let store = ProfileSettings.store(for: profileViewModel.activeProfile?.id)
          let defaultPlayer = ExternalPlayer.from(store.string(forKey: SettingsKey.externalPlayer))
          let player = customPlayer ?? defaultPlayer
@@ -2271,7 +2271,7 @@ index ef7d9a28..9966849d 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -1954,7 +2191,13 @@ struct ContentView: View {
+@@ -1972,7 +2209,13 @@ struct ContentView: View {
          // Hand off to the external app only when it is actually installed
          // (`canOpenURL` needs its scheme in LSApplicationQueriesSchemes); if it
          // isn't, fall through to the built-in player instead of a dead launch.
@@ -2286,7 +2286,7 @@ index ef7d9a28..9966849d 100644
              meta: meta,
              season: meta.isSeries ? numbers?.season : nil,
              episode: meta.isSeries ? numbers?.episode : nil,
-@@ -1976,6 +2219,22 @@ struct ContentView: View {
+@@ -1994,6 +2237,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -2309,7 +2309,7 @@ index ef7d9a28..9966849d 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -4900,6 +5159,8 @@ enum ProfileDisplayName {
+@@ -4941,6 +5200,8 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -2318,7 +2318,7 @@ index ef7d9a28..9966849d 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -4912,6 +5173,13 @@ private final class TVHomeFocusWork {
+@@ -4953,6 +5214,13 @@ private final class TVHomeFocusWork {
          let cwLandscape: Bool
          let landscapePosters: Bool
          let calendarToday: [NuvioMeta]
@@ -2332,7 +2332,7 @@ index ef7d9a28..9966849d 100644
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5175,6 +5443,21 @@ struct TVHomeView: View {
+@@ -5398,6 +5666,21 @@ struct TVHomeView: View {
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.heroEnabled) private var heroEnabled = true
      @AppStorage(SettingsKey.fullscreenHeroBackdrop) private var fullscreenHeroBackdrop = true
@@ -2354,7 +2354,7 @@ index ef7d9a28..9966849d 100644
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5225,6 +5508,19 @@ struct TVHomeView: View {
+@@ -5448,6 +5731,19 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -2374,7 +2374,7 @@ index ef7d9a28..9966849d 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -5303,6 +5599,46 @@ struct TVHomeView: View {
+@@ -5542,6 +5838,46 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -2421,7 +2421,7 @@ index ef7d9a28..9966849d 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -5318,6 +5654,7 @@ struct TVHomeView: View {
+@@ -5557,6 +5893,7 @@ struct TVHomeView: View {
                      )
                      .equatable()
                      .frame(width: proxy.size.width, height: proxy.size.height)
@@ -2429,7 +2429,7 @@ index ef7d9a28..9966849d 100644
                      .clipped()
                  } else {
                      let backdropWidth = proxy.size.width * 0.65
-@@ -5333,6 +5670,7 @@ struct TVHomeView: View {
+@@ -5572,6 +5909,7 @@ struct TVHomeView: View {
                          )
                          .equatable()
                          .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
@@ -2437,7 +2437,7 @@ index ef7d9a28..9966849d 100644
                          .mask(
                              LinearGradient(
                                  stops: [
-@@ -5437,7 +5775,8 @@ struct TVHomeView: View {
+@@ -5676,7 +6014,8 @@ struct TVHomeView: View {
                          } else if let heroMeta = visibleFocusedMeta ?? visibleHero {
                              TVHeroView(
                                  meta: heroMeta,
@@ -2447,7 +2447,7 @@ index ef7d9a28..9966849d 100644
                              ) {
                                  navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
                              }
-@@ -5483,6 +5822,15 @@ struct TVHomeView: View {
+@@ -5722,6 +6061,15 @@ struct TVHomeView: View {
                                              .padding(.horizontal, horizontalEdgeInset)
                                          }
  
@@ -2463,7 +2463,7 @@ index ef7d9a28..9966849d 100644
                                          ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                                              let isNearFocusedRow = abs(index - focusedRowIndex) <= 2
                                              if isNearFocusedRow {
-@@ -5506,6 +5854,26 @@ struct TVHomeView: View {
+@@ -5745,6 +6093,26 @@ struct TVHomeView: View {
                                      .frame(maxWidth: .infinity, alignment: .leading)
                                      .padding(.top, TVHomeLayout.rowsTopPadding)
                                      .padding(.bottom, 80)
@@ -2490,7 +2490,7 @@ index ef7d9a28..9966849d 100644
                                      #if os(tvOS)
                                      // Place the configurator inside the scroll content so its
                                      // ancestor is the UIScrollView that owns the row offset.
-@@ -7682,6 +8050,23 @@ struct TVHomeView: View {
+@@ -8188,6 +8556,23 @@ struct TVHomeView: View {
              : estimatedCollectionRowHeight(for: section)
      }
  
@@ -2514,7 +2514,7 @@ index ef7d9a28..9966849d 100644
      private func prepareForOverlayPresentation(restoreCardID: String? = nil) {
          focusWork.defersOverlayPreparation = true
          focusWork.pendingOverlayRestoreCardID = restoreCardID
-@@ -7753,6 +8138,8 @@ struct TVHomeView: View {
+@@ -8259,6 +8644,8 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -2523,7 +2523,7 @@ index ef7d9a28..9966849d 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -7764,7 +8151,11 @@ struct TVHomeView: View {
+@@ -8270,7 +8657,11 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
@@ -2536,7 +2536,7 @@ index ef7d9a28..9966849d 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -7773,7 +8164,9 @@ struct TVHomeView: View {
+@@ -8279,7 +8670,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -2547,7 +2547,7 @@ index ef7d9a28..9966849d 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster"
          )
-@@ -7794,7 +8187,16 @@ struct TVHomeView: View {
+@@ -8300,7 +8693,16 @@ struct TVHomeView: View {
              + ((calendarToday.isEmpty || !homeCalendarToday) ? [] : [calendarTodaySection])
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
@@ -2565,7 +2565,7 @@ index ef7d9a28..9966849d 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -7806,18 +8208,41 @@ struct TVHomeView: View {
+@@ -8312,18 +8714,41 @@ struct TVHomeView: View {
                  if !section.collectionFolders.isEmpty
                      || section.id == TVHomeSection.localTitlesId
                      || section.id == TVHomeSection.jellyfinId
@@ -2577,12 +2577,11 @@ index ef7d9a28..9966849d 100644
                  copy.items = section.items.filter {
                      !ContentReleasePolicy.isUnreleased($0, today: today)
 +                        && !cinemaOnly.isCinemaOnly($0, today: today)
-                 }
-                 return copy
-             }
-         }
- 
--        let contentSections = result.filter(\.hasContent)
++                }
++                return copy
++            }
++        }
++
 +        // Fork: kids rating limit — only titles rated up to PG / TV-PG (your own Continue
 +        // Watching, collection folders and local/Jellyfin rows are left as they are).
 +        let kidsFiltered: [TVHomeSection]
@@ -2595,20 +2594,21 @@ index ef7d9a28..9966849d 100644
 +                    || section.id == TVHomeSection.jellyfinId
 +                    || section.id.hasPrefix(TVHomeSection.jellyfinLibraryIdPrefix) {
 +                    return section
-+                }
+                 }
 +                var copy = section
 +                copy.items = forkKids.visible(section.items)
-+                return copy
-+            }
+                 return copy
+             }
 +        } else {
 +            kidsFiltered = result
-+        }
-+
+         }
+ 
+-        let contentSections = result.filter(\.hasContent)
 +        let contentSections = kidsFiltered.filter(\.hasContent)
          focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
              signature: signature,
              sections: contentSections
-@@ -7883,11 +8308,53 @@ struct TVHomeView: View {
+@@ -8389,11 +8814,53 @@ struct TVHomeView: View {
      }
  
  
@@ -2662,7 +2662,7 @@ index ef7d9a28..9966849d 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -11380,11 +11847,14 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -11889,11 +12356,14 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -2677,7 +2677,7 @@ index ef7d9a28..9966849d 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
  
-@@ -11403,6 +11873,14 @@ private struct TVHeroView: View {
+@@ -11912,6 +12382,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
@@ -2692,7 +2692,7 @@ index ef7d9a28..9966849d 100644
              TVHeroMetaLine(meta: meta, episodeLine: episodeLine, continueItem: continueItem)
  
              if let continueItem {
-@@ -11419,6 +11897,8 @@ private struct TVHeroView: View {
+@@ -11928,6 +12406,8 @@ private struct TVHeroView: View {
                      .lineLimit(4)
                      .frame(maxWidth: 900, alignment: .leading)
                      .padding(.top, 4)
@@ -2701,7 +2701,7 @@ index ef7d9a28..9966849d 100644
              }
          }
          .foregroundColor(.white)
-@@ -11460,6 +11940,7 @@ extension TVHeroView: Equatable {
+@@ -11969,6 +12449,7 @@ extension TVHeroView: Equatable {
              && lhs.continueItem?.episodeVideo?.rating == rhs.continueItem?.episodeVideo?.rating
              && lhs.continueItem?.season == rhs.continueItem?.season
              && lhs.continueItem?.episode == rhs.continueItem?.episode

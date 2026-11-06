@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index a6f53e90..03caf9bb 100644
+index c502f17a..4cf825cb 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 @@ -463,6 +463,14 @@ struct DetailsScreen: View {
@@ -108,7 +108,7 @@ index a6f53e90..03caf9bb 100644
              // tvOS doesn't re-run default-focus when this content swaps in after
              // the async load finishes, so focus lands nowhere / off the Play
              // button. Move it onto Play explicitly once the content appears
-@@ -5595,9 +5628,39 @@ private struct TvDetailsActionButton: View {
+@@ -5594,9 +5627,39 @@ private struct TvDetailsActionButton: View {
      var onBack: (() -> Void)? = nil
  
      @State private var didTriggerHold = false
@@ -148,7 +148,7 @@ index a6f53e90..03caf9bb 100644
          Button(action: {
              if didTriggerHold {
                  didTriggerHold = false
-@@ -5619,9 +5682,12 @@ private struct TvDetailsActionButton: View {
+@@ -5618,9 +5681,12 @@ private struct TvDetailsActionButton: View {
              }
              .foregroundColor(foregroundColor)
              .padding(.horizontal, isPrimary ? 44 : 0)
@@ -164,7 +164,7 @@ index a6f53e90..03caf9bb 100644
              .shadow(color: .black.opacity(isFocused ? 0.35 : 0.18), radius: isFocused ? 18 : 7, y: 8)
          }
          .buttonStyle(TvPlayActionButtonStyle(onHold: longPressAction, didTriggerHold: $didTriggerHold))
-@@ -5650,6 +5716,46 @@ private struct TvDetailsActionButton: View {
+@@ -5649,6 +5715,46 @@ private struct TvDetailsActionButton: View {
      }
  }
  
@@ -211,7 +211,7 @@ index a6f53e90..03caf9bb 100644
  private struct OptionalAccessibilityHint: ViewModifier {
      let hint: String?
  
-@@ -8823,6 +8929,8 @@ private struct TvStreamPickerOverlay: View {
+@@ -8880,6 +8986,8 @@ private struct TvStreamPickerOverlay: View {
      @State private var focusedStreamWarmTask: Task<Void, Never>? = nil
      @State private var focusedStreamWarmToken: UUID? = nil
  
@@ -220,7 +220,7 @@ index a6f53e90..03caf9bb 100644
  
      private let filterAllKey = "filter::all"
      private let sortKey = "filter::sort"
-@@ -8977,6 +9085,16 @@ private struct TvStreamPickerOverlay: View {
+@@ -9034,6 +9142,16 @@ private struct TvStreamPickerOverlay: View {
              // cards before landing on the next one; re-seeding on that blip
              // snaps focus back to the first stream (the reported bug), so we
              // debounce and bail when focus has already landed somewhere.
@@ -237,7 +237,7 @@ index a6f53e90..03caf9bb 100644
              .onChange(of: focusedItem) { _, newValue in
                  if let newValue, newValue != filterAllKey, !didSeedStreamFocus {
                      didSeedStreamFocus = true
-@@ -9127,7 +9245,8 @@ private struct TvStreamPickerOverlay: View {
+@@ -9184,7 +9302,8 @@ private struct TvStreamPickerOverlay: View {
              sortOption: sortOption,
              includeDebrid: includeDebrid,
              cachedOnly: effectiveCachedOnly,
@@ -247,7 +247,7 @@ index a6f53e90..03caf9bb 100644
          )
          displayedStreams = refreshedStreams
          displayedStreamsCacheKey = key
-@@ -9389,6 +9508,20 @@ private struct TvStreamPickerOverlay: View {
+@@ -9446,6 +9565,20 @@ private struct TvStreamPickerOverlay: View {
                                      action: { select(stream, player: nil) },
                                      onSelectPlayer: { player in select(stream, player: player) }
                                  )
@@ -268,7 +268,7 @@ index a6f53e90..03caf9bb 100644
                                  .id(stream.id)
                                  .onAppear {
                                      if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -9769,8 +9902,11 @@ private struct TvStreamCardPresentation {
+@@ -9826,8 +9959,11 @@ private struct TvStreamCardPresentation {
      let fileSizeLabel: String?
      let badgePlacement: StreamBadgePlacement
      let showAddonLogo: Bool
@@ -277,10 +277,10 @@ index a6f53e90..03caf9bb 100644
  
      init(stream: NuvioStream, badgeSettings: StreamBadgeSettingsSnapshot) {
 +        forkLanguages = ForkStreamLanguages.tags(for: stream)
-         importedBadges = StreamBadgeMatcher.matchedBadges(
+         let matched = StreamBadgeMatcher.matchedBadges(
              for: stream,
              rules: badgeSettings.rules
-@@ -9816,6 +9952,7 @@ private struct TvStreamCard: View {
+@@ -9891,6 +10027,7 @@ private struct TvStreamCard: View {
      private let fileSizeLabel: String?
      private let badgePlacement: StreamBadgePlacement
      private let showAddonLogo: Bool
@@ -288,7 +288,7 @@ index a6f53e90..03caf9bb 100644
      let externalFocus: FocusState<String?>.Binding
      let action: () -> Void
      var onSelectPlayer: ((ExternalPlayer) -> Void)? = nil
-@@ -9840,6 +9977,7 @@ private struct TvStreamCard: View {
+@@ -9915,6 +10052,7 @@ private struct TvStreamCard: View {
          self.fileSizeLabel = presentation.fileSizeLabel
          self.badgePlacement = presentation.badgePlacement
          self.showAddonLogo = presentation.showAddonLogo
@@ -296,7 +296,7 @@ index a6f53e90..03caf9bb 100644
          self.externalFocus = externalFocus
          self.action = action
          self.onSelectPlayer = onSelectPlayer
-@@ -9863,11 +10001,20 @@ private struct TvStreamCard: View {
+@@ -9938,11 +10076,20 @@ private struct TvStreamCard: View {
                          )
                      }
  
@@ -322,7 +322,7 @@ index a6f53e90..03caf9bb 100644
  
                      if let secondaryName {
                          Text(secondaryName)
-@@ -9878,12 +10025,9 @@ private struct TvStreamCard: View {
+@@ -9953,12 +10100,9 @@ private struct TvStreamCard: View {
                      }
  
                      if let description = stream.description, !description.isEmpty {

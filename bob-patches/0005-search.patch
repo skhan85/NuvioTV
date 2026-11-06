@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
-index ed14000e..cc435950 100644
+index b1888021..2c3918fa 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
-@@ -253,6 +253,7 @@ struct NativeSearchView: View {
+@@ -278,6 +278,7 @@ struct NativeSearchView: View {
      @AppStorage(SettingsKey.amoled) private var amoled = false
      @AppStorage(SettingsKey.bodyColor) private var bodyColor = SettingsBackground.charcoal.rawValue
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -10,7 +10,7 @@ index ed14000e..cc435950 100644
  
      var effectiveLayoutMode: TVOSKeyboardLayoutMode {
          if let forced = forcedLayoutMode {
-@@ -678,7 +679,10 @@ struct NativeSearchView: View {
+@@ -893,7 +894,10 @@ struct NativeSearchView: View {
  
      private var visibleResults: [NuvioMeta] {
          guard hideUnreleased else { return viewModel.results }
@@ -21,12 +21,12 @@ index ed14000e..cc435950 100644
 +        }
      }
  
-     private var gridSuggestionTitles: [String] {
+     private var visibleResultIDs: [String] { visibleResults.map(\.id) }
 diff --git a/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
-index 4fdb5cfd..32ea52b7 100644
+index 72215b23..1784ee40 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
-@@ -65,6 +65,7 @@ struct NetflixSearchView: View {
+@@ -112,6 +112,7 @@ struct NetflixSearchView: View {
      @AppStorage(SettingsKey.amoled) private var amoled = false
      @AppStorage(SettingsKey.bodyColor) private var bodyColor = SettingsBackground.charcoal.rawValue
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -34,7 +34,7 @@ index 4fdb5cfd..32ea52b7 100644
  
      @AppStorage("nuvio.keyboard.detectedLayout") private var detectedKeyboardMode: TVOSKeyboardLayoutMode = .linear
  
-@@ -546,7 +547,10 @@ struct NetflixSearchView: View {
+@@ -831,7 +832,10 @@ struct NetflixSearchView: View {
  
      private var visibleResults: [NuvioMeta] {
          guard hideUnreleased else { return viewModel.results }
@@ -45,7 +45,7 @@ index 4fdb5cfd..32ea52b7 100644
 +        }
      }
  
-     private var resultsCountLabel: String {
+     private var visibleResultIDs: [String] { visibleResults.map(\.id) }
 diff --git a/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift
 index 4130c3a9..62f549c6 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift

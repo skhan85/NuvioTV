@@ -1,16 +1,16 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift b/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
-index b0709d07..37075797 100644
+index 94915dae..20f9aa7e 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
-@@ -13,6 +13,7 @@ public struct UserProfileView: View {
-     @State private var newProfileAvatarId = ProfileAvatarCatalog.defaultId
-     @State private var focusedColor = Color(hex: "#1E88E5")
+@@ -15,6 +15,7 @@ public struct UserProfileView: View {
+     @State private var focusedBackgroundUrl: String? = nil
+     @State private var focusedBackgroundId: String? = nil
      @FocusState private var focusedItem: String?
 +    @State private var forkCardsShown = false // Fork: staggered entrance
  
      private static let addProfileFocusId = "add_profile"
      private static let retryFocusId = "retry_account_sync"
-@@ -42,7 +43,7 @@ public struct UserProfileView: View {
+@@ -48,7 +49,7 @@ public struct UserProfileView: View {
  
                  Spacer().frame(height: 14)
  
@@ -19,7 +19,7 @@ index b0709d07..37075797 100644
                      .font(.appFont(size: 28, weight: .regular))
                      .foregroundColor(.white.opacity(0.6))
  
-@@ -83,30 +84,43 @@ public struct UserProfileView: View {
+@@ -89,30 +90,43 @@ public struct UserProfileView: View {
                  Spacer()
  
                  // Centered single row of profiles.
@@ -67,15 +67,15 @@ index b0709d07..37075797 100644
                  Spacer()
  
                  Spacer().frame(height: 56)
-@@ -141,6 +155,7 @@ public struct UserProfileView: View {
+@@ -147,6 +161,7 @@ public struct UserProfileView: View {
          }
          .animation(.easeInOut(duration: 0.18), value: showingAddProfile)
          .onAppear {
 +            withAnimation { forkCardsShown = true }
              AvatarCatalogStore.shared.loadIfNeeded()
+             ProfileBackgroundCatalogStore.shared.loadIfNeeded()
              if accountSyncError != nil, onRetryAccountSync != nil {
-                 focusRetryIfNeeded()
-@@ -166,6 +181,27 @@ public struct UserProfileView: View {
+@@ -176,6 +191,27 @@ public struct UserProfileView: View {
          }
      }
  
@@ -103,7 +103,7 @@ index b0709d07..37075797 100644
      private func initialFocusTarget() -> String? {
          if accountSyncError != nil, onRetryAccountSync != nil {
              return Self.retryFocusId
-@@ -296,10 +332,10 @@ fileprivate extension Color {
+@@ -419,10 +455,10 @@ fileprivate extension Color {
  struct ProfileCard: View {
      let profile: Profile
      let isFocused: Bool
@@ -116,7 +116,7 @@ index b0709d07..37075797 100644
      var body: some View {
          Button(action: action) {
              VStack(spacing: 18) {
-@@ -316,7 +352,16 @@ struct ProfileCard: View {
+@@ -439,7 +475,16 @@ struct ProfileCard: View {
                          .foregroundColor(isFocused ? .white : Color.white.opacity(0.6))
                          .lineLimit(1)
  
@@ -134,7 +134,7 @@ index b0709d07..37075797 100644
                          Text(L10n.string("profile_selection_primary_badge", fallback: "PRIMARY"))
                              .font(.appFont(size: 16, weight: .bold))
                              .tracking(1.5)
-@@ -352,10 +397,9 @@ struct ProfileCard: View {
+@@ -475,10 +520,9 @@ struct ProfileCard: View {
  
  struct AddProfileButton: View {
      let isFocused: Bool
@@ -146,11 +146,10 @@ index b0709d07..37075797 100644
      var body: some View {
          Button(action: action) {
              VStack(spacing: 18) {
-@@ -1212,3 +1256,45 @@ private struct ProfileAvatarPickerButton: View {
-         return prominent ? .black : .white
+@@ -1786,3 +1830,44 @@ private struct ProfileBackgroundGridCell<Content: View>: View {
+         .focusEffectDisabledIfAvailable()
      }
  }
-+
 +
 +// MARK: - Fork: Who's watching polish
 +

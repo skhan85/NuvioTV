@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index cfc9fc8d..ac12058a 100644
+index 8948b198..0281b6ed 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -1148,11 +1148,13 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
+@@ -1154,11 +1154,13 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
      case crimson = "Crimson"
      case rust = "Rust"
      case teal = "Teal"
@@ -16,7 +16,7 @@ index cfc9fc8d..ac12058a 100644
          case .charcoal: return Color(red: 13.0 / 255.0, green: 13.0 / 255.0, blue: 13.0 / 255.0)
          case .black: return .black
          case .midnight: return Color(red: 0.020, green: 0.030, blue: 0.065)
-@@ -1183,6 +1185,7 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
+@@ -1189,6 +1191,7 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
          case .crimson: return Color(red: 0.64, green: 0.11, blue: 0.14)
          case .rust: return Color(red: 0.56, green: 0.27, blue: 0.09)
          case .teal: return Color(red: 0.07, green: 0.42, blue: 0.39)
@@ -24,7 +24,7 @@ index cfc9fc8d..ac12058a 100644
          }
      }
  
-@@ -3362,6 +3365,26 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3435,6 +3438,26 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.continueWatchingEpisodeRatings) private var continueWatchingEpisodeRatings = true
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -51,7 +51,7 @@ index cfc9fc8d..ac12058a 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -3772,6 +3795,138 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -3845,6 +3868,138 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -190,7 +190,7 @@ index cfc9fc8d..ac12058a 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -5267,7 +5422,7 @@ private struct IntegrationSettingsView: View {
+@@ -5340,7 +5495,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -199,7 +199,7 @@ index cfc9fc8d..ac12058a 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -5587,7 +5742,7 @@ private struct TmdbOptionsSheet: View {
+@@ -5660,7 +5815,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -208,7 +208,7 @@ index cfc9fc8d..ac12058a 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -8760,6 +8915,7 @@ private struct PlaybackSettingsView: View {
+@@ -8834,6 +8989,7 @@ private struct PlaybackSettingsView: View {
      @AppStorage(SettingsKey.autoSkipRecap) private var autoSkipRecap = false
      @AppStorage(SettingsKey.autoSkipOutro) private var autoSkipOutro = false
      @AppStorage(SettingsKey.autoSkipMovieCredits) private var autoSkipMovieCredits = false
@@ -216,7 +216,7 @@ index cfc9fc8d..ac12058a 100644
      @AppStorage(SettingsKey.streamAutoPlayPreferBingeGroup) private var streamAutoPlayPreferBingeGroup = true
      @AppStorage(SettingsKey.streamAutoPlayReuseBingeGroup) private var streamAutoPlayReuseBingeGroup = true
      @AppStorage(SettingsKey.seekPreviewEnabled) private var seekPreviewEnabled = true
-@@ -9267,6 +9423,16 @@ private struct PlaybackSettingsView: View {
+@@ -9375,6 +9531,16 @@ private struct PlaybackSettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -233,7 +233,7 @@ index cfc9fc8d..ac12058a 100644
                  SettingsToggleRow(
                      title: L10n.string("tvos_settings_autoplay_trailers", fallback: "Autoplay Trailers"),
                      subtitle: L10n.string("tvos_settings_start_previews_after_focus_settles", fallback: "Start previews after focus settles"),
-@@ -9458,10 +9624,8 @@ private struct PlaybackSettingsView: View {
+@@ -9566,10 +9732,8 @@ private struct PlaybackSettingsView: View {
              ) {
                  SettingsActionRow(
                      title: L10n.string("tvos_playback_preferred_audio", fallback: "Preferred Audio"),
@@ -246,7 +246,7 @@ index cfc9fc8d..ac12058a 100644
                      value: audioLanguageSummary,
                      accentColor: accentColor
                  ) {
-@@ -14347,8 +14511,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -14552,8 +14716,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs
