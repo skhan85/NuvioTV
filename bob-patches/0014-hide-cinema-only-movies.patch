@@ -191,7 +191,7 @@ index 8f2700bd..d0bace62 100644
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 311b62a3..7253f7a7 100644
+index 762dd38a..202902f1 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -5177,6 +5177,8 @@ private final class TVHomeFocusWork {
@@ -212,7 +212,7 @@ index 311b62a3..7253f7a7 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -8102,7 +8106,8 @@ struct TVHomeView: View {
+@@ -8106,7 +8110,8 @@ struct TVHomeView: View {
              landscapePosters: landscapePosters,
              calendarToday: homeCalendarToday ? calendarToday.metas : [],
              kidsRevision: forkKidsLimit ? forkKids.revision : -1,
@@ -222,7 +222,7 @@ index 311b62a3..7253f7a7 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -8159,6 +8164,7 @@ struct TVHomeView: View {
+@@ -8163,6 +8168,7 @@ struct TVHomeView: View {
                  var copy = section
                  copy.items = section.items.filter {
                      !ContentReleasePolicy.isUnreleased($0, today: today)

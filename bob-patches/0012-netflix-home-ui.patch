@@ -120,10 +120,10 @@ index b5dc34e3..3ca2e896 100644
      static func fetchEpisodes(for meta: NuvioMeta) async -> [NuvioVideo]? {
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..1c3c7fd9
+index 00000000..9aa3f916
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,232 @@
 +import Foundation
 +import SwiftUI
 +
@@ -167,7 +167,7 @@ index 00000000..1c3c7fd9
 +    private var queue: [NuvioMeta] = []
 +    private var running = 0
 +    private var publishScheduled = false
-+    private static let maxConcurrent = 4
++    private static let maxConcurrent = 6
 +    private static let storeKey = "fork_card_badges_v1"
 +    private static let ttl: Double = 12 * 3600
 +
@@ -190,6 +190,24 @@ index 00000000..1c3c7fd9
 +        if let cached = entries[meta.id], now - cached.at < Self.ttl { return cached }
 +        enqueue(meta)
 +        return entries[meta.id]
++    }
++
++    /// Looks up tags for the start of every row as Home loads, so they're ready before you
++    /// scroll. Queued behind on-screen cards, which still go first.
++    func prefetch(_ sections: [TVHomeSection], perRow: Int = 15) {
++        guard Self.isEnabled else { return }
++        let now = Date().timeIntervalSince1970
++        var added = false
++        for section in sections where section.collectionFolders.isEmpty {
++            for meta in section.items.prefix(perRow) {
++                if let cached = entries[meta.id], now - cached.at < Self.ttl { continue }
++                guard !inFlight.contains(meta.id) else { continue }
++                inFlight.insert(meta.id)
++                queue.insert(meta, at: 0)
++                added = true
++            }
++        }
++        if added { DispatchQueue.main.async { [weak self] in self?.pump() } }
 +    }
 +
 +    private func enqueue(_ meta: NuvioMeta) {
@@ -339,7 +357,7 @@ index 00000000..1c3c7fd9
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 8c293406..c57a0a6f 100644
+index 8c293406..709aa510 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -710,6 +710,10 @@ struct ContentView: View {
@@ -371,7 +389,18 @@ index 8c293406..c57a0a6f 100644
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -8079,7 +8087,8 @@ struct TVHomeView: View {
+@@ -5818,6 +5826,10 @@ struct TVHomeView: View {
+                                     .padding(.bottom, 80)
+                                     // Fork: the billboard plays trailers, so cards keep their artwork.
+                                     .environment(\.forkBillboardOwnsCardTrailers, forkBillboardOwnsTrailers)
++                                    // Fork: card tags for every row's first titles, fetched as rows arrive.
++                                    .task(id: "\(store.sectionsRevision)-\(sections.count)-\(forkTrendingRevision)") {
++                                        ForkCardBadges.shared.prefetch(sections)
++                                    }
+                                     #if os(tvOS)
+                                     // Place the configurator inside the scroll content so its
+                                     // ancestor is the UIScrollView that owns the row offset.
+@@ -8079,7 +8091,8 @@ struct TVHomeView: View {
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
              calendarToday: homeCalendarToday ? calendarToday.metas : [],
@@ -381,7 +410,7 @@ index 8c293406..c57a0a6f 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -8088,7 +8097,9 @@ struct TVHomeView: View {
+@@ -8088,7 +8101,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -392,7 +421,7 @@ index 8c293406..c57a0a6f 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster"
          )
-@@ -11765,6 +11776,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -11765,6 +11780,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -400,7 +429,7 @@ index 8c293406..c57a0a6f 100644
      let meta: NuvioMeta
      /// Continue Watching entry for this title, when one exists. Lets the hero
      /// say which episode is in progress, how much is left, and show the
-@@ -11790,6 +11802,14 @@ private struct TVHeroView: View {
+@@ -11790,6 +11806,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
