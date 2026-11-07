@@ -2,8 +2,8 @@ name: tvOS Fork Release (bobsupra base)
 
 # Builds an unsigned NuvioTV (Apple TV) IPA from bobsupra/NuvioTVOS's main branch with the patches
 # in /bob-patches applied, and publishes it as a GitHub release (picked up by the Raspberry Pi
-# release watcher). Checks every 6 hours, so a new push to bobsupra's main is rebuilt within about
-# 6 hours. A change to /bob-patches or this file also triggers a rebuild. Branches other than main
+# release watcher). Checks once a day (1:41 pm Toronto in winter, 2:41 pm in summer), so a new push to
+# bobsupra's main is rebuilt within a day. A change to /bob-patches or this file also triggers a rebuild. Branches other than main
 # only build a test IPA (run artifact), never a release.
 
 on:
@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "41 */6 * * *"
+    - cron: "41 18 * * *" # once a day; every 6 hours got Actions disabled on this fork
   push:
     paths:
       - "bob-patches/**"
