@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 8948b198..0281b6ed 100644
+index 8948b198..7160405f 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 @@ -1154,11 +1154,13 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
@@ -100,7 +100,7 @@ index 8948b198..0281b6ed 100644
 +                )
 +                SettingsToggleRow(
 +                    title: "Card Tags",
-+                    subtitle: "Netflix TOP 10 tags, New Episode / New Season / Recently Added tags, and a HINDI (or Tamil, Telugu…) tag on Indian titles, from TMDB",
++                    subtitle: "Netflix TOP 10 tags, New Episode / New Season / Recently Added tags, and the original language (KOREAN, HINDI…) on non-English titles, from TMDB",
 +                    isOn: $forkCardBadges,
 +                    accentColor: accentColor
 +                )

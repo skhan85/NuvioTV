@@ -1399,10 +1399,10 @@ index 00000000..91ac5b16
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/LanguagesFork.swift b/tvosApp/NuvioTV/Sources/Fork/LanguagesFork.swift
 new file mode 100644
-index 00000000..51a64959
+index 00000000..e8e1b6b7
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/LanguagesFork.swift
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,142 @@
 +import Foundation
 +import SwiftUI
 +
@@ -1521,15 +1521,25 @@ index 00000000..51a64959
 +    }
 +}
 +
-+/// The original language of Indian titles, for a small tag on Home cards ("HINDI").
++/// The original language of non-English titles, for a small tag on Home cards ("KOREAN").
 +enum ForkOriginalLanguage {
 +    static let tagColor = Color(red: 1.0, green: 0.71, blue: 0.27)
++    /// TMDB's codes. Codes not listed (and English, or "xx" for no language) get no tag.
 +    private static let names: [String: String] = [
-+        "hi": "Hindi", "ta": "Tamil", "te": "Telugu", "ml": "Malayalam", "kn": "Kannada",
-+        "pa": "Punjabi", "bn": "Bengali", "mr": "Marathi", "ur": "Urdu"
++        "ar": "Arabic", "bg": "Bulgarian", "bn": "Bengali", "ca": "Catalan", "cn": "Cantonese",
++        "cs": "Czech", "da": "Danish", "de": "German", "el": "Greek", "es": "Spanish",
++        "et": "Estonian", "fa": "Persian", "fi": "Finnish", "fil": "Filipino", "fr": "French",
++        "gu": "Gujarati", "he": "Hebrew", "hi": "Hindi", "hr": "Croatian", "hu": "Hungarian",
++        "id": "Indonesian", "is": "Icelandic", "it": "Italian", "ja": "Japanese", "ka": "Georgian",
++        "kn": "Kannada", "ko": "Korean", "lt": "Lithuanian", "lv": "Latvian", "ml": "Malayalam",
++        "mr": "Marathi", "ms": "Malay", "nb": "Norwegian", "nl": "Dutch", "no": "Norwegian",
++        "pa": "Punjabi", "pl": "Polish", "pt": "Portuguese", "ro": "Romanian", "ru": "Russian",
++        "sk": "Slovak", "sl": "Slovenian", "sr": "Serbian", "sv": "Swedish", "sw": "Swahili",
++        "ta": "Tamil", "te": "Telugu", "th": "Thai", "tl": "Tagalog", "tr": "Turkish",
++        "uk": "Ukrainian", "ur": "Urdu", "vi": "Vietnamese", "zh": "Chinese"
 +    ]
 +
-+    /// "Hindi" for TMDB's "hi"; nil for languages that don't get a tag.
++    /// "Korean" for TMDB's "ko"; nil for English and languages that don't get a tag.
 +    static func label(forCode code: String?) -> String? {
 +        guard let code = code?.lowercased(), !code.isEmpty else { return nil }
 +        return names[code]
@@ -1537,7 +1547,7 @@ index 00000000..51a64959
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..16b96ce9
+index 00000000..9e1c3dde
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 @@ -0,0 +1,253 @@
@@ -1573,7 +1583,7 @@ index 00000000..16b96ce9
 +    struct Entry: Codable, Equatable {
 +        var primary: String?
 +        var secondary: String?
-+        /// Original language when it gets a tag ("Hindi"), see `ForkOriginalLanguage`.
++        /// Original language when it isn't English ("Korean"), see `ForkOriginalLanguage`.
 +        var language: String?
 +        var at: Double
 +    }
@@ -1587,7 +1597,7 @@ index 00000000..16b96ce9
 +    private var running = 0
 +    private var publishScheduled = false
 +    private static let maxConcurrent = 6
-+    private static let storeKey = "fork_card_badges_v2"
++    private static let storeKey = "fork_card_badges_v3"
 +    private static let ttl: Double = 12 * 3600
 +
 +    private init() {
@@ -1890,10 +1900,10 @@ index 00000000..1e20a812
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..31207be5
+index 00000000..fed1aaec
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,61 @@
 +import Foundation
 +
 +// MARK: - Fork: "What's new in your fork"
@@ -1908,6 +1918,14 @@ index 00000000..31207be5
 +    }
 +
 +    static let entries: [Entry] = [
++        Entry(
++            id: 3,
++            date: "Nov 6, 2026",
++            items: [
++                "Home cards now tag every non-English title with its language (KOREAN, SPANISH, HINDI…), not just Indian ones.",
++                "The details page shows a title's original language by name (Korean, not KO), and nothing for English titles."
++            ]
++        ),
 +        Entry(
 +            id: 2,
 +            date: "Nov 6, 2026",
