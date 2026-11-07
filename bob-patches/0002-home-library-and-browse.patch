@@ -1547,7 +1547,7 @@ index 00000000..e8e1b6b7
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..9e1c3dde
+index 00000000..ff7ff64c
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 @@ -0,0 +1,253 @@
@@ -1597,7 +1597,7 @@ index 00000000..9e1c3dde
 +    private var running = 0
 +    private var publishScheduled = false
 +    private static let maxConcurrent = 6
-+    private static let storeKey = "fork_card_badges_v3"
++    private static let storeKey = "fork_card_badges_v4"
 +    private static let ttl: Double = 12 * 3600
 +
 +    private init() {

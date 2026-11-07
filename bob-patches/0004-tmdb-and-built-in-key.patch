@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 171cf70d..ead39172 100644
+index 171cf70d..b24657d7 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 @@ -192,8 +192,8 @@ enum TmdbDetailsService {
@@ -43,7 +43,7 @@ index 171cf70d..ead39172 100644
      }
  
      static var preferredLanguage: String {
-@@ -506,6 +509,429 @@ enum TmdbDetailsService {
+@@ -506,6 +509,446 @@ enum TmdbDetailsService {
          )
      }
  
@@ -147,6 +147,8 @@ index 171cf70d..ead39172 100644
 +        let today = calendar.startOfDay(for: Date())
 +        let tomorrow = dayFormatter.string(from: calendar.date(byAdding: .day, value: 1, to: today) ?? today)
 +        let until = dayFormatter.string(from: calendar.date(byAdding: .day, value: 60, to: today) ?? today)
++        let todayText = dayFormatter.string(from: today)
++        let cutoff = dayFormatter.string(from: calendar.date(byAdding: .day, value: -90, to: today) ?? today)
 +
 +        func discover(_ path: String, _ extra: [URLQueryItem]) async -> [TmdbListItem] {
 +            var components = URLComponents(url: apiBase.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
@@ -216,6 +218,12 @@ index 171cf70d..ead39172 100644
 +                            .filter { $0 >= tomorrow }
 +                            .sorted()
 +                    }
++                    // Fork: already watchable at home somewhere (any country), or in cinemas more
++                    // than 90 days ago: it's out, so it isn't Coming Soon.
++                    let all = releases.results.flatMap(\.release_dates)
++                    let alreadyOut = all.contains { ($0.type ?? 0) >= 4 && ($0.release_date.map { String($0.prefix(10)) } ?? "9999") <= todayText }
++                        || all.contains { (2...3).contains($0.type ?? 0) && ($0.release_date.map { String($0.prefix(10)) } ?? "9999") < cutoff }
++                    if alreadyOut { return (movie.id, nil) }
 +                    let us = homeDays(releases.results.filter { $0.iso_3166_1 == "US" })
 +                    return (movie.id, us.first ?? homeDays(releases.results).first)
 +                }
@@ -409,10 +417,19 @@ index 171cf70d..ead39172 100644
 +                .filter { ($0.type ?? 0) >= 4 }
 +                .compactMap { day($0.release_date) }
 +                .min()
++            // Fork: already out at home somewhere (any country): "Recently Added" for a month, then
++            // nothing. Never "Coming Soon" just because a later date (another country, a disc) is ahead.
 +            if let homeRelease {
 +                let daysAgo = -daysFromToday(homeRelease)
-+                if daysAgo >= 0 && daysAgo <= 30 { return ("Recently Added", nil, language) }
++                if daysAgo >= 0 { return (daysAgo <= 30 ? "Recently Added" : nil, nil, language) }
 +            }
++            // Fork: in cinemas more than 90 days ago: treat it as out, whatever TMDB is missing.
++            let cinema = releases.results
++                .flatMap(\.release_dates)
++                .filter { (2...3).contains($0.type ?? 0) }
++                .compactMap { day($0.release_date) }
++                .min()
++            if let cinema, -daysFromToday(cinema) > 90 { return (nil, nil, language) }
 +            // Fork: streaming soon — "Coming Soon" with the day (this week) or the date.
 +            let upcoming = releases.results
 +                .flatMap(\.release_dates)
