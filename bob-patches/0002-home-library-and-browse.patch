@@ -1399,10 +1399,10 @@ index 00000000..91ac5b16
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/LanguagesFork.swift b/tvosApp/NuvioTV/Sources/Fork/LanguagesFork.swift
 new file mode 100644
-index 00000000..e8e1b6b7
+index 00000000..cb3e4bcc
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/LanguagesFork.swift
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,175 @@
 +import Foundation
 +import SwiftUI
 +
@@ -1454,6 +1454,38 @@ index 00000000..e8e1b6b7
 +        options: [.caseInsensitive]
 +    )
 +
++    /// AIOStreams rewrites each source's text and lists its audio languages as small-caps ISO codes after a
++    /// marker ("📣 ᴇɴ • ʜɪ • ᴋᴏ"), which the words and flags above never match. The codes on such a line are
++    /// turned back into names ("English Hindi Korean") and added to the text, so tags and the
++    /// preferred-language order see them too.
++    private static let codeNames: [String: String] = [
++        "en": "English", "eng": "English", "hi": "Hindi", "ta": "Tamil", "te": "Telugu", "ml": "Malayalam",
++        "kn": "Kannada", "pa": "Punjabi", "bn": "Bengali", "mr": "Marathi", "ur": "Urdu", "es": "Spanish",
++        "fr": "French", "de": "German", "it": "Italian", "pt": "Portuguese", "ru": "Russian", "ar": "Arabic",
++        "tr": "Turkish", "ja": "Japanese", "ko": "Korean", "zh": "Chinese"
++    ]
++    private static let smallCaps: [Character: Character] = [
++        "ᴀ": "a", "ʙ": "b", "ᴄ": "c", "ᴅ": "d", "ᴇ": "e", "ꜰ": "f", "ɢ": "g", "ʜ": "h", "ɪ": "i",
++        "ᴊ": "j", "ᴋ": "k", "ʟ": "l", "ᴍ": "m", "ɴ": "n", "ᴏ": "o", "ᴘ": "p", "ǫ": "q", "ʀ": "r",
++        "ꜱ": "s", "ᴛ": "t", "ᴜ": "u", "ᴠ": "v", "ᴡ": "w", "ʏ": "y", "ᴢ": "z"
++    ]
++    private static let languageMarkers = ["📣", "🗣"]
++
++    static func withAioLanguages(_ text: String) -> String {
++        var names: [String] = []
++        for line in text.components(separatedBy: .newlines) {
++            guard let marker = languageMarkers.compactMap({ line.range(of: $0)?.lowerBound }).min() else { continue }
++            let plain = String(line[marker...].map { smallCaps[$0] ?? $0 }).lowercased()
++            let tokens = plain.components(separatedBy: CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyz-").inverted)
++            for token in tokens {
++                let code = token.split(separator: "-").first.map(String.init) ?? ""
++                guard (2...3).contains(code.count), let name = codeNames[code], !names.contains(name) else { continue }
++                names.append(name)
++            }
++        }
++        return names.isEmpty ? text : text + "\n" + names.joined(separator: " ")
++    }
++
 +    private static func found(_ regex: NSRegularExpression?, in text: String) -> Bool {
 +        guard let regex else { return false }
 +        return regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
@@ -1466,8 +1498,9 @@ index 00000000..e8e1b6b7
 +        return tags(text: text)
 +    }
 +
-+    static func tags(text: String) -> Tags {
-+        guard !text.isEmpty else { return Tags() }
++    static func tags(text raw: String) -> Tags {
++        guard !raw.isEmpty else { return Tags() }
++        let text = withAioLanguages(raw)
 +        let languages = compiled.filter { found($0.regex, in: text) }.map(\.name)
 +        let hasEnglish = found(english, in: text)
 +        let multiAudio = found(multi, in: text) || languages.count + (hasEnglish ? 1 : 0) >= 2
