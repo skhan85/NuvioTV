@@ -972,7 +972,7 @@ index 00000000..1603ec76
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
-index 87d2625d..72c378ad 100644
+index cd88a01c..832ffd63 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
 @@ -86,20 +86,25 @@ final class PlaybackStartupBenchmark {

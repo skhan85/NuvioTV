@@ -1999,10 +1999,10 @@ index 00000000..fed1aaec
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 23dc71cc..93eb3614 100644
+index 506a6b52..c34e1f66 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-@@ -481,6 +481,10 @@ struct ContentView: View {
+@@ -483,6 +483,10 @@ struct ContentView: View {
      @State private var reopenStreamPickerResumePosition: Double?
      /// Episode to select when Details opens from the calendar.
      @State private var detailsFocusEpisode: DetailsEpisodeFocus?
@@ -2013,7 +2013,7 @@ index 23dc71cc..93eb3614 100644
      /// Title whose liquid-glass quick-actions menu is showing (long-press on a
      /// card). Presented as an overlay over the tab view, like Details/Player.
      @State private var cardMenuMeta: NuvioMeta?
-@@ -540,6 +544,42 @@ struct ContentView: View {
+@@ -542,6 +546,42 @@ struct ContentView: View {
          ZStack {
              ProfileScopedRootBackground()
  
@@ -2056,7 +2056,7 @@ index 23dc71cc..93eb3614 100644
              switch activeScreen {
              case .login:
                  // `.login` is also the value this state starts at, before
-@@ -681,6 +721,18 @@ struct ContentView: View {
+@@ -683,6 +723,18 @@ struct ContentView: View {
                  }
              }
          }
@@ -2075,7 +2075,7 @@ index 23dc71cc..93eb3614 100644
          // Backing out of the switch must not leave the cover behind.
          .onChange(of: isOnProfileSelection) { _, isSelecting in
              if isSelecting, isPreparingProfile {
-@@ -1292,7 +1344,7 @@ struct ContentView: View {
+@@ -1294,7 +1346,7 @@ struct ContentView: View {
          let callbackDuration = callback.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
          let duration = callbackDuration
              ?? session.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
@@ -2084,7 +2084,7 @@ index 23dc71cc..93eb3614 100644
              guard let duration, position.isFinite, position >= 0 else { return nil }
              let normalizedProgress = position / duration
              guard callbackDuration != nil,
-@@ -1302,6 +1354,20 @@ struct ContentView: View {
+@@ -1304,6 +1356,20 @@ struct ContentView: View {
              }
              return 1
          }
@@ -2105,7 +2105,7 @@ index 23dc71cc..93eb3614 100644
          guard let progress, progress.isFinite, (0...1).contains(progress) else { return }
          // External callbacks can underreport EOF position; allow up to two minutes of grace,
          // with an 80% floor, while built-in playback keeps its stream-timed threshold.
-@@ -1380,6 +1446,10 @@ struct ContentView: View {
+@@ -1382,6 +1448,10 @@ struct ContentView: View {
              return
          }
  
@@ -2116,7 +2116,7 @@ index 23dc71cc..93eb3614 100644
          if progress >= callbackCompletionCutoff(WatchProgressLedger.completionFraction) {
              if let duration {
                  ContinueWatchingStore.markPlaybackCompleted(
-@@ -1410,6 +1480,129 @@ struct ContentView: View {
+@@ -1412,6 +1482,129 @@ struct ContentView: View {
          }
      }
  
@@ -2246,7 +2246,7 @@ index 23dc71cc..93eb3614 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1861,6 +2054,15 @@ struct ContentView: View {
+@@ -1863,6 +2056,15 @@ struct ContentView: View {
          }
      }
  
@@ -2262,7 +2262,7 @@ index 23dc71cc..93eb3614 100644
      private func presentPlayback(
          url: URL,
          meta: NuvioMeta,
-@@ -1877,7 +2079,8 @@ struct ContentView: View {
+@@ -1879,7 +2081,8 @@ struct ContentView: View {
          startupBenchmarkToken: UUID? = nil,
          sourceID: String? = nil,
          collectionContext: CollectionPlaybackContext? = nil,
@@ -2272,7 +2272,7 @@ index 23dc71cc..93eb3614 100644
      ) {
          // Usenet streams arrive as nuvio-usenet:// URLs: start the local
          // engine first, then play its 127.0.0.1 URL like any other stream.
-@@ -1919,13 +2122,47 @@ struct ContentView: View {
+@@ -1921,13 +2124,47 @@ struct ContentView: View {
          let store = ProfileSettings.store(for: profileViewModel.activeProfile?.id)
          let defaultPlayer = ExternalPlayer.from(store.string(forKey: SettingsKey.externalPlayer))
          let player = customPlayer ?? defaultPlayer
@@ -2322,7 +2322,7 @@ index 23dc71cc..93eb3614 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -1972,7 +2209,13 @@ struct ContentView: View {
+@@ -1974,7 +2211,13 @@ struct ContentView: View {
          // Hand off to the external app only when it is actually installed
          // (`canOpenURL` needs its scheme in LSApplicationQueriesSchemes); if it
          // isn't, fall through to the built-in player instead of a dead launch.
@@ -2337,7 +2337,7 @@ index 23dc71cc..93eb3614 100644
              meta: meta,
              season: meta.isSeries ? numbers?.season : nil,
              episode: meta.isSeries ? numbers?.episode : nil,
-@@ -1994,6 +2237,22 @@ struct ContentView: View {
+@@ -1996,6 +2239,22 @@ struct ContentView: View {
              PlaybackStartupTiming.cancel(token: startupBenchmarkToken)
              if let externalSession {
                  ExternalPlaybackSessionStore.save(externalSession)
@@ -2360,7 +2360,7 @@ index 23dc71cc..93eb3614 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -4941,6 +5200,8 @@ enum ProfileDisplayName {
+@@ -4943,6 +5202,8 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -2369,7 +2369,7 @@ index 23dc71cc..93eb3614 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -4953,6 +5214,13 @@ private final class TVHomeFocusWork {
+@@ -4955,6 +5216,13 @@ private final class TVHomeFocusWork {
          let cwLandscape: Bool
          let landscapePosters: Bool
          let calendarToday: [NuvioMeta]
@@ -2383,7 +2383,7 @@ index 23dc71cc..93eb3614 100644
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5398,6 +5666,21 @@ struct TVHomeView: View {
+@@ -5400,6 +5668,21 @@ struct TVHomeView: View {
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.heroEnabled) private var heroEnabled = true
      @AppStorage(SettingsKey.fullscreenHeroBackdrop) private var fullscreenHeroBackdrop = true
@@ -2405,7 +2405,7 @@ index 23dc71cc..93eb3614 100644
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5448,6 +5731,19 @@ struct TVHomeView: View {
+@@ -5450,6 +5733,19 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -2425,7 +2425,7 @@ index 23dc71cc..93eb3614 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -5542,6 +5838,46 @@ struct TVHomeView: View {
+@@ -5544,6 +5840,46 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -2472,7 +2472,7 @@ index 23dc71cc..93eb3614 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -5557,6 +5893,7 @@ struct TVHomeView: View {
+@@ -5559,6 +5895,7 @@ struct TVHomeView: View {
                      )
                      .equatable()
                      .frame(width: proxy.size.width, height: proxy.size.height)
@@ -2480,7 +2480,7 @@ index 23dc71cc..93eb3614 100644
                      .clipped()
                  } else {
                      let backdropWidth = proxy.size.width * 0.65
-@@ -5572,6 +5909,7 @@ struct TVHomeView: View {
+@@ -5574,6 +5911,7 @@ struct TVHomeView: View {
                          )
                          .equatable()
                          .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
@@ -2488,7 +2488,7 @@ index 23dc71cc..93eb3614 100644
                          .mask(
                              LinearGradient(
                                  stops: [
-@@ -5676,7 +6014,8 @@ struct TVHomeView: View {
+@@ -5678,7 +6016,8 @@ struct TVHomeView: View {
                          } else if let heroMeta = visibleFocusedMeta ?? visibleHero {
                              TVHeroView(
                                  meta: heroMeta,
@@ -2498,7 +2498,7 @@ index 23dc71cc..93eb3614 100644
                              ) {
                                  navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
                              }
-@@ -5722,6 +6061,15 @@ struct TVHomeView: View {
+@@ -5724,6 +6063,15 @@ struct TVHomeView: View {
                                              .padding(.horizontal, horizontalEdgeInset)
                                          }
  
@@ -2514,7 +2514,7 @@ index 23dc71cc..93eb3614 100644
                                          ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                                              let isNearFocusedRow = abs(index - focusedRowIndex) <= 2
                                              if isNearFocusedRow {
-@@ -5745,6 +6093,26 @@ struct TVHomeView: View {
+@@ -5747,6 +6095,26 @@ struct TVHomeView: View {
                                      .frame(maxWidth: .infinity, alignment: .leading)
                                      .padding(.top, TVHomeLayout.rowsTopPadding)
                                      .padding(.bottom, 80)
@@ -2541,7 +2541,7 @@ index 23dc71cc..93eb3614 100644
                                      #if os(tvOS)
                                      // Place the configurator inside the scroll content so its
                                      // ancestor is the UIScrollView that owns the row offset.
-@@ -8188,6 +8556,23 @@ struct TVHomeView: View {
+@@ -8190,6 +8558,23 @@ struct TVHomeView: View {
              : estimatedCollectionRowHeight(for: section)
      }
  
@@ -2565,7 +2565,7 @@ index 23dc71cc..93eb3614 100644
      private func prepareForOverlayPresentation(restoreCardID: String? = nil) {
          focusWork.defersOverlayPreparation = true
          focusWork.pendingOverlayRestoreCardID = restoreCardID
-@@ -8259,6 +8644,8 @@ struct TVHomeView: View {
+@@ -8261,6 +8646,8 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -2574,7 +2574,7 @@ index 23dc71cc..93eb3614 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -8270,7 +8657,11 @@ struct TVHomeView: View {
+@@ -8272,7 +8659,11 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
@@ -2587,7 +2587,7 @@ index 23dc71cc..93eb3614 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -8279,7 +8670,9 @@ struct TVHomeView: View {
+@@ -8281,7 +8672,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -2598,7 +2598,7 @@ index 23dc71cc..93eb3614 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster"
          )
-@@ -8300,7 +8693,16 @@ struct TVHomeView: View {
+@@ -8302,7 +8695,16 @@ struct TVHomeView: View {
              + ((calendarToday.isEmpty || !homeCalendarToday) ? [] : [calendarTodaySection])
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
@@ -2616,7 +2616,7 @@ index 23dc71cc..93eb3614 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -8312,18 +8714,41 @@ struct TVHomeView: View {
+@@ -8314,18 +8716,41 @@ struct TVHomeView: View {
                  if !section.collectionFolders.isEmpty
                      || section.id == TVHomeSection.localTitlesId
                      || section.id == TVHomeSection.jellyfinId
@@ -2659,7 +2659,7 @@ index 23dc71cc..93eb3614 100644
          focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
              signature: signature,
              sections: contentSections
-@@ -8389,11 +8814,53 @@ struct TVHomeView: View {
+@@ -8391,11 +8816,53 @@ struct TVHomeView: View {
      }
  
  
@@ -2713,7 +2713,7 @@ index 23dc71cc..93eb3614 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -11893,11 +12360,14 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -11895,11 +12362,14 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -2728,7 +2728,7 @@ index 23dc71cc..93eb3614 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
      @AppStorage(SettingsKey.hideUnwatchedEpisodeDescriptions) private var hideUnwatchedEpisodeDescriptions = false
-@@ -11949,6 +12419,14 @@ private struct TVHeroView: View {
+@@ -11951,6 +12421,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
@@ -2743,7 +2743,7 @@ index 23dc71cc..93eb3614 100644
              TVHeroMetaLine(meta: meta, episodeLine: episodeLine, continueItem: continueItem)
  
              if let continueItem {
-@@ -11967,6 +12445,8 @@ private struct TVHeroView: View {
+@@ -11969,6 +12447,8 @@ private struct TVHeroView: View {
                          .lineLimit(4)
                          .frame(maxWidth: 900, alignment: .leading)
                          .padding(.top, 4)
@@ -2752,7 +2752,7 @@ index 23dc71cc..93eb3614 100644
                  } else {
                      Text(description.wrappedEveryNWords(9))
                          .font(.appFont(size: 24, weight: .regular))
-@@ -11975,6 +12455,8 @@ private struct TVHeroView: View {
+@@ -11977,6 +12457,8 @@ private struct TVHeroView: View {
                          .lineLimit(4)
                          .frame(maxWidth: 900, alignment: .leading)
                          .padding(.top, 4)
@@ -2761,7 +2761,7 @@ index 23dc71cc..93eb3614 100644
                  }
              }
          }
-@@ -12028,6 +12510,7 @@ extension TVHeroView: Equatable {
+@@ -12030,6 +12512,7 @@ extension TVHeroView: Equatable {
              && lhs.continueItem?.isUpNext == rhs.continueItem?.isUpNext
              && lhs.hideUnwatchedEpisodeDescriptions == rhs.hideUnwatchedEpisodeDescriptions
              && lhs.hideUnwatchedEpisodeTitles == rhs.hideUnwatchedEpisodeTitles
@@ -2770,10 +2770,10 @@ index 23dc71cc..93eb3614 100644
  }
  
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index 70b20f41..2e6e7e7a 100644
+index 94f8326d..b98908ab 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-@@ -236,6 +236,9 @@ struct PosterCard: View {
+@@ -237,6 +237,9 @@ struct PosterCard: View {
      @AppStorage(SettingsKey.blurUnwatchedEpisodes) private var blurUnwatchedEpisodes = false
      @AppStorage(SettingsKey.hideUnwatchedEpisodeTitles) private var hideUnwatchedEpisodeTitles = false
      @State private var loadedCustomLandscapeArtworkURL: String?
@@ -2783,7 +2783,7 @@ index 70b20f41..2e6e7e7a 100644
  
      private var shouldBlurNextUpArtwork: Bool {
          (continueWatchingBlurNextUp || blurUnwatchedEpisodes)
-@@ -249,6 +252,8 @@ struct PosterCard: View {
+@@ -250,6 +253,8 @@ struct PosterCard: View {
      @State private var landscapeArtworkPrepared = false
      @AppStorage(SettingsKey.trailersEnabled) private var trailersEnabled = true
      @AppStorage(SettingsKey.trailerDelay) private var trailerDelay = 7
@@ -2792,7 +2792,7 @@ index 70b20f41..2e6e7e7a 100644
      @AppStorage(SettingsKey.cardCornerRadius) private var cardCornerRadiusSetting = AppCardStyle.defaultCornerRadiusRaw
      @AppStorage(SettingsKey.liquidGlassCards) private var liquidGlassCards = true
      @State private var isTrailerPreviewActive = false
-@@ -423,7 +428,7 @@ struct PosterCard: View {
+@@ -424,7 +429,7 @@ struct PosterCard: View {
              .overlay {
                  // Prepare during the delay, but keep playback and visibility
                  // gated by isTrailerPreviewActive until the timer completes.
@@ -2801,7 +2801,7 @@ index 70b20f41..2e6e7e7a 100644
                      && !isContinueOrUpcomingCard && !didFinishTrailerPreview {
                      TrailerPreviewPlayer(
                          meta: meta,
-@@ -454,6 +459,27 @@ struct PosterCard: View {
+@@ -455,6 +460,27 @@ struct PosterCard: View {
              .overlay(alignment: effectiveLandscape ? .topTrailing : .top) {
                  continueBadge
              }
@@ -2829,7 +2829,7 @@ index 70b20f41..2e6e7e7a 100644
              .overlay(alignment: .bottomTrailing) {
                  if let collectionOrigin, !continueIsUpNext {
                      CollectionOriginBadge(origin: collectionOrigin)
-@@ -659,9 +685,22 @@ struct PosterCard: View {
+@@ -651,9 +677,22 @@ struct PosterCard: View {
          }
      }
  
@@ -2852,7 +2852,7 @@ index 70b20f41..2e6e7e7a 100644
          if let continueEpisodeText {
              return "\(continueEpisodeText) • \(continueRemainingText)"
          }
-@@ -682,7 +721,7 @@ struct PosterCard: View {
+@@ -674,7 +713,7 @@ struct PosterCard: View {
                          .frame(width: width, height: 8)
  
                      Capsule()
@@ -2861,7 +2861,7 @@ index 70b20f41..2e6e7e7a 100644
                          .frame(width: max(8, width * progress), height: 8)
                  }
                  .padding(.leading, 22)
-@@ -952,7 +991,12 @@ struct PosterCard: View {
+@@ -951,7 +990,12 @@ struct PosterCard: View {
      }
  
      private var trailerActivationIdentity: String {
@@ -2875,7 +2875,7 @@ index 70b20f41..2e6e7e7a 100644
      }
  
      private var isTrailerPreviewVisible: Bool {
-@@ -964,7 +1008,7 @@ struct PosterCard: View {
+@@ -963,7 +1007,7 @@ struct PosterCard: View {
          isTrailerPreviewActive = false
          isTrailerPreviewReady = false
          didFinishTrailerPreview = false
@@ -2884,7 +2884,7 @@ index 70b20f41..2e6e7e7a 100644
  
          let delay = min(15, max(0, trailerDelay))
          do {
-@@ -972,7 +1016,7 @@ struct PosterCard: View {
+@@ -971,7 +1015,7 @@ struct PosterCard: View {
          } catch {
              return
          }
@@ -2893,7 +2893,7 @@ index 70b20f41..2e6e7e7a 100644
          isTrailerPreviewActive = true
      }
  
-@@ -3541,6 +3585,9 @@ struct TitleActionsMenuContent: View {
+@@ -3539,6 +3583,9 @@ struct TitleActionsMenuContent: View {
              let isItemWatched = libraryWatchedContext == nil
                  ? WatchedStore.contains(meta: meta)
                  : isLibraryWatched
@@ -2903,7 +2903,7 @@ index 70b20f41..2e6e7e7a 100644
  
              Button {
                  scheduleOpenDetails()
-@@ -3548,17 +3595,19 @@ struct TitleActionsMenuContent: View {
+@@ -3546,17 +3593,19 @@ struct TitleActionsMenuContent: View {
                  Label(L10n.string("action_go_to_details", fallback: "Go to details"), systemImage: "info.circle")
              }
  
@@ -2933,7 +2933,7 @@ index 70b20f41..2e6e7e7a 100644
  
              if let onRefreshCatalog {
                  Button {
-@@ -3576,7 +3625,11 @@ struct TitleActionsMenuContent: View {
+@@ -3574,7 +3623,11 @@ struct TitleActionsMenuContent: View {
                          toggleLibrary(currentlyInLibrary: true)
                      }
                  } label: {
@@ -2946,7 +2946,7 @@ index 70b20f41..2e6e7e7a 100644
                  }
              } else {
                  Button {
-@@ -3584,7 +3637,11 @@ struct TitleActionsMenuContent: View {
+@@ -3582,7 +3635,11 @@ struct TitleActionsMenuContent: View {
                          toggleLibrary(currentlyInLibrary: false)
                      }
                  } label: {
@@ -2960,7 +2960,7 @@ index 70b20f41..2e6e7e7a 100644
              }
          }
 diff --git a/tvosApp/NuvioTV/Sources/UI/Discover/DiscoverView.swift b/tvosApp/NuvioTV/Sources/UI/Discover/DiscoverView.swift
-index cb8708a9..fbf86a6d 100644
+index 4f2db92a..3ae15c68 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Discover/DiscoverView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Discover/DiscoverView.swift
 @@ -45,6 +45,7 @@ struct DiscoverSection: View {
@@ -2984,7 +2984,7 @@ index cb8708a9..fbf86a6d 100644
  
      @ViewBuilder
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift b/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
-index 26c8d0ec..16a9a188 100644
+index c443d0ce..4508f4fb 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
 @@ -42,11 +42,16 @@ struct CollectionFolderBrowseView: View {
@@ -3300,7 +3300,7 @@ index cb516441..d2bc7fce 100644
          }
          .padding(
 diff --git a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
-index c1e9203d..12be61d8 100644
+index aeb043c6..6b033a48 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
 @@ -260,6 +260,8 @@ public struct LibraryView: View {

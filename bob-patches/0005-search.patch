@@ -23,7 +23,7 @@ index b1888021..2c3918fa 100644
  
      private var visibleResultIDs: [String] { visibleResults.map(\.id) }
 diff --git a/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
-index 72215b23..1784ee40 100644
+index 7c444603..e06dffde 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
 @@ -112,6 +112,7 @@ struct NetflixSearchView: View {

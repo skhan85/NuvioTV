@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index c29797b9..b25c945f 100644
+index fc9e343d..35d1257f 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 @@ -463,6 +463,14 @@ struct DetailsScreen: View {
@@ -108,7 +108,7 @@ index c29797b9..b25c945f 100644
              // tvOS doesn't re-run default-focus when this content swaps in after
              // the async load finishes, so focus lands nowhere / off the Play
              // button. Move it onto Play explicitly once the content appears
-@@ -5594,9 +5627,39 @@ private struct TvDetailsActionButton: View {
+@@ -5596,9 +5629,39 @@ private struct TvDetailsActionButton: View {
      var onBack: (() -> Void)? = nil
  
      @State private var didTriggerHold = false
@@ -148,7 +148,7 @@ index c29797b9..b25c945f 100644
          Button(action: {
              if didTriggerHold {
                  didTriggerHold = false
-@@ -5618,9 +5681,12 @@ private struct TvDetailsActionButton: View {
+@@ -5620,9 +5683,12 @@ private struct TvDetailsActionButton: View {
              }
              .foregroundColor(foregroundColor)
              .padding(.horizontal, isPrimary ? 44 : 0)
@@ -164,7 +164,7 @@ index c29797b9..b25c945f 100644
              .shadow(color: .black.opacity(isFocused ? 0.35 : 0.18), radius: isFocused ? 18 : 7, y: 8)
          }
          .buttonStyle(TvPlayActionButtonStyle(onHold: longPressAction, didTriggerHold: $didTriggerHold))
-@@ -5649,6 +5715,46 @@ private struct TvDetailsActionButton: View {
+@@ -5651,6 +5717,46 @@ private struct TvDetailsActionButton: View {
      }
  }
  
@@ -211,7 +211,7 @@ index c29797b9..b25c945f 100644
  private struct OptionalAccessibilityHint: ViewModifier {
      let hint: String?
  
-@@ -5833,11 +5939,18 @@ private struct TvDetailsSummary: View {
+@@ -5835,11 +5941,18 @@ private struct TvDetailsSummary: View {
          guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
              return nil
          }
@@ -234,7 +234,7 @@ index c29797b9..b25c945f 100644
      }
  
      private var releaseDisplay: String? {
-@@ -8916,6 +9029,8 @@ private struct TvStreamPickerOverlay: View {
+@@ -8923,6 +9036,8 @@ private struct TvStreamPickerOverlay: View {
      @State private var focusedStreamWarmTask: Task<Void, Never>? = nil
      @State private var focusedStreamWarmToken: UUID? = nil
  
@@ -243,7 +243,7 @@ index c29797b9..b25c945f 100644
  
      private let filterAllKey = "filter::all"
      private let sortKey = "filter::sort"
-@@ -9070,6 +9185,16 @@ private struct TvStreamPickerOverlay: View {
+@@ -9102,6 +9217,16 @@ private struct TvStreamPickerOverlay: View {
              // cards before landing on the next one; re-seeding on that blip
              // snaps focus back to the first stream (the reported bug), so we
              // debounce and bail when focus has already landed somewhere.
@@ -260,7 +260,7 @@ index c29797b9..b25c945f 100644
              .onChange(of: focusedItem) { _, newValue in
                  if let newValue, newValue != filterAllKey, !didSeedStreamFocus {
                      didSeedStreamFocus = true
-@@ -9220,7 +9345,8 @@ private struct TvStreamPickerOverlay: View {
+@@ -9252,7 +9377,8 @@ private struct TvStreamPickerOverlay: View {
              sortOption: sortOption,
              includeDebrid: includeDebrid,
              cachedOnly: effectiveCachedOnly,
@@ -270,7 +270,7 @@ index c29797b9..b25c945f 100644
          )
          displayedStreams = refreshedStreams
          displayedStreamsCacheKey = key
-@@ -9507,6 +9633,20 @@ private struct TvStreamPickerOverlay: View {
+@@ -9576,6 +9702,20 @@ private struct TvStreamPickerOverlay: View {
                                      action: { select(stream, player: nil) },
                                      onSelectPlayer: { player in select(stream, player: player) }
                                  )
@@ -291,7 +291,7 @@ index c29797b9..b25c945f 100644
                                  .id(stream.id)
                                  .onAppear {
                                      if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -9887,8 +10027,11 @@ private struct TvStreamCardPresentation {
+@@ -10149,8 +10289,11 @@ private struct TvStreamCardPresentation {
      let fileSizeLabel: String?
      let badgePlacement: StreamBadgePlacement
      let showAddonLogo: Bool
@@ -303,15 +303,15 @@ index c29797b9..b25c945f 100644
          let matched = StreamBadgeMatcher.matchedBadges(
              for: stream,
              rules: badgeSettings.rules
-@@ -9952,6 +10095,7 @@ private struct TvStreamCard: View {
-     private let fileSizeLabel: String?
-     private let badgePlacement: StreamBadgePlacement
-     private let showAddonLogo: Bool
+@@ -10218,6 +10361,7 @@ private struct TvStreamCard: View {
+     private let style: StreamListStyle
+     /// The Stream List preview draws its first card as focused.
+     private let previewFocused: Bool
 +    private let forkLanguages: ForkStreamLanguages.Tags
      let externalFocus: FocusState<String?>.Binding
      let action: () -> Void
      var onSelectPlayer: ((ExternalPlayer) -> Void)? = nil
-@@ -9976,6 +10120,7 @@ private struct TvStreamCard: View {
+@@ -10246,6 +10390,7 @@ private struct TvStreamCard: View {
          self.fileSizeLabel = presentation.fileSizeLabel
          self.badgePlacement = presentation.badgePlacement
          self.showAddonLogo = presentation.showAddonLogo
@@ -319,23 +319,23 @@ index c29797b9..b25c945f 100644
          self.externalFocus = externalFocus
          self.action = action
          self.onSelectPlayer = onSelectPlayer
-@@ -9999,11 +10144,20 @@ private struct TvStreamCard: View {
+@@ -10277,11 +10422,20 @@ private struct TvStreamCard: View {
                          )
                      }
  
 -                    Text(primaryName)
--                        .font(.system(size: 34, weight: .bold))
+-                        .font(.system(size: style.font(34), weight: .bold))
 -                        .foregroundColor(.white)
--                        .lineLimit(2)
+-                        .lineLimit(nameLines)
 -                        .fixedSize(horizontal: false, vertical: true)
 +                    // Fork: no size pill next to the source name. It counted in binary units (28.2 GB for a
 +                    // 30.3 GB file) and showed even with the size badges turned off. The size is in the
 +                    // add-on's own text and in the size badge when that is on.
 +                    HStack(alignment: .firstTextBaseline, spacing: 14) {
 +                        Text(primaryName)
-+                            .font(.system(size: 34, weight: .bold))
++                            .font(.system(size: style.font(34), weight: .bold))
 +                            .foregroundColor(.white)
-+                            .lineLimit(2)
++                            .lineLimit(nameLines)
 +                            .fixedSize(horizontal: false, vertical: true)
 +                        // Fork: "Hindi" / "Multi-audio" tags.
 +                        if !forkLanguages.isEmpty {
@@ -345,15 +345,15 @@ index c29797b9..b25c945f 100644
  
                      if let secondaryName {
                          Text(secondaryName)
-@@ -10014,12 +10168,9 @@ private struct TvStreamCard: View {
+@@ -10292,12 +10446,9 @@ private struct TvStreamCard: View {
                      }
  
                      if let description = stream.description, !description.isEmpty {
 -                        Text(description)
--                            .font(.system(size: 26, weight: .regular))
+-                            .font(.system(size: style.detailFont(26), weight: .regular))
 -                            .foregroundColor(.white.opacity(0.62))
--                            .lineSpacing(5)
--                            .lineLimit(6)
+-                            .lineSpacing(style.detailLineSpacing)
+-                            .lineLimit(descriptionLines)
 -                            .fixedSize(horizontal: false, vertical: true)
 +                        // Fork: every line of the add-on's text, laid out in two columns so the
 +                        // card stays compact (was cut off after six lines).
