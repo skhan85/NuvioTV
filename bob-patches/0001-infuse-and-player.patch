@@ -1068,7 +1068,7 @@ index 886801c7..ab91c0d8 100644
              withAnimation(.easeInOut(duration: 0.2)) {
                  viewModel.closeSceneDetail()
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
-index 7040a4a8..793acf39 100644
+index bcc5d4dc..293a16a8 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
 @@ -31,7 +31,8 @@ private final class PlaybackDiagnosticHistoryModel: ObservableObject {
@@ -1109,7 +1109,7 @@ index 7040a4a8..793acf39 100644
          requestID = UUID()
          server.stop()
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index 6bbaa769..b7280812 100644
+index d86a6d9b..52d60219 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 @@ -412,6 +412,10 @@ class PlayerViewModel: ObservableObject {
@@ -1133,7 +1133,7 @@ index 6bbaa769..b7280812 100644
  
      init(
          sessionCoordinator suppliedCoordinator: PlaybackSessionCoordinator? = nil,
-@@ -2745,9 +2750,24 @@ class PlayerViewModel: ObservableObject {
+@@ -2758,9 +2763,24 @@ class PlayerViewModel: ObservableObject {
      /// Play the next episode now (the card's Play button).
      func playNextEpisode() {
          guard !isAdvanceInFlight, !isAwaitingStreamStart else { return }
@@ -1158,7 +1158,7 @@ index 6bbaa769..b7280812 100644
      func cancelAutoPlay() {
          isAutoPlayCancelled = true
          nextEpisodeCountdown = nil
-@@ -3048,7 +3068,24 @@ class PlayerViewModel: ObservableObject {
+@@ -3061,7 +3081,24 @@ class PlayerViewModel: ObservableObject {
          }
          let timeoutSeconds = loadTimeoutSeconds
          loadWatchdogTask = Task { [weak self] in
@@ -1184,7 +1184,7 @@ index 6bbaa769..b7280812 100644
              guard !Task.isCancelled, let self,
                    self.sessionCoordinator.loadGeneration == targetGeneration,
                    self.sessionCoordinator.lastLoadError == nil,
-@@ -3109,7 +3146,7 @@ class PlayerViewModel: ObservableObject {
+@@ -3122,7 +3159,7 @@ class PlayerViewModel: ObservableObject {
                  LastPlaybackStreamStore.remove(metaId: meta.id, season: numbers?.season, episode: numbers?.episode)
              }
              self.attemptFailover(
@@ -1193,7 +1193,7 @@ index 6bbaa769..b7280812 100644
                  toast: nil
              )
          }
-@@ -4137,6 +4174,14 @@ class PlayerViewModel: ObservableObject {
+@@ -4150,6 +4187,14 @@ class PlayerViewModel: ObservableObject {
                      }
                  }
                  if autoPlayNextEnabled && !isAutoPlayCancelled {
@@ -1208,7 +1208,7 @@ index 6bbaa769..b7280812 100644
                      advance()
                      return
                  }
-@@ -4845,6 +4890,7 @@ class PlayerViewModel: ObservableObject {
+@@ -4858,6 +4903,7 @@ class PlayerViewModel: ObservableObject {
      }
  
      func togglePlayPause() {
@@ -1216,7 +1216,7 @@ index 6bbaa769..b7280812 100644
          recordWatchPartyTransportIntent()
          if isScrubbing {
              commitScrub(andPlay: true)
-@@ -6065,6 +6111,8 @@ class PlayerViewModel: ObservableObject {
+@@ -6080,6 +6126,8 @@ class PlayerViewModel: ObservableObject {
      }
  
      func dpadSample(x: Double, y: Double) {
@@ -1225,7 +1225,7 @@ index 6bbaa769..b7280812 100644
          for observer in gesturePadObservers.values { observer(x, y) }
          guard !showScenePanel, !isSceneDetailVisible else { return }
          if isScrubbing {
-@@ -6102,6 +6150,8 @@ class PlayerViewModel: ObservableObject {
+@@ -6117,6 +6165,8 @@ class PlayerViewModel: ObservableObject {
      /// Handles GameController buttonA (physical click on Siri Remote touchpad).
      /// On 1st Gen Siri Remotes (black remote), clicks on the left/right sides trigger discrete seek or hold-to-seek.
      func handleGCButtonA(isPressed: Bool, pad: GCMicroGamepad? = nil, touchX: Double? = nil) {
