@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift b/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
-index 94915dae..20f9aa7e 100644
+index 94915dae..cb23f28a 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
 @@ -15,6 +15,7 @@ public struct UserProfileView: View {
@@ -67,15 +67,16 @@ index 94915dae..20f9aa7e 100644
                  Spacer()
  
                  Spacer().frame(height: 56)
-@@ -147,6 +161,7 @@ public struct UserProfileView: View {
+@@ -147,6 +161,8 @@ public struct UserProfileView: View {
          }
          .animation(.easeInOut(duration: 0.18), value: showingAddProfile)
          .onAppear {
++            ForkSpeed.profilePickerShown() // Fork: Speed Report
 +            withAnimation { forkCardsShown = true }
              AvatarCatalogStore.shared.loadIfNeeded()
              ProfileBackgroundCatalogStore.shared.loadIfNeeded()
              if accountSyncError != nil, onRetryAccountSync != nil {
-@@ -176,6 +191,27 @@ public struct UserProfileView: View {
+@@ -176,6 +192,27 @@ public struct UserProfileView: View {
          }
      }
  
@@ -103,7 +104,7 @@ index 94915dae..20f9aa7e 100644
      private func initialFocusTarget() -> String? {
          if accountSyncError != nil, onRetryAccountSync != nil {
              return Self.retryFocusId
-@@ -419,10 +455,10 @@ fileprivate extension Color {
+@@ -419,10 +456,10 @@ fileprivate extension Color {
  struct ProfileCard: View {
      let profile: Profile
      let isFocused: Bool
@@ -116,7 +117,7 @@ index 94915dae..20f9aa7e 100644
      var body: some View {
          Button(action: action) {
              VStack(spacing: 18) {
-@@ -439,7 +475,16 @@ struct ProfileCard: View {
+@@ -439,7 +476,16 @@ struct ProfileCard: View {
                          .foregroundColor(isFocused ? .white : Color.white.opacity(0.6))
                          .lineLimit(1)
  
@@ -134,7 +135,7 @@ index 94915dae..20f9aa7e 100644
                          Text(L10n.string("profile_selection_primary_badge", fallback: "PRIMARY"))
                              .font(.appFont(size: 16, weight: .bold))
                              .tracking(1.5)
-@@ -475,10 +520,9 @@ struct ProfileCard: View {
+@@ -475,10 +521,9 @@ struct ProfileCard: View {
  
  struct AddProfileButton: View {
      let isFocused: Bool
@@ -146,7 +147,7 @@ index 94915dae..20f9aa7e 100644
      var body: some View {
          Button(action: action) {
              VStack(spacing: 18) {
-@@ -1786,3 +1830,44 @@ private struct ProfileBackgroundGridCell<Content: View>: View {
+@@ -1786,3 +1831,44 @@ private struct ProfileBackgroundGridCell<Content: View>: View {
          .focusEffectDisabledIfAvailable()
      }
  }
