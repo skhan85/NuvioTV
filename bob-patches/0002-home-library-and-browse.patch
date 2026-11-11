@@ -1943,10 +1943,10 @@ index 00000000..1e20a812
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/SpeedFork.swift b/tvosApp/NuvioTV/Sources/Fork/SpeedFork.swift
 new file mode 100644
-index 00000000..c8c869ec
+index 00000000..df14cfb1
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/SpeedFork.swift
-@@ -0,0 +1,240 @@
+@@ -0,0 +1,241 @@
 +import Foundation
 +import SwiftUI
 +
@@ -2010,6 +2010,7 @@ index 00000000..c8c869ec
 +
 +    /// A profile was picked and Home started loading.
 +    static func profilePicked() {
++        ForkStyle.invalidate() // the new profile may use another style
 +        let now = Date()
 +        shared.lock.lock()
 +        var run = HomeRun(at: now, startToPicker: nil, pickToRows: nil, pickToHome: nil, rows: nil)
@@ -2189,19 +2190,20 @@ index 00000000..c8c869ec
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 new file mode 100644
-index 00000000..aaf87973
+index 00000000..dceafce2
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
-@@ -0,0 +1,41 @@
+@@ -0,0 +1,114 @@
 +import Foundation
++import SwiftUI
 +
 +// MARK: - Fork: Style (one look per profile)
 +
 +/// One choice per profile that sets a whole look at once (Settings → Layout → Style).
 +///
-+/// Round 1 (foundations): each style sets the colours and the card shape through settings the
-+/// app already has. The menu, the hero, the rows and the other screens follow in later rounds
-+/// and will read `ForkStyle.current`. "Custom" changes nothing, so the individual switches keep
++/// So far each style sets the colours, the card shape, the menu position and the typeface through
++/// settings the app already has, plus its own look for a focused card. The hero, the rows and
++/// the other screens follow and read `ForkStyle.current`. "Custom" changes nothing, so the individual switches keep
 +/// working as before.
 +enum ForkStyle: String, CaseIterable, Identifiable {
 +    case netflix = "Netflix Style"
@@ -2215,28 +2217,100 @@ index 00000000..aaf87973
 +
 +    static let options: [String] = ForkStyle.allCases.map { $0.rawValue }
 +
-+    /// The active profile's style, for code outside SwiftUI views.
++    /// The active profile's style, for code outside SwiftUI views. Read on every card draw, so the
++    /// value is remembered until a setting changes or another profile is picked.
 +    static var current: ForkStyle {
++        ForkStyleCache.shared.value
++    }
++
++    static func invalidate() {
++        ForkStyleCache.shared.invalidate()
++    }
++
++    fileprivate static func stored() -> ForkStyle {
 +        ForkStyle(rawValue: ProfileSettings.current.string(forKey: key) ?? "") ?? .custom
++    }
++
++    // MARK: Card focus
++
++    /// Border of a focused card; nil keeps the app's own accent-coloured outline.
++    var focusBorderColor: Color? {
++        switch self {
++        case .disney, .max: return .white
++        case .netflix, .custom: return nil
++        }
++    }
++
++    var focusBorderWidth: CGFloat? {
++        switch self {
++        case .disney: return 4
++        case .max: return 3
++        case .netflix, .custom: return nil
++        }
++    }
++
++    /// Coloured glow around a focused card; nil keeps the dark drop shadow.
++    var focusGlow: Color? {
++        switch self {
++        case .disney: return Color(red: 0.56, green: 0.83, blue: 1.0).opacity(0.75)
++        case .netflix, .max, .custom: return nil
++        }
 +    }
 +
 +    /// One line for the Settings row, describing what this style sets today.
 +    var summary: String {
 +        switch self {
 +        case .netflix:
-+            return "Near-black, white accents, billboard, Top 10 and card tags, the Netflix-style details page"
++            return "Near-black with white accents, menu along the top, billboard, Top 10 and card tags, the Netflix-style details page"
 +        case .disney:
-+            return "Navy with pale-blue accents, wide rounded cards, studio tiles above the rows"
++            return "Navy with a pale-blue glow on the focused card, menu at the side, wide rounded cards, Avenir Next type, studio tiles above the rows"
 +        case .max:
-+            return "Deep violet with violet accents, tall posters with small corners"
++            return "Deep violet, menu at the side, tall posters with small corners and a thin white outline, San Francisco type"
 +        case .custom:
 +            return "Nothing is changed for you: set colours, cards and rows yourself below"
 +        }
 +    }
 +}
++
++/// Remembers the active profile's style between setting changes.
++final class ForkStyleCache {
++    static let shared = ForkStyleCache()
++
++    private let lock = NSLock()
++    private var cached: ForkStyle?
++    private var observers: [NSObjectProtocol] = []
++
++    private init() {
++        let center = NotificationCenter.default
++        for name in [UserDefaults.didChangeNotification, ProfileSettings.settingsChangedNotification] {
++            observers.append(center.addObserver(forName: name, object: nil, queue: nil) { [weak self] _ in
++                self?.invalidate()
++            })
++        }
++    }
++
++    var value: ForkStyle {
++        lock.lock()
++        let hit = cached
++        lock.unlock()
++        if let hit { return hit }
++        // Read outside the lock: reading a profile's settings can itself post a change notice.
++        let style = ForkStyle.stored()
++        lock.lock()
++        cached = style
++        lock.unlock()
++        return style
++    }
++
++    func invalidate() {
++        lock.lock()
++        cached = nil
++        lock.unlock()
++    }
++}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..8f45fd42
+index 00000000..dfdf1b39
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 @@ -0,0 +1,69 @@
@@ -2258,7 +2332,7 @@ index 00000000..8f45fd42
 +            id: 4,
 +            date: "Nov 11, 2026",
 +            items: [
-+                "Style: one choice in Settings > Layout sets a whole look for this profile. Netflix Style, Disney+ Style or Max Style; Custom leaves your own settings alone. This first step sets colours and card shape; the menu, Home and the other screens follow.",
++                "Style: one choice in Settings > Layout sets a whole look for this profile. Netflix Style, Disney+ Style or Max Style; Custom leaves your own settings alone. So far a style sets colours, card shape and focus look, where the menu sits and the typeface; Home's billboard and the other screens follow.",
 +                "Speed Report (Settings > Advanced): how long this Apple TV takes to reach the profile picker, load Home and hand a video to Infuse."
 +            ]
 +        ),
@@ -3118,7 +3192,7 @@ index d65363d3..6c780fd2 100644
  }
  
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index db62229c..6a209bf7 100644
+index db62229c..b5fa2849 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 @@ -249,6 +249,9 @@ struct PosterCard: View {
@@ -3177,6 +3251,15 @@ index db62229c..6a209bf7 100644
              .overlay(alignment: .bottomTrailing) {
                  if let origin = shownOrigin {
                      CollectionOriginBadge(origin: origin)
+@@ -497,7 +523,7 @@ struct PosterCard: View {
+                 RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+                     .stroke(focusedBorderColor, lineWidth: focusedBorderWidth)
+             )
+-            .shadow(color: .black.opacity(shadowOpacity), radius: shadowRadius)
++            .shadow(color: forkShadowColor, radius: forkShadowRadius)
+ 
+             if showsPosterTitle {
+                 MarqueeText(
 @@ -674,9 +700,22 @@ struct PosterCard: View {
          }
      }
@@ -3209,7 +3292,34 @@ index db62229c..6a209bf7 100644
                          .frame(width: max(8, width * progress), height: 8)
                  }
                  .padding(.leading, 22)
-@@ -974,7 +1013,12 @@ struct PosterCard: View {
+@@ -942,11 +981,24 @@ struct PosterCard: View {
+ 
+     private var focusedBorderColor: Color {
+         guard showsFocusedAppearance else { return .clear }
+-        return AppFocusOutline.color
++        return ForkStyle.current.focusBorderColor ?? AppFocusOutline.color // Fork: Style
+     }
+ 
+     private var focusedBorderWidth: CGFloat {
+-        showsFocusedAppearance ? (effectiveFocusHighlighter ? AppFocusOutline.emphasizedWidth : AppFocusOutline.width) : 0
++        guard showsFocusedAppearance else { return 0 }
++        if let width = ForkStyle.current.focusBorderWidth { return width } // Fork: Style
++        return effectiveFocusHighlighter ? AppFocusOutline.emphasizedWidth : AppFocusOutline.width
++    }
++
++    // Fork: Style. Disney+ Style lights a focused card with a pale-blue glow instead of a dark shadow.
++    private var forkShadowColor: Color {
++        if showsFocusedAppearance, let glow = ForkStyle.current.focusGlow { return glow }
++        return .black.opacity(shadowOpacity)
++    }
++
++    private var forkShadowRadius: CGFloat {
++        if showsFocusedAppearance, ForkStyle.current.focusGlow != nil { return 22 }
++        return shadowRadius
+     }
+ 
+     private var shadowOpacity: Double {
+@@ -974,7 +1026,12 @@ struct PosterCard: View {
      }
  
      private var trailerActivationIdentity: String {
@@ -3223,7 +3333,7 @@ index db62229c..6a209bf7 100644
      }
  
      private var isTrailerPreviewVisible: Bool {
-@@ -986,7 +1030,7 @@ struct PosterCard: View {
+@@ -986,7 +1043,7 @@ struct PosterCard: View {
          isTrailerPreviewActive = false
          isTrailerPreviewReady = false
          didFinishTrailerPreview = false
@@ -3232,7 +3342,7 @@ index db62229c..6a209bf7 100644
  
          let delay = min(15, max(0, trailerDelay))
          do {
-@@ -994,7 +1038,7 @@ struct PosterCard: View {
+@@ -994,7 +1051,7 @@ struct PosterCard: View {
          } catch {
              return
          }
@@ -3241,7 +3351,7 @@ index db62229c..6a209bf7 100644
          isTrailerPreviewActive = true
      }
  
-@@ -3573,6 +3617,9 @@ struct TitleActionsMenuContent: View {
+@@ -3573,6 +3630,9 @@ struct TitleActionsMenuContent: View {
              let isItemWatched = libraryWatchedContext == nil
                  ? WatchedStore.contains(meta: meta)
                  : isLibraryWatched
@@ -3251,7 +3361,7 @@ index db62229c..6a209bf7 100644
  
              Button {
                  scheduleOpenDetails()
-@@ -3580,17 +3627,19 @@ struct TitleActionsMenuContent: View {
+@@ -3580,17 +3640,19 @@ struct TitleActionsMenuContent: View {
                  Label(L10n.string("action_go_to_details", fallback: "Go to details"), systemImage: "info.circle")
              }
  
@@ -3281,7 +3391,7 @@ index db62229c..6a209bf7 100644
  
              if let onRefreshCatalog {
                  Button {
-@@ -3608,7 +3657,11 @@ struct TitleActionsMenuContent: View {
+@@ -3608,7 +3670,11 @@ struct TitleActionsMenuContent: View {
                          toggleLibrary(currentlyInLibrary: true)
                      }
                  } label: {
@@ -3294,7 +3404,7 @@ index db62229c..6a209bf7 100644
                  }
              } else {
                  Button {
-@@ -3616,7 +3669,11 @@ struct TitleActionsMenuContent: View {
+@@ -3616,7 +3682,11 @@ struct TitleActionsMenuContent: View {
                          toggleLibrary(currentlyInLibrary: false)
                      }
                  } label: {

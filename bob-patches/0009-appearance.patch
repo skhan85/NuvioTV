@@ -1,0 +1,43 @@
+diff --git a/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift b/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
+index 2e988561..57bb5f2e 100644
+--- a/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
++++ b/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
+@@ -572,6 +572,7 @@ enum AppFont: String, CaseIterable, Identifiable, Hashable {
+     case inter = "Inter"
+     case system = "System"
+     case rounded = "Rounded"
++    case avenir = "Avenir Next" // Fork: the Disney+ Style typeface (ships with tvOS)
+ 
+     var id: String { rawValue }
+ 
+@@ -580,6 +581,7 @@ enum AppFont: String, CaseIterable, Identifiable, Hashable {
+         case .inter: return "Inter"
+         case .system: return "System (San Francisco)"
+         case .rounded: return "System (Rounded)"
++        case .avenir: return "Avenir Next"
+         }
+     }
+ 
+@@ -630,6 +632,22 @@ final class AppFontManager: ObservableObject {
+             return .system(size: size, weight: weight, design: design == .default ? .default : design)
+         case .rounded:
+             return .system(size: size, weight: weight, design: .rounded)
++        case .avenir:
++            return .custom(Self.avenirFontName(for: weight), size: size)
++        }
++    }
++
++    // Fork
++    private static func avenirFontName(for weight: Font.Weight) -> String {
++        switch weight {
++        case .bold, .heavy, .black:
++            return "AvenirNext-Bold"
++        case .semibold:
++            return "AvenirNext-DemiBold"
++        case .medium:
++            return "AvenirNext-Medium"
++        default:
++            return "AvenirNext-Regular"
+         }
+     }
+ 
