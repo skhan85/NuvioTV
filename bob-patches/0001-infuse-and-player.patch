@@ -213,7 +213,7 @@ index d32d8a99..a50cfa00 100644
                      }
                  case MPV_EVENT_END_FILE:
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
-index 38f9cc82..05cc1566 100644
+index acd1c857..ab266154 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
 @@ -89,7 +89,14 @@ final class MPVStreamProtocolBridge: @unchecked Sendable {
@@ -263,7 +263,7 @@ index 38f9cc82..05cc1566 100644
          request.httpMethod = "GET"
          for (k, v) in headers {
              request.setValue(v, forHTTPHeaderField: k)
-@@ -651,6 +666,14 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+@@ -670,6 +685,14 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
              return
          }
  
@@ -278,7 +278,7 @@ index 38f9cc82..05cc1566 100644
          if status >= 400 {
              if taskError == nil {
                  taskError = NSError(domain: "HTTPError", code: status, userInfo: [NSLocalizedDescriptionKey: "HTTP \(status)"])
-@@ -663,6 +686,11 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+@@ -682,6 +705,11 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
              ? httpResponse.expectedContentLength
              : nil
  
@@ -290,7 +290,7 @@ index 38f9cc82..05cc1566 100644
          if status == 206 {
              guard let contentRange = httpResponse.value(forHTTPHeaderField: "Content-Range"),
                    let parsedRange = PlaybackStreamCacheContentRange.parse(contentRange),
-@@ -877,6 +905,18 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+@@ -896,6 +924,18 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
                      }
                  } else {
                      consecutiveReadFailures = 0
@@ -1007,7 +1007,7 @@ index cd88a01c..832ffd63 100644
              break
          }
 diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
-index c1b99eb1..f89533c6 100644
+index 65308488..9b4db270 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
 @@ -57,6 +57,24 @@ extension PlayerView {
@@ -1109,7 +1109,7 @@ index bcc5d4dc..293a16a8 100644
          requestID = UUID()
          server.stop()
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index d86a6d9b..52d60219 100644
+index 97c93908..4b5fd14b 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 @@ -412,6 +412,10 @@ class PlayerViewModel: ObservableObject {

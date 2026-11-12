@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index 9c0fbb8d..ae69a440 100644
+index 85b3d8f6..cfe08362 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-@@ -498,6 +498,14 @@ struct DetailsScreen: View {
+@@ -526,6 +526,14 @@ struct DetailsScreen: View {
                  streamDiscoveryDuration = nil
              }
          }
@@ -17,7 +17,7 @@ index 9c0fbb8d..ae69a440 100644
          .onChange(of: viewModel.uiState.isLoading) { _, isLoading in
              if !isLoading {
                  if let meta = viewModel.uiState.meta, meta.id == id, !meta.isSeries {
-@@ -961,7 +969,8 @@ struct DetailsScreen: View {
+@@ -992,7 +1000,8 @@ struct DetailsScreen: View {
                  sortOption: sortOption,
                  includeDebrid: debrid.isEnabled || TorrentSettings.isEnabled(),
                  cachedOnly: cachedOnly,
@@ -27,7 +27,7 @@ index 9c0fbb8d..ae69a440 100644
              )
              let available = displayed.filter { $0.unavailabilityReason == nil && !$0.isNotPlayable }
              let pool: [NuvioStream]
-@@ -1204,7 +1213,8 @@ struct DetailsScreen: View {
+@@ -1235,7 +1244,8 @@ struct DetailsScreen: View {
                          sortOption: sortOption,
                          includeDebrid: debridIsEnabled || torrentIsEnabled,
                          cachedOnly: cachedOnly,
@@ -37,7 +37,7 @@ index 9c0fbb8d..ae69a440 100644
                      )
                      let available = displayed.filter { $0.unavailabilityReason == nil && !$0.isNotPlayable }
                      let pool: [NuvioStream]
-@@ -3929,7 +3939,8 @@ enum StreamPickerListBuilder {
+@@ -3962,7 +3972,8 @@ enum StreamPickerListBuilder {
          includeDebrid: Bool,
          cachedOnly: Bool = false,
          preserveAddonStreams: Bool = false,
@@ -47,8 +47,8 @@ index 9c0fbb8d..ae69a440 100644
      ) -> [NuvioStream] {
          let playable = playableStreams(
              streams: streams,
-@@ -3940,7 +3951,11 @@ enum StreamPickerListBuilder {
-             preserveAddonStreams: preserveAddonStreams,
+@@ -3973,7 +3984,11 @@ enum StreamPickerListBuilder {
+             preserveAddonStreams: preserveAddonStreams || sortOption == .recommended,
              includeUnknownCacheStatus: includeUnknownCacheStatus
          )
 -        return sorted(playable, by: sortOption, preserveAddonStreams: preserveAddonStreams)
@@ -60,7 +60,7 @@ index 9c0fbb8d..ae69a440 100644
      }
  
      /// Constant-size cache key. Repository revision captures every publication,
-@@ -4168,6 +4183,10 @@ private enum TvDetailsFocusSection: Hashable {
+@@ -4260,6 +4275,10 @@ private enum TvDetailsFocusSection: Hashable {
  struct TvDetailsContent: View {
      let uiState: DetailsUiState
      var libraryWatchedContext: LibraryWatchedContext? = nil
@@ -70,8 +70,8 @@ index 9c0fbb8d..ae69a440 100644
 +    private var forkVisibleMoreLikeThis: [RelatedTitle] { forkKids.visible(uiState.moreLikeThis) }
      var initialPlayRequestID: UInt? = nil
      var initialFocusEpisode: DetailsEpisodeFocus? = nil
-     var initialRelatedFocusID: String? = nil
-@@ -4682,7 +4701,8 @@ struct TvDetailsContent: View {
+     var initialFocusTarget: DetailsFocusTarget? = nil
+@@ -4804,7 +4823,8 @@ struct TvDetailsContent: View {
                      if !uiState.moreLikeThis.isEmpty {
                          relatedTitlesRow(
                              title: L10n.string("settings_tmdb_module_more_like_this", fallback: "More Like This"),
@@ -81,7 +81,7 @@ index 9c0fbb8d..ae69a440 100644
                              scrollProxy: scrollProxy,
                              restoresMoreLikeThisFocus: true
                          )
-@@ -4907,6 +4927,9 @@ struct TvDetailsContent: View {
+@@ -5071,6 +5091,9 @@ struct TvDetailsContent: View {
  
                                      TvDetailsLogo(meta: meta)
  
@@ -91,9 +91,9 @@ index 9c0fbb8d..ae69a440 100644
                                      if detailsActionsBelowInfo {
                                          TvDetailsSummary(
                                              meta: meta,
-@@ -5019,6 +5042,17 @@ struct TvDetailsContent: View {
-             #if os(tvOS)
-             .onMoveCommand { _ in cancelRelatedFocusRestoration() }
+@@ -5193,6 +5216,17 @@ struct TvDetailsContent: View {
+                 cancelFocusRestoration()
+             }
              #endif
 +            // Fork: a series page starts finding sources for its Play/Resume episode once the
 +            // page has settled (movies already do this when the page opens).
@@ -109,7 +109,7 @@ index 9c0fbb8d..ae69a440 100644
              // tvOS doesn't re-run default-focus when this content swaps in after
              // the async load finishes, so focus lands nowhere / off the Play
              // button. Move it onto Play explicitly once the content appears
-@@ -6299,9 +6333,42 @@ private struct TvDetailsActionButton: View {
+@@ -6669,9 +6703,42 @@ private struct TvDetailsActionButton: View {
      var onBack: (() -> Void)? = nil
  
      @State private var didTriggerHold = false
@@ -152,7 +152,7 @@ index 9c0fbb8d..ae69a440 100644
          Button(action: {
              if didTriggerHold {
                  didTriggerHold = false
-@@ -6328,9 +6395,12 @@ private struct TvDetailsActionButton: View {
+@@ -6698,9 +6765,12 @@ private struct TvDetailsActionButton: View {
              }
              .foregroundColor(foregroundColor)
              .padding(.horizontal, isPrimary ? 44 : (isWide && title != nil ? 32 : 0))
@@ -168,7 +168,7 @@ index 9c0fbb8d..ae69a440 100644
              .shadow(color: .black.opacity(isFocused ? 0.35 : 0.18), radius: isFocused ? 18 : 7, y: 8)
          }
          .buttonStyle(TvPlayActionButtonStyle(onHold: longPressAction, didTriggerHold: $didTriggerHold))
-@@ -6359,6 +6429,46 @@ private struct TvDetailsActionButton: View {
+@@ -6729,6 +6799,46 @@ private struct TvDetailsActionButton: View {
      }
  }
  
@@ -215,7 +215,7 @@ index 9c0fbb8d..ae69a440 100644
  private struct OptionalAccessibilityHint: ViewModifier {
      let hint: String?
  
-@@ -6543,11 +6653,18 @@ private struct TvDetailsSummary: View {
+@@ -6913,11 +7023,18 @@ private struct TvDetailsSummary: View {
          guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
              return nil
          }
@@ -238,7 +238,7 @@ index 9c0fbb8d..ae69a440 100644
      }
  
      private var releaseDisplay: String? {
-@@ -9685,6 +9802,8 @@ private struct TvStreamPickerOverlay: View {
+@@ -10198,6 +10315,8 @@ private struct TvStreamPickerOverlay: View {
      @State private var focusedStreamWarmTask: Task<Void, Never>? = nil
      @State private var focusedStreamWarmToken: UUID? = nil
  
@@ -247,7 +247,7 @@ index 9c0fbb8d..ae69a440 100644
  
      private let filterAllKey = "filter::all"
      private let sortKey = "filter::sort"
-@@ -9864,6 +9983,16 @@ private struct TvStreamPickerOverlay: View {
+@@ -10382,6 +10501,16 @@ private struct TvStreamPickerOverlay: View {
              // cards before landing on the next one; re-seeding on that blip
              // snaps focus back to the first stream (the reported bug), so we
              // debounce and bail when focus has already landed somewhere.
@@ -264,7 +264,7 @@ index 9c0fbb8d..ae69a440 100644
              .onChange(of: focusedItem) { _, newValue in
                  if let newValue, newValue != filterAllKey, !didSeedStreamFocus {
                      didSeedStreamFocus = true
-@@ -10015,7 +10144,8 @@ private struct TvStreamPickerOverlay: View {
+@@ -10542,7 +10671,8 @@ private struct TvStreamPickerOverlay: View {
              includeDebrid: includeDebrid,
              cachedOnly: effectiveCachedOnly,
              preserveAddonStreams: preserveAddonOrder,
@@ -274,7 +274,7 @@ index 9c0fbb8d..ae69a440 100644
          )
          displayedStreams = refreshedStreams
          displayedStreamsCacheKey = key
-@@ -10327,6 +10457,20 @@ private struct TvStreamPickerOverlay: View {
+@@ -10934,6 +11064,20 @@ private struct TvStreamPickerOverlay: View {
                                      action: { select(stream, player: nil) },
                                      onSelectPlayer: { player in select(stream, player: player) }
                                  )
@@ -295,7 +295,7 @@ index 9c0fbb8d..ae69a440 100644
                                  .id(stream.id)
                                  .onAppear {
                                      if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -10900,8 +11044,11 @@ private struct TvStreamCardPresentation {
+@@ -11567,8 +11711,11 @@ private struct TvStreamCardPresentation {
      let fileSizeLabel: String?
      let badgePlacement: StreamBadgePlacement
      let showAddonLogo: Bool
@@ -307,7 +307,7 @@ index 9c0fbb8d..ae69a440 100644
          let matched = StreamBadgeMatcher.matchedBadges(
              for: stream,
              rules: badgeSettings.rules
-@@ -10969,6 +11116,7 @@ private struct TvStreamCard: View {
+@@ -11636,6 +11783,7 @@ private struct TvStreamCard: View {
      private let style: StreamListStyle
      /// The Stream List preview draws its first card as focused.
      private let previewFocused: Bool
@@ -315,15 +315,15 @@ index 9c0fbb8d..ae69a440 100644
      let externalFocus: FocusState<String?>.Binding
      let action: () -> Void
      var onSelectPlayer: ((ExternalPlayer) -> Void)? = nil
-@@ -10997,6 +11145,7 @@ private struct TvStreamCard: View {
-         self.fileSizeLabel = presentation.fileSizeLabel
+@@ -11665,6 +11813,7 @@ private struct TvStreamCard: View {
+         self.fileSizeLabel = style.hideFileSize ? nil : presentation.fileSizeLabel
          self.badgePlacement = presentation.badgePlacement
          self.showAddonLogo = presentation.showAddonLogo
 +        self.forkLanguages = presentation.forkLanguages
          self.externalFocus = externalFocus
          self.action = action
          self.onSelectPlayer = onSelectPlayer
-@@ -11028,11 +11177,20 @@ private struct TvStreamCard: View {
+@@ -11699,11 +11848,20 @@ private struct TvStreamCard: View {
                          )
                      }
  
@@ -349,10 +349,10 @@ index 9c0fbb8d..ae69a440 100644
  
                      if let secondaryName {
                          Text(secondaryName)
-@@ -11043,12 +11201,9 @@ private struct TvStreamCard: View {
+@@ -11714,12 +11872,9 @@ private struct TvStreamCard: View {
                      }
  
-                     if let description = stream.description, !description.isEmpty {
+                     if let description = descriptionText, !description.isEmpty {
 -                        Text(description)
 -                            .font(.system(size: style.detailFont(26), weight: .regular))
 -                            .foregroundColor(.white.opacity(0.62))
@@ -366,10 +366,10 @@ index 9c0fbb8d..ae69a440 100644
  
                      if stream.debridCacheStatusUnavailable == true {
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
-index 54e61b7c..8d98833a 100644
+index 90864e92..0e623917 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/DetailsViewModel.swift
-@@ -1127,6 +1127,8 @@ class DetailsViewModel: ObservableObject {
+@@ -1131,6 +1131,8 @@ class DetailsViewModel: ObservableObject {
      func prepareStreams(forId streamId: String, type: String, forceRefresh: Bool = false) {
          requestedStreamId = streamId
          streamObserveTask?.cancel()
