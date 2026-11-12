@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
-index b1888021..2c3918fa 100644
+index b1888021..aa914e91 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
 @@ -278,6 +278,7 @@ struct NativeSearchView: View {
@@ -10,6 +10,15 @@ index b1888021..2c3918fa 100644
  
      var effectiveLayoutMode: TVOSKeyboardLayoutMode {
          if let forced = forcedLayoutMode {
+@@ -490,7 +491,7 @@ struct NativeSearchView: View {
+                 .autocorrectionDisabled()
+                 #if os(tvOS)
+                 .toolbar(.hidden, for: .navigationBar)
+-                .toolbar(.hidden, for: .tabBar)
++                .forkSearchTabBar() // Fork: keep the top menu
+                 #endif
+         }
+     }
 @@ -893,7 +894,10 @@ struct NativeSearchView: View {
  
      private var visibleResults: [NuvioMeta] {
@@ -22,8 +31,17 @@ index b1888021..2c3918fa 100644
      }
  
      private var visibleResultIDs: [String] { visibleResults.map(\.id) }
+@@ -1276,7 +1280,7 @@ struct NativeSearchGridKeyboardHost: View {
+                 }
+                 #if os(tvOS)
+                 .toolbar(.hidden, for: .navigationBar)
+-                .toolbar(.hidden, for: .tabBar)
++                .forkSearchTabBar() // Fork: keep the top menu
+                 #endif
+         }
+         .padding(.top, topPadding)
 diff --git a/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
-index 7c444603..e06dffde 100644
+index 7c444603..1c344265 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
 @@ -112,6 +112,7 @@ struct NetflixSearchView: View {
@@ -34,6 +52,15 @@ index 7c444603..e06dffde 100644
  
      @AppStorage("nuvio.keyboard.detectedLayout") private var detectedKeyboardMode: TVOSKeyboardLayoutMode = .linear
  
+@@ -336,7 +337,7 @@ struct NetflixSearchView: View {
+                 .autocorrectionDisabled()
+                 #if os(tvOS)
+                 .toolbar(.hidden, for: .navigationBar)
+-                .toolbar(.hidden, for: .tabBar)
++                .forkSearchTabBar() // Fork: keep the top menu
+                 #endif
+         }
+     }
 @@ -831,7 +832,10 @@ struct NetflixSearchView: View {
  
      private var visibleResults: [NuvioMeta] {

@@ -2190,10 +2190,10 @@ index 00000000..df14cfb1
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 new file mode 100644
-index 00000000..dceafce2
+index 00000000..8133e8cc
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,136 @@
 +import Foundation
 +import SwiftUI
 +
@@ -2308,12 +2308,34 @@ index 00000000..dceafce2
 +        lock.unlock()
 +    }
 +}
++
++// MARK: - Fork: top menu stays on the search screens
++
++#if os(tvOS)
++extension View {
++    /// The search screens hide the tab bar to give the results the whole width. With the side
++    /// menu that is fine (pressing Left brings it back), but with the top menu (Netflix Style)
++    /// nothing brings it back, so the menu vanished as soon as Search opened. With the top menu
++    /// the bar is left alone.
++    func forkSearchTabBar() -> some View {
++        modifier(ForkSearchTabBarModifier())
++    }
++}
++
++private struct ForkSearchTabBarModifier: ViewModifier {
++    @AppStorage(SettingsKey.useTopNavigation) private var useTopNavigation = false
++
++    func body(content: Content) -> some View {
++        content.toolbar(useTopNavigation ? Visibility.automatic : Visibility.hidden, for: .tabBar)
++    }
++}
++#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..dfdf1b39
+index 00000000..402195c6
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,76 @@
 +import Foundation
 +
 +// MARK: - Fork: "What's new in your fork"
@@ -2328,6 +2350,13 @@ index 00000000..dfdf1b39
 +    }
 +
 +    static let entries: [Entry] = [
++        Entry(
++            id: 5,
++            date: "Nov 11, 2026",
++            items: [
++                "The top menu no longer disappears when you open Search (Netflix Style): the search screens used to hide the whole menu bar, which only works with the side menu."
++            ]
++        ),
 +        Entry(
 +            id: 4,
 +            date: "Nov 11, 2026",
