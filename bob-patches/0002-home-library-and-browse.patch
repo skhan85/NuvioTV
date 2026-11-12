@@ -1590,7 +1590,7 @@ index 00000000..cb3e4bcc
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..ff7ff64c
+index 00000000..21401c31
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 @@ -0,0 +1,253 @@
@@ -1798,7 +1798,7 @@ index 00000000..ff7ff64c
 +        .foregroundColor(.white)
 +        .frame(width: 40, height: 46)
 +        .background(
-+            RoundedRectangle(cornerRadius: 4, style: .continuous).fill(ForkNetflixUI.netflixRed)
++            RoundedRectangle(cornerRadius: 4, style: .continuous).fill(ForkStyle.current.brandColor)
 +        )
 +        .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
 +    }
@@ -1810,7 +1810,7 @@ index 00000000..ff7ff64c
 +                .foregroundColor(.white)
 +                .padding(.horizontal, 10)
 +                .padding(.vertical, 5)
-+                .background(ForkNetflixUI.netflixRed)
++                .background(ForkStyle.current.brandColor)
 +            if let secondary {
 +                Text(secondary)
 +                    .font(.system(size: 17, weight: .bold))
@@ -2190,10 +2190,10 @@ index 00000000..df14cfb1
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 new file mode 100644
-index 00000000..068af640
+index 00000000..8b5ec083
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,147 @@
 +import Foundation
 +import SwiftUI
 +
@@ -2249,6 +2249,17 @@ index 00000000..068af640
 +        }
 +    }
 +
++    /// The one spot colour of this look: progress bars and the TOP 10 / New Episode badges.
++    /// Netflix: its red #E50914. Disney+: its blue #0089EC. Max: Max Blue #002BE7 (the brand
++    /// site's own value). Custom keeps the red the fork always used.
++    var brandColor: Color {
++        switch self {
++        case .netflix, .custom: return Color(red: 0xE5 / 255, green: 0x09 / 255, blue: 0x14 / 255)
++        case .disney: return Color(red: 0x00 / 255, green: 0x89 / 255, blue: 0xEC / 255)
++        case .max: return Color(red: 0x00 / 255, green: 0x2B / 255, blue: 0xE7 / 255)
++        }
++    }
++
 +    /// Coloured glow around a focused card; nil keeps the dark drop shadow.
 +    var focusGlow: Color? {
 +        switch self {
@@ -2263,9 +2274,9 @@ index 00000000..068af640
 +        case .netflix:
 +            return "Netflix's own near-black (#141414) with white text and a white outline on the focused card; red only on progress bars, badges and Top 10. Menu along the top, billboard, card tags, the Netflix-style details page"
 +        case .disney:
-+            return "Navy with a pale-blue glow on the focused card, menu at the side, wide rounded cards, Avenir Next type, studio tiles above the rows"
++            return "Disney+'s deep navy (#040714) with a blue accent (#0089EC), a pale-blue glow on the focused card, menu at the side, wide rounded cards, Avenir Next type, studio tiles above the rows"
 +        case .max:
-+            return "Deep violet, menu at the side, tall posters with small corners and a thin white outline, San Francisco type"
++            return "Max's black with Max Blue (#002BE7) for progress bars and badges, white text, menu at the side, tall posters with small corners and a thin white outline, San Francisco type"
 +        case .custom:
 +            return "Nothing is changed for you: set colours, cards and rows yourself below"
 +        }
@@ -3228,7 +3239,7 @@ index d65363d3..6c780fd2 100644
  }
  
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index db62229c..b5fa2849 100644
+index db62229c..527f717c 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 @@ -249,6 +249,9 @@ struct PosterCard: View {
@@ -3324,7 +3335,7 @@ index db62229c..b5fa2849 100644
  
                      Capsule()
 -                        .fill(Color.white)
-+                        .fill(forkNetflixUI ? ForkNetflixUI.netflixRed : Color.white)
++                        .fill(forkNetflixUI ? ForkStyle.current.brandColor : Color.white)
                          .frame(width: max(8, width * progress), height: 8)
                  }
                  .padding(.leading, 22)

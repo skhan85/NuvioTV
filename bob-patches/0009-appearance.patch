@@ -1,3 +1,20 @@
+diff --git a/tvosApp/NuvioTV/Images.xcassets/SplashScreenBackground.colorset/Contents.json b/tvosApp/NuvioTV/Images.xcassets/SplashScreenBackground.colorset/Contents.json
+index dba1090c..d1cf3c5b 100644
+--- a/tvosApp/NuvioTV/Images.xcassets/SplashScreenBackground.colorset/Contents.json
++++ b/tvosApp/NuvioTV/Images.xcassets/SplashScreenBackground.colorset/Contents.json
+@@ -4,9 +4,9 @@
+       "color": {
+         "components": {
+           "alpha": "1.000",
+-          "blue": "0.0156862745098039",
+-          "green": "0.0156862745098039",
+-          "red": "0.00784313725490196"
++          "blue": "0.0784313725490196",
++          "green": "0.0784313725490196",
++          "red": "0.0784313725490196"
+         },
+         "color-space": "srgb"
+       },
 diff --git a/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift b/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
 index 2e988561..57bb5f2e 100644
 --- a/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
@@ -41,3 +58,17 @@ index 2e988561..57bb5f2e 100644
          }
      }
  
+diff --git a/tvosApp/NuvioTV/SplashScreen.storyboard b/tvosApp/NuvioTV/SplashScreen.storyboard
+index 102a9d5c..919f53ed 100644
+--- a/tvosApp/NuvioTV/SplashScreen.storyboard
++++ b/tvosApp/NuvioTV/SplashScreen.storyboard
+@@ -42,7 +42,7 @@
+             <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+         </systemColor>
+         <namedColor name="SplashScreenBackground">
+-            <color alpha="1.000" blue="0.0156862745098039" green="0.0156862745098039" red="0.00784313725490196" customColorSpace="sRGB" colorSpace="custom"/>
++            <color alpha="1.000" blue="0.0784313725490196" green="0.0784313725490196" red="0.0784313725490196" customColorSpace="sRGB" colorSpace="custom"/>
+         </namedColor>
+     </resources>
+ </document>
+\ No newline at end of file

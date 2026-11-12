@@ -15,7 +15,7 @@ in `Sources/Fork/*.swift`; the edits to upstream files are mostly small hooks in
 | `0006-profiles` | UI/Profile | "Who's watching" polish (Kids tag, greeting, bigger avatars, focus hint, entrance), Speed Report mark when the picker appears |
 | `0007-settings-screen` | UI/Settings/SettingsView | All fork switches (Netflix Style, Play Something, Card Tags, Disney+ Style, Kids options, Ask If Still Watching, …), the Style picker (Netflix Style / Disney+ Style / Max Style / Custom), Speed Report row under Advanced |
 | `0008-sync-and-trakt` | Core/Sync, Core/Trakt | Sync and Trakt fixes; Remind Me sends the full release date |
-| `0009-appearance` | Core/AppLanguage | Avenir Next as an app typeface (the Disney+ Style type) |
+| `0009-appearance` | Core/AppLanguage, SplashScreen storyboard and colour | Avenir Next as an app typeface (the Disney+ Style type); the launch screen background (#141414) |
 
 To change a feature, edit the patched source and regenerate the patch for that file's group
 (`git diff BASE HEAD -- <files in the group>`).
