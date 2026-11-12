@@ -2190,7 +2190,7 @@ index 00000000..df14cfb1
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 new file mode 100644
-index 00000000..74cc0b33
+index 00000000..068af640
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 @@ -0,0 +1,136 @@
@@ -2261,7 +2261,7 @@ index 00000000..74cc0b33
 +    var summary: String {
 +        switch self {
 +        case .netflix:
-+            return "Black with red accents and a white outline on the focused card, menu along the top, billboard, Top 10 and card tags, the Netflix-style details page"
++            return "Netflix's own near-black (#141414) with white text and a white outline on the focused card; red only on progress bars, badges and Top 10. Menu along the top, billboard, card tags, the Netflix-style details page"
 +        case .disney:
 +            return "Navy with a pale-blue glow on the focused card, menu at the side, wide rounded cards, Avenir Next type, studio tiles above the rows"
 +        case .max:
@@ -2332,7 +2332,7 @@ index 00000000..74cc0b33
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..312737a0
+index 00000000..32dcd54e
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 @@ -0,0 +1,83 @@
@@ -2351,10 +2351,10 @@ index 00000000..312737a0
 +
 +    static let entries: [Entry] = [
 +        Entry(
-+            id: 6,
-+            date: "Nov 11, 2026",
++            id: 7,
++            date: "Nov 12, 2026",
 +            items: [
-+                "Netflix Style is now black with red accents (a new Netflix Red accent) and a white outline on the focused card. If you already picked Netflix Style, choose another Style and then Netflix Style again to apply it."
++                "Netflix Style now uses Netflix's own colours: its near-black #141414 background, white text and a white outline on the focused card, with red kept for progress bars, badges and Top 10 as in the real app. If you already picked Netflix Style, choose another Style and then Netflix Style again to apply it."
 +            ]
 +        ),
 +        Entry(
