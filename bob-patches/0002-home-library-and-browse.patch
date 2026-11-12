@@ -2190,7 +2190,7 @@ index 00000000..df14cfb1
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 new file mode 100644
-index 00000000..8133e8cc
+index 00000000..74cc0b33
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 @@ -0,0 +1,136 @@
@@ -2236,16 +2236,16 @@ index 00000000..8133e8cc
 +    /// Border of a focused card; nil keeps the app's own accent-coloured outline.
 +    var focusBorderColor: Color? {
 +        switch self {
-+        case .disney, .max: return .white
-+        case .netflix, .custom: return nil
++        case .netflix, .disney, .max: return .white
++        case .custom: return nil
 +        }
 +    }
 +
 +    var focusBorderWidth: CGFloat? {
 +        switch self {
-+        case .disney: return 4
++        case .netflix, .disney: return 4
 +        case .max: return 3
-+        case .netflix, .custom: return nil
++        case .custom: return nil
 +        }
 +    }
 +
@@ -2261,7 +2261,7 @@ index 00000000..8133e8cc
 +    var summary: String {
 +        switch self {
 +        case .netflix:
-+            return "Near-black with white accents, menu along the top, billboard, Top 10 and card tags, the Netflix-style details page"
++            return "Black with red accents and a white outline on the focused card, menu along the top, billboard, Top 10 and card tags, the Netflix-style details page"
 +        case .disney:
 +            return "Navy with a pale-blue glow on the focused card, menu at the side, wide rounded cards, Avenir Next type, studio tiles above the rows"
 +        case .max:
@@ -2332,10 +2332,10 @@ index 00000000..8133e8cc
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..402195c6
+index 00000000..312737a0
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,83 @@
 +import Foundation
 +
 +// MARK: - Fork: "What's new in your fork"
@@ -2350,6 +2350,13 @@ index 00000000..402195c6
 +    }
 +
 +    static let entries: [Entry] = [
++        Entry(
++            id: 6,
++            date: "Nov 11, 2026",
++            items: [
++                "Netflix Style is now black with red accents (a new Netflix Red accent) and a white outline on the focused card. If you already picked Netflix Style, choose another Style and then Netflix Style again to apply it."
++            ]
++        ),
 +        Entry(
 +            id: 5,
 +            date: "Nov 11, 2026",
