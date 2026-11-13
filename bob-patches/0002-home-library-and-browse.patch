@@ -294,143 +294,6 @@ index 00000000..b03ae552
 +        onPlayingChange(false)
 +    }
 +}
-diff --git a/tvosApp/NuvioTV/Sources/Fork/DisneyKidsFork.swift b/tvosApp/NuvioTV/Sources/Fork/DisneyKidsFork.swift
-new file mode 100644
-index 00000000..c59e6366
---- /dev/null
-+++ b/tvosApp/NuvioTV/Sources/Fork/DisneyKidsFork.swift
-@@ -0,0 +1,131 @@
-+import Foundation
-+import SwiftUI
-+
-+// MARK: - Fork: Disney+ look for a Kids profile
-+
-+/// Per profile. On: Disney navy background, sky accents, and a row of kids studio tiles
-+/// (Disney, Pixar, DreamWorks, Illumination, Nickelodeon, Cartoon Network) above the rows;
-+/// each opens that studio's titles.
-+enum ForkDisneyKids {
-+    static let enabledKey = "fork_disney_style"
-+    static let openBrandNotification = Notification.Name("fork.disney.openBrand")
-+
-+    struct Brand: Identifiable, Hashable {
-+        let tmdbId: Int
-+        let name: String
-+        let kind: MetaCompany.Kind
-+        var id: String { "\(kind.rawValue)-\(tmdbId)" }
-+    }
-+
-+    static let brands: [Brand] = [
-+        Brand(tmdbId: 2, name: "Disney", kind: .production),
-+        Brand(tmdbId: 3, name: "Pixar", kind: .production),
-+        Brand(tmdbId: 521, name: "DreamWorks", kind: .production),
-+        Brand(tmdbId: 6704, name: "Illumination", kind: .production),
-+        Brand(tmdbId: 13, name: "Nickelodeon", kind: .network),
-+        Brand(tmdbId: 56, name: "Cartoon Network", kind: .network)
-+    ]
-+
-+    static func open(_ brand: Brand, logoURL: String?) {
-+        let company = MetaCompany(name: brand.name, logoURL: logoURL, tmdbId: brand.tmdbId, kind: brand.kind)
-+        NotificationCenter.default.post(name: openBrandNotification, object: company)
-+    }
-+}
-+
-+/// Studio logos from TMDB, fetched once per launch.
-+@MainActor
-+final class ForkBrandLogos: ObservableObject {
-+    static let shared = ForkBrandLogos()
-+    @Published private(set) var logos: [String: String] = [:]
-+    private var started = false
-+
-+    func loadIfNeeded() {
-+        guard !started else { return }
-+        started = true
-+        Task { @MainActor in
-+            for brand in ForkDisneyKids.brands {
-+                if let path = await TmdbDetailsService.fetchBrandLogoPath(tmdbId: brand.tmdbId, isNetwork: brand.kind == .network) {
-+                    logos[brand.id] = "https://image.tmdb.org/t/p/w500" + path
-+                }
-+            }
-+            // Let a later visit retry anything that failed (offline at launch).
-+            if logos.count < ForkDisneyKids.brands.count { started = false }
-+        }
-+    }
-+}
-+
-+struct ForkKidsBrandRow: View {
-+    @ObservedObject private var logos = ForkBrandLogos.shared
-+
-+    var body: some View {
-+        HStack(spacing: 28) {
-+            ForEach(ForkDisneyKids.brands) { brand in
-+                ForkKidsBrandTile(brand: brand, logoURL: logos.logos[brand.id])
-+            }
-+        }
-+        .padding(.leading, TVLayout.rowLeading)
-+        .padding(.vertical, 14)
-+        .focusSection()
-+        .onAppear { logos.loadIfNeeded() }
-+    }
-+}
-+
-+private struct ForkKidsBrandTile: View {
-+    let brand: ForkDisneyKids.Brand
-+    let logoURL: String?
-+    @FocusState private var focused: Bool
-+
-+    var body: some View {
-+        Button {
-+            ForkDisneyKids.open(brand, logoURL: logoURL)
-+        } label: {
-+            ZStack {
-+                RoundedRectangle(cornerRadius: 14, style: .continuous)
-+                    .fill(
-+                        LinearGradient(
-+                            colors: [Color(red: 0.19, green: 0.23, blue: 0.38), Color(red: 0.10, green: 0.13, blue: 0.24)],
-+                            startPoint: .top,
-+                            endPoint: .bottom
-+                        )
-+                    )
-+                if let logoURL, let url = URL(string: logoURL) {
-+                    AsyncImage(url: url) { phase in
-+                        if case .success(let image) = phase {
-+                            image
-+                                .renderingMode(.template)
-+                                .resizable()
-+                                .scaledToFit()
-+                                .foregroundColor(.white)
-+                        } else {
-+                            brandName
-+                        }
-+                    }
-+                    .padding(.horizontal, 30)
-+                    .padding(.vertical, 26)
-+                } else {
-+                    brandName
-+                }
-+            }
-+            .frame(width: 236, height: 132)
-+            .overlay(
-+                RoundedRectangle(cornerRadius: 14, style: .continuous)
-+                    .stroke(Color.white.opacity(focused ? 0.95 : 0.16), lineWidth: focused ? 4 : 2)
-+            )
-+            .scaleEffect(focused ? 1.08 : 1)
-+            .shadow(color: .black.opacity(focused ? 0.55 : 0.25), radius: focused ? 18 : 8, y: 6)
-+            .animation(.easeOut(duration: 0.18), value: focused)
-+        }
-+        .buttonStyle(.plain)
-+        .focused($focused)
-+        .nuvioFocusEffectDisabledIfAvailable()
-+    }
-+
-+    private var brandName: some View {
-+        Text(brand.name)
-+            .font(.system(size: 26, weight: .bold))
-+            .foregroundColor(.white)
-+            .multilineTextAlignment(.center)
-+            .minimumScaleFactor(0.7)
-+            .padding(.horizontal, 16)
-+    }
-+}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
 new file mode 100644
 index 00000000..116aec06
@@ -2284,10 +2147,10 @@ index 00000000..df14cfb1
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 new file mode 100644
-index 00000000..395b499c
+index 00000000..a3ab6a59
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,143 @@
 +import Foundation
 +import SwiftUI
 +
@@ -2301,15 +2164,14 @@ index 00000000..395b499c
 +/// working as before.
 +enum ForkStyle: String, CaseIterable, Identifiable {
 +    case netflix = "Netflix Style"
-+    case disney = "Disney+ Style"
 +    case custom = "Custom"
 +
-+    /// Max Style was dropped on 2026-11-13; a profile still saved with it reads as Netflix Style.
-+    static let droppedMaxRawValue = "Max Style"
++    /// Max Style and Disney+ Style were dropped on 2026-11-13; a profile still saved with one reads as Netflix Style.
++    static let droppedRawValues: Set<String> = ["Max Style", "Disney+ Style"]
 +
-+    /// A stored value, with the dropped Max Style read as Netflix Style.
++    /// A stored value, with the dropped styles read as Netflix Style.
 +    static func from(stored raw: String?) -> ForkStyle {
-+        if raw == droppedMaxRawValue { return .netflix }
++        if let raw, droppedRawValues.contains(raw) { return .netflix }
 +        return ForkStyle(rawValue: raw ?? "") ?? .custom
 +    }
 +
@@ -2338,33 +2200,29 @@ index 00000000..395b499c
 +    /// Border of a focused card; nil keeps the app's own accent-coloured outline.
 +    var focusBorderColor: Color? {
 +        switch self {
-+        case .netflix, .disney: return .white
++        case .netflix: return .white
 +        case .custom: return nil
 +        }
 +    }
 +
 +    var focusBorderWidth: CGFloat? {
 +        switch self {
-+        case .netflix, .disney: return 4
++        case .netflix: return 4
 +        case .custom: return nil
 +        }
 +    }
 +
 +    /// The one spot colour of this look: progress bars and the TOP 10 / New Episode badges.
-+    /// Netflix: its red #E50914. Disney+: its blue #0089EC. Custom keeps the red the fork always used.
++    /// Netflix: its red #E50914. Custom keeps the same red the fork always used.
 +    var brandColor: Color {
 +        switch self {
 +        case .netflix, .custom: return Color(red: 0xE5 / 255, green: 0x09 / 255, blue: 0x14 / 255)
-+        case .disney: return Color(red: 0x00 / 255, green: 0x89 / 255, blue: 0xEC / 255)
 +        }
 +    }
 +
 +    /// Coloured glow around a focused card; nil keeps the dark drop shadow.
 +    var focusGlow: Color? {
-+        switch self {
-+        case .disney: return Color(red: 0.56, green: 0.83, blue: 1.0).opacity(0.75)
-+        case .netflix, .custom: return nil
-+        }
++        nil
 +    }
 +
 +    /// One line for the Settings row, describing what this style sets today.
@@ -2372,8 +2230,6 @@ index 00000000..395b499c
 +        switch self {
 +        case .netflix:
 +            return "Netflix's own near-black (#141414) with white text and a white outline on the focused card; red only on progress bars, badges and Top 10. Menu along the top, billboard, card tags, the Netflix-style details page"
-+        case .disney:
-+            return "Made for Kids profiles: Disney+'s deep navy (#040714) with a blue accent (#0089EC), a pale-blue glow on the focused card, menu at the side, wide rounded cards, Avenir Next type, studio tiles above the rows"
 +        case .custom:
 +            return "Nothing is changed for you: set colours, cards and rows yourself below"
 +        }
@@ -2440,7 +2296,7 @@ index 00000000..395b499c
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..1dd1f674
+index 00000000..588f0f9a
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 @@ -0,0 +1,105 @@
@@ -2462,7 +2318,7 @@ index 00000000..1dd1f674
 +            id: 10,
 +            date: "Nov 13, 2026",
 +            items: [
-+                "Max Style is gone: the choices are Netflix Style, Disney+ Style (made for Kids profiles) and Custom. A profile that was on Max Style now counts as Netflix Style; pick Netflix Style once in Settings > Layout to bring its colours and top menu over too."
++                "One look: Disney+ Style and Max Style are gone, so the choices are Netflix Style and Custom, and the Disney+ switch and studio tiles are removed. A profile that was on Disney+ or Max Style now counts as Netflix Style; pick Netflix Style once in Settings > Layout on that profile to bring its colours and top menu over too. Kids profiles keep their age-rating limits."
 +            ]
 +        ),
 +        Entry(
@@ -2550,7 +2406,7 @@ index 00000000..1dd1f674
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index b190950c..0c8d9c0b 100644
+index b190950c..c08aa82f 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -18,6 +18,7 @@ import AetherEngine
@@ -2615,7 +2471,7 @@ index b190950c..0c8d9c0b 100644
              switch activeScreen {
              case .login:
                  // `.login` is also the value this state starts at, before
-@@ -840,6 +881,18 @@ struct ContentView: View {
+@@ -840,6 +881,10 @@ struct ContentView: View {
                  }
              }
          }
@@ -2623,18 +2479,10 @@ index b190950c..0c8d9c0b 100644
 +        .onChange(of: profileViewModel.activeProfile?.name, initial: true) { _, name in
 +            ForkNetflixUI.activeProfileName = name
 +        }
-+        // Fork: a Kids studio tile opens that studio's titles.
-+        .onReceive(NotificationCenter.default.publisher(for: ForkDisneyKids.openBrandNotification)) { note in
-+            guard let company = note.object as? MetaCompany else { return }
-+            productionBrowseReturn = nil
-+            withAnimation(.easeInOut(duration: 0.28)) {
-+                activeScreen = .productionBrowse(company)
-+            }
-+        }
          // Backing out of the switch must not leave the cover behind.
          .onChange(of: isOnProfileSelection) { _, isSelecting in
              if isSelecting, isPreparingProfile {
-@@ -1464,7 +1517,7 @@ struct ContentView: View {
+@@ -1464,7 +1509,7 @@ struct ContentView: View {
          let callbackDuration = callback.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
          let duration = callbackDuration
              ?? session.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
@@ -2643,7 +2491,7 @@ index b190950c..0c8d9c0b 100644
              guard let duration, position.isFinite, position >= 0 else { return nil }
              let normalizedProgress = position / duration
              guard callbackDuration != nil,
-@@ -1474,6 +1527,20 @@ struct ContentView: View {
+@@ -1474,6 +1519,20 @@ struct ContentView: View {
              }
              return 1
          }
@@ -2664,7 +2512,7 @@ index b190950c..0c8d9c0b 100644
          guard let progress, progress.isFinite, (0...1).contains(progress) else { return }
          // External callbacks can underreport EOF position; allow up to two minutes of grace,
          // with an 80% floor, while built-in playback keeps its stream-timed threshold.
-@@ -1552,6 +1619,10 @@ struct ContentView: View {
+@@ -1552,6 +1611,10 @@ struct ContentView: View {
              return
          }
  
@@ -2675,7 +2523,7 @@ index b190950c..0c8d9c0b 100644
          if progress >= callbackCompletionCutoff(WatchProgressLedger.completionFraction) {
              if let duration {
                  ContinueWatchingStore.markPlaybackCompleted(
-@@ -1582,6 +1653,129 @@ struct ContentView: View {
+@@ -1582,6 +1645,129 @@ struct ContentView: View {
          }
      }
  
@@ -2805,7 +2653,7 @@ index b190950c..0c8d9c0b 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1638,6 +1832,7 @@ struct ContentView: View {
+@@ -1638,6 +1824,7 @@ struct ContentView: View {
          profileGateReadiness = .waiting(hasFocusableContent: false, targetSignature: nil)
          isPreparingProfile = true
          profileGateStartedAt = Date()
@@ -2813,7 +2661,7 @@ index b190950c..0c8d9c0b 100644
          let generation = profileGateGeneration
          TVHomeDebugTrace.log("profileGate.begin gen=\(generation) timeout=\(Self.profileGateTimeout)s minDuration=\(Self.profileGateMinimumDuration)s")
          libraryViewModel.loadLibrary()
-@@ -1716,6 +1911,7 @@ struct ContentView: View {
+@@ -1716,6 +1903,7 @@ struct ContentView: View {
              return
          }
          TVHomeDebugTrace.log("profileGate.lift executing (isPreparingProfile was \(isPreparingProfile), gen=\(generation.map { String($0) } ?? "nil"))")
@@ -2821,7 +2669,7 @@ index b190950c..0c8d9c0b 100644
          profileGateTask?.cancel()
          profileGateTask = nil
          profileGateLiftTask?.cancel()
-@@ -2033,6 +2229,15 @@ struct ContentView: View {
+@@ -2033,6 +2221,15 @@ struct ContentView: View {
          }
      }
  
@@ -2837,7 +2685,7 @@ index b190950c..0c8d9c0b 100644
      private func presentPlayback(
          url: URL,
          meta: NuvioMeta,
-@@ -2049,7 +2254,8 @@ struct ContentView: View {
+@@ -2049,7 +2246,8 @@ struct ContentView: View {
          startupBenchmarkToken: UUID? = nil,
          sourceID: String? = nil,
          collectionContext: CollectionPlaybackContext? = nil,
@@ -2847,7 +2695,7 @@ index b190950c..0c8d9c0b 100644
      ) {
          // Usenet streams arrive as nuvio-usenet:// URLs: start the local
          // engine first, then play its 127.0.0.1 URL like any other stream.
-@@ -2091,13 +2297,47 @@ struct ContentView: View {
+@@ -2091,13 +2289,47 @@ struct ContentView: View {
          let store = ProfileSettings.store(for: profileViewModel.activeProfile?.id)
          let defaultPlayer = ExternalPlayer.from(store.string(forKey: SettingsKey.externalPlayer))
          let player = customPlayer ?? defaultPlayer
@@ -2897,7 +2745,7 @@ index b190950c..0c8d9c0b 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -2144,7 +2384,13 @@ struct ContentView: View {
+@@ -2144,7 +2376,13 @@ struct ContentView: View {
          // Hand off to the external app only when it is actually installed
          // (`canOpenURL` needs its scheme in LSApplicationQueriesSchemes); if it
          // isn't, fall through to the built-in player instead of a dead launch.
@@ -2912,7 +2760,7 @@ index b190950c..0c8d9c0b 100644
              meta: meta,
              season: meta.isSeries ? numbers?.season : nil,
              episode: meta.isSeries ? numbers?.episode : nil,
-@@ -2163,9 +2409,27 @@ struct ContentView: View {
+@@ -2163,9 +2401,27 @@ struct ContentView: View {
                 errorURL: errorCallback
             ),
             UIApplication.shared.canOpenURL(launchURL) {
@@ -2940,7 +2788,7 @@ index b190950c..0c8d9c0b 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -5251,6 +5515,8 @@ enum ProfileDisplayName {
+@@ -5251,6 +5507,8 @@ enum ProfileDisplayName {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -2949,7 +2797,7 @@ index b190950c..0c8d9c0b 100644
          let cwVisible: Bool
          let cwCount: Int
          let cwFirstId: String?
-@@ -5263,6 +5529,13 @@ private final class TVHomeFocusWork {
+@@ -5263,6 +5521,13 @@ private final class TVHomeFocusWork {
          let cwLandscape: Bool
          let landscapePosters: Bool
          let calendarToday: [NuvioMeta]
@@ -2963,7 +2811,7 @@ index b190950c..0c8d9c0b 100644
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5799,6 +6072,21 @@ struct TVHomeView: View {
+@@ -5799,6 +6064,19 @@ struct TVHomeView: View {
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.heroEnabled) private var heroEnabled = true
      @AppStorage(SettingsKey.fullscreenHeroBackdrop) private var fullscreenHeroBackdrop = true
@@ -2979,13 +2827,11 @@ index b190950c..0c8d9c0b 100644
 +    @State private var forkWhatsNewMessage = ""
 +    // Fork: Coming Soon row (Settings → Layout).
 +    @AppStorage(ForkTrendingRows.comingSoonKey) private var forkComingSoonEnabled = true
-+    // Fork: Disney+ look for a Kids profile (studio tiles above the rows).
-+    @AppStorage(ForkDisneyKids.enabledKey) private var forkDisneyStyle = false
 +    @AppStorage(ForkPlaySomething.enabledKey) private var forkPlaySomething = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5851,6 +6139,19 @@ struct TVHomeView: View {
+@@ -5851,6 +6129,19 @@ struct TVHomeView: View {
      @State private var rawContinueWatchingItems: [ContinueWatchingItem] = []
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -3005,7 +2851,7 @@ index b190950c..0c8d9c0b 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -5948,6 +6249,46 @@ struct TVHomeView: View {
+@@ -5948,6 +6239,46 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -3052,7 +2898,7 @@ index b190950c..0c8d9c0b 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -5963,6 +6304,7 @@ struct TVHomeView: View {
+@@ -5963,6 +6294,7 @@ struct TVHomeView: View {
                      )
                      .equatable()
                      .frame(width: proxy.size.width, height: proxy.size.height)
@@ -3060,7 +2906,7 @@ index b190950c..0c8d9c0b 100644
                      .clipped()
                  } else {
                      let backdropWidth = proxy.size.width * 0.65
-@@ -5978,6 +6320,7 @@ struct TVHomeView: View {
+@@ -5978,6 +6310,7 @@ struct TVHomeView: View {
                          )
                          .equatable()
                          .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
@@ -3068,7 +2914,7 @@ index b190950c..0c8d9c0b 100644
                          .mask(
                              LinearGradient(
                                  stops: [
-@@ -6086,7 +6429,8 @@ struct TVHomeView: View {
+@@ -6086,7 +6419,8 @@ struct TVHomeView: View {
                                  continueIsNextEpisodeSpoilerRevealable:
                                      (focusedSectionId == TVHomeSection.continueWatchingId
                                          || focusedSectionId == TVHomeSection.upcomingId)
@@ -3078,7 +2924,7 @@ index b190950c..0c8d9c0b 100644
                              ) {
                                  navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
                              }
-@@ -6132,6 +6476,15 @@ struct TVHomeView: View {
+@@ -6132,6 +6466,11 @@ struct TVHomeView: View {
                                              .padding(.horizontal, horizontalEdgeInset)
                                          }
  
@@ -3087,14 +2933,10 @@ index b190950c..0c8d9c0b 100644
 +                                            ForkPlaySomethingButton { forkStartPlaySomething(sections: sections) }
 +                                        }
 +
-+                                        if forkDisneyStyle {
-+                                            ForkKidsBrandRow()
-+                                        }
-+
                                          ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                                              let isNearFocusedRow = abs(index - focusedRowIndex) <= 2
                                              if isNearFocusedRow {
-@@ -6155,6 +6508,26 @@ struct TVHomeView: View {
+@@ -6155,6 +6494,26 @@ struct TVHomeView: View {
                                      .frame(maxWidth: .infinity, alignment: .leading)
                                      .padding(.top, TVHomeLayout.rowsTopPadding)
                                      .padding(.bottom, 80)
@@ -3121,7 +2963,7 @@ index b190950c..0c8d9c0b 100644
                                      #if os(tvOS)
                                      // Place the configurator inside the scroll content so its
                                      // ancestor is the UIScrollView that owns the row offset.
-@@ -8628,6 +9001,23 @@ struct TVHomeView: View {
+@@ -8628,6 +8987,23 @@ struct TVHomeView: View {
              : estimatedCollectionRowHeight(for: section)
      }
  
@@ -3145,7 +2987,7 @@ index b190950c..0c8d9c0b 100644
      private func prepareForOverlayPresentation(restoreCardID: String? = nil) {
          focusWork.defersOverlayPreparation = true
          focusWork.pendingOverlayRestoreCardID = restoreCardID
-@@ -8699,6 +9089,8 @@ struct TVHomeView: View {
+@@ -8699,6 +9075,8 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -3154,7 +2996,7 @@ index b190950c..0c8d9c0b 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -8710,7 +9102,11 @@ struct TVHomeView: View {
+@@ -8710,7 +9088,11 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
@@ -3167,7 +3009,7 @@ index b190950c..0c8d9c0b 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -8719,7 +9115,9 @@ struct TVHomeView: View {
+@@ -8719,7 +9101,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -3178,7 +3020,7 @@ index b190950c..0c8d9c0b 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster"
          )
-@@ -8740,7 +9138,16 @@ struct TVHomeView: View {
+@@ -8740,7 +9124,16 @@ struct TVHomeView: View {
              + ((calendarToday.isEmpty || !homeCalendarToday) ? [] : [calendarTodaySection])
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
@@ -3196,7 +3038,7 @@ index b190950c..0c8d9c0b 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -8752,18 +9159,41 @@ struct TVHomeView: View {
+@@ -8752,18 +9145,41 @@ struct TVHomeView: View {
                  if !section.collectionFolders.isEmpty
                      || section.id == TVHomeSection.localTitlesId
                      || section.id == TVHomeSection.jellyfinId
@@ -3208,12 +3050,11 @@ index b190950c..0c8d9c0b 100644
                  copy.items = section.items.filter {
                      !ContentReleasePolicy.isUnreleased($0, today: today)
 +                        && !cinemaOnly.isCinemaOnly($0, today: today)
-                 }
-                 return copy
-             }
-         }
- 
--        let contentSections = result.filter(\.hasContent)
++                }
++                return copy
++            }
++        }
++
 +        // Fork: kids rating limit — only titles rated up to PG / TV-PG (your own Continue
 +        // Watching, collection folders and local/Jellyfin rows are left as they are).
 +        let kidsFiltered: [TVHomeSection]
@@ -3226,20 +3067,21 @@ index b190950c..0c8d9c0b 100644
 +                    || section.id == TVHomeSection.jellyfinId
 +                    || section.id.hasPrefix(TVHomeSection.jellyfinLibraryIdPrefix) {
 +                    return section
-+                }
+                 }
 +                var copy = section
 +                copy.items = forkKids.visible(section.items)
-+                return copy
-+            }
+                 return copy
+             }
 +        } else {
 +            kidsFiltered = result
-+        }
-+
+         }
+ 
+-        let contentSections = result.filter(\.hasContent)
 +        let contentSections = kidsFiltered.filter(\.hasContent)
          focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
              signature: signature,
              sections: contentSections
-@@ -8829,11 +9259,53 @@ struct TVHomeView: View {
+@@ -8829,11 +9245,53 @@ struct TVHomeView: View {
      }
  
  
@@ -3293,7 +3135,7 @@ index b190950c..0c8d9c0b 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -9254,6 +9726,7 @@ struct TVHomeView: View {
+@@ -9254,6 +9712,7 @@ struct TVHomeView: View {
          collectionSections: [TVHomeSection],
          resetFocusIfEmpty: Bool
      ) {
@@ -3301,7 +3143,7 @@ index b190950c..0c8d9c0b 100644
          TVHomeDebugTrace.measure("home.publishHomeSections catalog=\(catalogSections.count) col=\(collectionSections.count)") {
              let pinned = collectionSections.filter(\.isPinnedCollection)
              let unpinned = collectionSections.filter { !$0.isPinnedCollection }
-@@ -12465,6 +12938,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -12465,6 +12924,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -3309,7 +3151,7 @@ index b190950c..0c8d9c0b 100644
      let meta: NuvioMeta
      /// Continue Watching entry for this title, when one exists. Lets the hero
      /// say which episode is in progress, how much is left, and show the
-@@ -12473,6 +12947,8 @@ private struct TVHeroView: View {
+@@ -12473,6 +12933,8 @@ private struct TVHeroView: View {
      /// Home supplies this only for a matched Continue Watching / Upcoming item.
      /// Calendar cards intentionally do not carry spoiler reveal evidence.
      var continueIsNextEpisodeSpoilerRevealable: Bool = false
@@ -3318,7 +3160,7 @@ index b190950c..0c8d9c0b 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
      @AppStorage(SettingsKey.hideUnwatchedEpisodeDescriptions) private var hideUnwatchedEpisodeDescriptions = false
-@@ -12521,6 +12997,11 @@ private struct TVHeroView: View {
+@@ -12521,6 +12983,11 @@ private struct TVHeroView: View {
          // up a line, so the name never has to be cut short in the hero's fixed height.
          let nameBelow = meta.logoUrl == nil ? nil : AniListMetaBuilder.nameUnderLogo(meta)
          VStack(alignment: .leading, spacing: 18) {
@@ -3330,7 +3172,7 @@ index b190950c..0c8d9c0b 100644
              if let logoUrl = meta.logoUrl {
                  CachedHeroLogo(url: logoUrl, title: meta.name, nameBelow: nameBelow, logoMaxHeight: nameBelow == nil ? 136 : 100)
                      .layoutPriority(nameBelow == nil ? 0 : 1)
-@@ -12531,6 +13012,14 @@ private struct TVHeroView: View {
+@@ -12531,6 +12998,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
@@ -3345,7 +3187,7 @@ index b190950c..0c8d9c0b 100644
              TVHeroMetaLine(meta: meta, episodeLine: episodeLine, continueItem: continueItem)
  
              if let continueItem {
-@@ -12549,6 +13038,8 @@ private struct TVHeroView: View {
+@@ -12549,6 +13024,8 @@ private struct TVHeroView: View {
                          .lineLimit(nameBelow == nil ? 4 : 3)
                          .frame(maxWidth: 900, alignment: .leading)
                          .padding(.top, 4)
@@ -3354,7 +3196,7 @@ index b190950c..0c8d9c0b 100644
                  } else {
                      Text(description.wrappedEveryNWords(9))
                          .font(.appFont(size: 24, weight: .regular))
-@@ -12557,6 +13048,8 @@ private struct TVHeroView: View {
+@@ -12557,6 +13034,8 @@ private struct TVHeroView: View {
                          .lineLimit(nameBelow == nil ? 4 : 3)
                          .frame(maxWidth: 900, alignment: .leading)
                          .padding(.top, 4)
@@ -3363,7 +3205,7 @@ index b190950c..0c8d9c0b 100644
                  }
              }
          }
-@@ -12612,6 +13105,7 @@ extension TVHeroView: Equatable {
+@@ -12612,6 +13091,7 @@ extension TVHeroView: Equatable {
              && lhs.revealNextEpisodeSpoilers == rhs.revealNextEpisodeSpoilers
              && lhs.hideUnwatchedEpisodeDescriptions == rhs.hideUnwatchedEpisodeDescriptions
              && lhs.hideUnwatchedEpisodeTitles == rhs.hideUnwatchedEpisodeTitles
@@ -3371,7 +3213,7 @@ index b190950c..0c8d9c0b 100644
      }
  }
  
-@@ -14026,12 +14520,21 @@ private struct TVHeroMetaLine: View {
+@@ -14026,12 +14506,21 @@ private struct TVHeroMetaLine: View {
      }
  
      var body: some View {
@@ -3399,7 +3241,7 @@ index b190950c..0c8d9c0b 100644
  
          let badge = meta.statusBadgeLabel
          let isEpisodeMode = episodeRatingsIdentifier != nil
-@@ -14077,7 +14580,7 @@ private struct TVHeroMetaLine: View {
+@@ -14077,7 +14566,7 @@ private struct TVHeroMetaLine: View {
              if hasPrimary || showSecondLine {
                  VStack(alignment: .leading, spacing: 10) {
                      if hasPrimary {
@@ -3409,7 +3251,7 @@ index b190950c..0c8d9c0b 100644
                              .foregroundColor(.white.opacity(0.66))
                              .lineLimit(1)
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index 7a7d75ee..7183abbb 100644
+index 7a7d75ee..14f1c34d 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 @@ -253,6 +253,9 @@ struct PosterCard: View {
@@ -3583,7 +3425,7 @@ index 7a7d75ee..7183abbb 100644
 +        return effectiveFocusHighlighter ? AppFocusOutline.emphasizedWidth : AppFocusOutline.width
 +    }
 +
-+    // Fork: Style. Disney+ Style lights a focused card with a pale-blue glow instead of a dark shadow.
++    // Fork: Style. A style may light a focused card with a coloured glow instead of a dark shadow (none does today).
 +    private var forkShadowColor: Color {
 +        if showsFocusedAppearance, let glow = ForkStyle.current.focusGlow { return glow }
 +        return .black.opacity(shadowOpacity)
