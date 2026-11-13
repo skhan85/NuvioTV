@@ -19,3 +19,7 @@ in `Sources/Fork/*.swift`; the edits to upstream files are mostly small hooks in
 
 To change a feature, edit the patched source and regenerate the patch for that file's group
 (`git diff BASE HEAD -- <files in the group>`).
+
+## Credits
+
+Some Netflix Style ideas (the facts line on an opened card, "Ends at" times) come from [Notflix](https://github.com/DaoeZ/notflix) by DaoeZ, a GPL-3.0 NuvioTV-based Android TV app.
