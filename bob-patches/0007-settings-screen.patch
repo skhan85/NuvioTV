@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index 55b1cb6e..8b19ee2e 100644
+index 55b1cb6e..3f1075da 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 @@ -1518,11 +1518,13 @@ enum SettingsAccent: String, CaseIterable, Identifiable {
@@ -71,7 +71,7 @@ index 55b1cb6e..8b19ee2e 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -4098,6 +4129,57 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -4098,6 +4129,48 @@ private struct LayoutDiscoverySettingsView: View {
  
      /// Classic was never a distinct layout (behaved like Modern).
      private let layouts = ["Modern", "Grid View", "Compact"]
@@ -79,7 +79,7 @@ index 55b1cb6e..8b19ee2e 100644
 +    // Fork: Style. One choice that sets a whole look; Custom leaves everything as it is.
 +    private var forkStyleBinding: Binding<String> {
 +        Binding(
-+            get: { forkStyle },
++            get: { ForkStyle.from(stored: forkStyle).rawValue },
 +            set: { value in
 +                forkStyle = value
 +                applyForkStyle(ForkStyle(rawValue: value) ?? .custom)
@@ -113,15 +113,6 @@ index 55b1cb6e..8b19ee2e 100644
 +            forkTopNavigation = false
 +            AppFontManager.shared.setFont(.avenir, persist: true)
 +            homeLayout = "Modern"
-+        case .max:
-+            forkDisneyStyle = false
-+            forkBodyColor = SettingsBackground.black.rawValue
-+            forkTheme = SettingsAccent.white.rawValue
-+            forkCardCorners = CardCornerRadiusOption.subtle.rawValue
-+            landscapePosters = false
-+            forkTopNavigation = false
-+            AppFontManager.shared.setFont(.system, persist: true)
-+            homeLayout = "Modern"
 +        case .custom:
 +            break
 +        }
@@ -129,14 +120,14 @@ index 55b1cb6e..8b19ee2e 100644
      // Search is the only screen that currently hosts the full Discover surface.
      // Do not offer Home/Library as dead selections that merely hide Discover.
      private let discoverLocations = ["Search", "Off"]
-@@ -4113,6 +4195,16 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -4113,6 +4186,16 @@ private struct LayoutDiscoverySettingsView: View {
                      fallback: "How the home screen presents rows and artwork"
                  )
              ) {
 +                // Fork
 +                SettingsOptionRow(
 +                    title: "Style",
-+                    subtitle: (ForkStyle(rawValue: forkStyle) ?? .custom).summary,
++                    subtitle: ForkStyle.from(stored: forkStyle).summary,
 +                    selection: forkStyleBinding,
 +                    options: ForkStyle.options,
 +                    accentColor: accentColor,
@@ -146,7 +137,7 @@ index 55b1cb6e..8b19ee2e 100644
                  HomeLayoutLivePreview(
                      layout: homeLayout,
                      heroEnabled: heroEnabled,
-@@ -4508,6 +4600,138 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -4508,6 +4591,138 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -285,7 +276,7 @@ index 55b1cb6e..8b19ee2e 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -6143,7 +6367,7 @@ private struct IntegrationSettingsView: View {
+@@ -6143,7 +6358,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -294,7 +285,7 @@ index 55b1cb6e..8b19ee2e 100644
      }
  
      private var mdbListHasApiKey: Bool {
-@@ -7572,7 +7796,7 @@ private struct TmdbOptionsSheet: View {
+@@ -7572,7 +7787,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -303,7 +294,7 @@ index 55b1cb6e..8b19ee2e 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -11061,6 +11285,7 @@ private struct PlaybackSettingsView: View {
+@@ -11061,6 +11276,7 @@ private struct PlaybackSettingsView: View {
      @AppStorage(SettingsKey.autoSkipRecap) private var autoSkipRecap = false
      @AppStorage(SettingsKey.autoSkipOutro) private var autoSkipOutro = false
      @AppStorage(SettingsKey.autoSkipMovieCredits) private var autoSkipMovieCredits = false
@@ -311,7 +302,7 @@ index 55b1cb6e..8b19ee2e 100644
      @AppStorage(SettingsKey.streamAutoPlayPreferBingeGroup) private var streamAutoPlayPreferBingeGroup = true
      @AppStorage(SettingsKey.streamAutoPlayReuseBingeGroup) private var streamAutoPlayReuseBingeGroup = true
      @AppStorage(SettingsKey.seekPreviewEnabled) private var seekPreviewEnabled = true
-@@ -11610,6 +11835,16 @@ private struct PlaybackSettingsView: View {
+@@ -11610,6 +11826,16 @@ private struct PlaybackSettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -328,7 +319,7 @@ index 55b1cb6e..8b19ee2e 100644
                  SettingsToggleRow(
                      title: L10n.string("tvos_settings_autoplay_trailers", fallback: "Autoplay Trailers"),
                      subtitle: L10n.string("tvos_settings_start_previews_after_focus_settles", fallback: "Start previews after focus settles"),
-@@ -11826,10 +12061,8 @@ private struct PlaybackSettingsView: View {
+@@ -11826,10 +12052,8 @@ private struct PlaybackSettingsView: View {
              ) {
                  SettingsActionRow(
                      title: L10n.string("tvos_playback_preferred_audio", fallback: "Preferred Audio"),
@@ -341,7 +332,7 @@ index 55b1cb6e..8b19ee2e 100644
                      value: audioLanguageSummary,
                      accentColor: accentColor
                  ) {
-@@ -13431,6 +13664,7 @@ private struct AdvancedSettingsView: View {
+@@ -13431,6 +13655,7 @@ private struct AdvancedSettingsView: View {
  
      @AppStorage(PlaybackTimelineRecorder.enabledKey) private var timelineEnabled = false
      @State private var showingPlaybackHistory = false
@@ -349,7 +340,7 @@ index 55b1cb6e..8b19ee2e 100644
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
      @AppStorage(SettingsKey.playbackDiagnostics) private var playbackDiagnostics = false
      @AppStorage(SettingsKey.playbackDebug) private var playbackDebug = false
-@@ -13489,6 +13723,14 @@ private struct AdvancedSettingsView: View {
+@@ -13489,6 +13714,14 @@ private struct AdvancedSettingsView: View {
                      accentColor: accentColor,
                      action: { showingPlaybackHistory = true }
                  )
@@ -364,7 +355,7 @@ index 55b1cb6e..8b19ee2e 100644
                  #endif
  
                  // Whether the app can hand its rows to the Top Shelf extension: a sideloaded
-@@ -13614,6 +13856,9 @@ private struct AdvancedSettingsView: View {
+@@ -13614,6 +13847,9 @@ private struct AdvancedSettingsView: View {
          .fullScreenCover(isPresented: $showingPlaybackHistory) {
              PlaybackDiagnosticHistoryView(accentColor: accentColor)
          }
@@ -374,7 +365,7 @@ index 55b1cb6e..8b19ee2e 100644
          #endif
      }
  
-@@ -17209,8 +17454,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -17209,8 +17445,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs

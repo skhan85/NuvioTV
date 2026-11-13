@@ -2284,10 +2284,10 @@ index 00000000..df14cfb1
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 new file mode 100644
-index 00000000..8b5ec083
+index 00000000..395b499c
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,150 @@
 +import Foundation
 +import SwiftUI
 +
@@ -2302,8 +2302,16 @@ index 00000000..8b5ec083
 +enum ForkStyle: String, CaseIterable, Identifiable {
 +    case netflix = "Netflix Style"
 +    case disney = "Disney+ Style"
-+    case max = "Max Style"
 +    case custom = "Custom"
++
++    /// Max Style was dropped on 2026-11-13; a profile still saved with it reads as Netflix Style.
++    static let droppedMaxRawValue = "Max Style"
++
++    /// A stored value, with the dropped Max Style read as Netflix Style.
++    static func from(stored raw: String?) -> ForkStyle {
++        if raw == droppedMaxRawValue { return .netflix }
++        return ForkStyle(rawValue: raw ?? "") ?? .custom
++    }
 +
 +    static let key = "fork_style"
 +
@@ -2322,7 +2330,7 @@ index 00000000..8b5ec083
 +    }
 +
 +    fileprivate static func stored() -> ForkStyle {
-+        ForkStyle(rawValue: ProfileSettings.current.string(forKey: key) ?? "") ?? .custom
++        from(stored: ProfileSettings.current.string(forKey: key))
 +    }
 +
 +    // MARK: Card focus
@@ -2330,7 +2338,7 @@ index 00000000..8b5ec083
 +    /// Border of a focused card; nil keeps the app's own accent-coloured outline.
 +    var focusBorderColor: Color? {
 +        switch self {
-+        case .netflix, .disney, .max: return .white
++        case .netflix, .disney: return .white
 +        case .custom: return nil
 +        }
 +    }
@@ -2338,19 +2346,16 @@ index 00000000..8b5ec083
 +    var focusBorderWidth: CGFloat? {
 +        switch self {
 +        case .netflix, .disney: return 4
-+        case .max: return 3
 +        case .custom: return nil
 +        }
 +    }
 +
 +    /// The one spot colour of this look: progress bars and the TOP 10 / New Episode badges.
-+    /// Netflix: its red #E50914. Disney+: its blue #0089EC. Max: Max Blue #002BE7 (the brand
-+    /// site's own value). Custom keeps the red the fork always used.
++    /// Netflix: its red #E50914. Disney+: its blue #0089EC. Custom keeps the red the fork always used.
 +    var brandColor: Color {
 +        switch self {
 +        case .netflix, .custom: return Color(red: 0xE5 / 255, green: 0x09 / 255, blue: 0x14 / 255)
 +        case .disney: return Color(red: 0x00 / 255, green: 0x89 / 255, blue: 0xEC / 255)
-+        case .max: return Color(red: 0x00 / 255, green: 0x2B / 255, blue: 0xE7 / 255)
 +        }
 +    }
 +
@@ -2358,7 +2363,7 @@ index 00000000..8b5ec083
 +    var focusGlow: Color? {
 +        switch self {
 +        case .disney: return Color(red: 0.56, green: 0.83, blue: 1.0).opacity(0.75)
-+        case .netflix, .max, .custom: return nil
++        case .netflix, .custom: return nil
 +        }
 +    }
 +
@@ -2368,9 +2373,7 @@ index 00000000..8b5ec083
 +        case .netflix:
 +            return "Netflix's own near-black (#141414) with white text and a white outline on the focused card; red only on progress bars, badges and Top 10. Menu along the top, billboard, card tags, the Netflix-style details page"
 +        case .disney:
-+            return "Disney+'s deep navy (#040714) with a blue accent (#0089EC), a pale-blue glow on the focused card, menu at the side, wide rounded cards, Avenir Next type, studio tiles above the rows"
-+        case .max:
-+            return "Max's black with Max Blue (#002BE7) for progress bars and badges, white text, menu at the side, tall posters with small corners and a thin white outline, San Francisco type"
++            return "Made for Kids profiles: Disney+'s deep navy (#040714) with a blue accent (#0089EC), a pale-blue glow on the focused card, menu at the side, wide rounded cards, Avenir Next type, studio tiles above the rows"
 +        case .custom:
 +            return "Nothing is changed for you: set colours, cards and rows yourself below"
 +        }
@@ -2437,10 +2440,10 @@ index 00000000..8b5ec083
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..f9f6fd9e
+index 00000000..1dd1f674
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,105 @@
 +import Foundation
 +
 +// MARK: - Fork: "What's new in your fork"
@@ -2455,6 +2458,13 @@ index 00000000..f9f6fd9e
 +    }
 +
 +    static let entries: [Entry] = [
++        Entry(
++            id: 10,
++            date: "Nov 13, 2026",
++            items: [
++                "Max Style is gone: the choices are Netflix Style, Disney+ Style (made for Kids profiles) and Custom. A profile that was on Max Style now counts as Netflix Style; pick Netflix Style once in Settings > Layout to bring its colours and top menu over too."
++            ]
++        ),
 +        Entry(
 +            id: 9,
 +            date: "Nov 13, 2026",
