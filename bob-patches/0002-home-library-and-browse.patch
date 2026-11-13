@@ -2147,10 +2147,10 @@ index 00000000..df14cfb1
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 new file mode 100644
-index 00000000..a3ab6a59
+index 00000000..bf5cc107
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,177 @@
 +import Foundation
 +import SwiftUI
 +
@@ -2192,7 +2192,41 @@ index 00000000..a3ab6a59
 +    }
 +
 +    fileprivate static func stored() -> ForkStyle {
-+        from(stored: ProfileSettings.current.string(forKey: key))
++        let store = ProfileSettings.current
++        let raw = store.string(forKey: key)
++        if let raw, droppedRawValues.contains(raw) {
++            // A profile still on Disney+ or Max Style: move it to Netflix Style for real (colours,
++            // top menu, typeface…), once, outside the view update that is reading the style.
++            DispatchQueue.main.async {
++                guard let current = store.string(forKey: key), droppedRawValues.contains(current) else { return }
++                applyNetflixSettings(to: store)
++            }
++            return .netflix
++        }
++        return from(stored: raw)
++    }
++
++    /// Writes Netflix Style's settings into a profile's store: the same values that picking
++    /// Netflix Style in Settings > Layout sets.
++    static func applyNetflixSettings(to store: UserDefaults) {
++        store.set(ForkStyle.netflix.rawValue, forKey: key)
++        store.set(false, forKey: "fork_disney_style")
++        store.set(SettingsBackground.netflix.rawValue, forKey: SettingsKey.bodyColor)
++        store.set(SettingsAccent.white.rawValue, forKey: SettingsKey.theme)
++        store.set(CardCornerRadiusOption.classic.rawValue, forKey: SettingsKey.cardCornerRadius)
++        store.set(false, forKey: SettingsKey.landscapePosters)
++        store.set(true, forKey: SettingsKey.useTopNavigation)
++        store.set(true, forKey: ForkNetflixDetails.enabledKey)
++        store.set("Modern", forKey: SettingsKey.homeLayout)
++        store.set(true, forKey: ForkBillboard.enabledKey)
++        store.set(true, forKey: ForkTrendingRows.enabledKey)
++        store.set(true, forKey: "fork_top10_numerals")
++        store.set(true, forKey: ForkNetflixUI.cardBadgesKey)
++        store.set("Netflix", forKey: SettingsKey.searchStyle)
++        if store === ProfileSettings.current {
++            AppFontManager.shared.setFont(.inter, persist: true)
++        }
++        ProfileSettings.notifySettingsChanged()
 +    }
 +
 +    // MARK: Card focus
@@ -2296,7 +2330,7 @@ index 00000000..a3ab6a59
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..588f0f9a
+index 00000000..019cf090
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 @@ -0,0 +1,105 @@
@@ -2318,7 +2352,7 @@ index 00000000..588f0f9a
 +            id: 10,
 +            date: "Nov 13, 2026",
 +            items: [
-+                "One look: Disney+ Style and Max Style are gone, so the choices are Netflix Style and Custom, and the Disney+ switch and studio tiles are removed. A profile that was on Disney+ or Max Style now counts as Netflix Style; pick Netflix Style once in Settings > Layout on that profile to bring its colours and top menu over too. Kids profiles keep their age-rating limits."
++                "One look: Disney+ Style and Max Style are gone, so the choices are Netflix Style and Custom, and the Disney+ switch and studio tiles are removed. A profile that was on Disney+ or Max Style switches to Netflix Style by itself (colours, top menu, typeface) the first time it opens. Kids profiles keep their age-rating limits."
 +            ]
 +        ),
 +        Entry(
