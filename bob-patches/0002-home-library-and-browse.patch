@@ -1453,10 +1453,10 @@ index 00000000..cb3e4bcc
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..0e7583e4
+index 00000000..e7de8f3d
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
-@@ -0,0 +1,347 @@
+@@ -0,0 +1,345 @@
 +import Foundation
 +import SwiftUI
 +
@@ -1619,18 +1619,16 @@ index 00000000..0e7583e4
 +                .padding(14)
 +                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 +            } else {
-+                if isTop10 || entry?.language != nil {
++                // Fork: all tags in the top-left corner, clear of the ratings line some poster
++                // services print along the bottom of the poster.
++                if isTop10 || entry?.language != nil || entry?.primary != nil {
 +                    VStack(alignment: .leading, spacing: 6) {
 +                        if isTop10 { top10Tag }
++                        if let primary = entry?.primary { pill(primary, entry?.secondary) }
 +                        if let language = entry?.language { languageTag(language) }
 +                    }
 +                    .padding(10)
 +                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-+                }
-+                if let primary = entry?.primary {
-+                    pill(primary, entry?.secondary)
-+                        .padding(.bottom, 12)
-+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
 +                }
 +            }
 +        }
@@ -2330,10 +2328,10 @@ index 00000000..bf5cc107
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..019cf090
+index 00000000..2e2424c3
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,112 @@
 +import Foundation
 +
 +// MARK: - Fork: "What's new in your fork"
@@ -2348,6 +2346,13 @@ index 00000000..019cf090
 +    }
 +
 +    static let entries: [Entry] = [
++        Entry(
++            id: 11,
++            date: "Nov 13, 2026",
++            items: [
++                "Recently Added / New Episode tags sit in the poster's top-left corner, so they no longer cover the ratings line along the bottom of the poster."
++            ]
++        ),
 +        Entry(
 +            id: 10,
 +            date: "Nov 13, 2026",
