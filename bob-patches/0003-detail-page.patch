@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index 85b3d8f6..cfe08362 100644
+index 85b3d8f6..662c9bb5 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 @@ -526,6 +526,14 @@ struct DetailsScreen: View {
@@ -71,7 +71,15 @@ index 85b3d8f6..cfe08362 100644
      var initialPlayRequestID: UInt? = nil
      var initialFocusEpisode: DetailsEpisodeFocus? = nil
      var initialFocusTarget: DetailsFocusTarget? = nil
-@@ -4804,7 +4823,8 @@ struct TvDetailsContent: View {
+@@ -4335,6 +4354,7 @@ struct TvDetailsContent: View {
+     @AppStorage(SettingsKey.trailerPreviewSound) private var trailerPreviewSound = false
+     @AppStorage(SettingsKey.trailerDelay) private var trailerDelay = 7
+     @AppStorage(SettingsKey.detailsActionsBelowInfo) private var detailsActionsBelowInfo = false
++    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixDetailsLayout = false
+     @State private var configuredDetailsSections: [TVDetailsSection] = TVDetailsSectionOrder.currentOrder()
+     @State private var disabledDetailsSections: Set<TVDetailsSection> = TVDetailsSectionOrder.disabledSections()
+ 
+@@ -4804,7 +4824,8 @@ struct TvDetailsContent: View {
                      if !uiState.moreLikeThis.isEmpty {
                          relatedTitlesRow(
                              title: L10n.string("settings_tmdb_module_more_like_this", fallback: "More Like This"),
@@ -81,17 +89,20 @@ index 85b3d8f6..cfe08362 100644
                              scrollProxy: scrollProxy,
                              restoresMoreLikeThisFocus: true
                          )
-@@ -5071,6 +5091,9 @@ struct TvDetailsContent: View {
+@@ -5071,7 +5092,11 @@ struct TvDetailsContent: View {
  
                                      TvDetailsLogo(meta: meta)
  
+-                                    if detailsActionsBelowInfo {
 +                                    // Fork: Netflix "TOP 10 · #3 in Movies Today" under the title.
 +                                    TvDetailsTop10Badge(metaId: meta.id)
 +
-                                     if detailsActionsBelowInfo {
++                                    // Fork: the Netflix layout always puts the buttons under the info.
++                                    if detailsActionsBelowInfo || forkNetflixDetailsLayout {
                                          TvDetailsSummary(
                                              meta: meta,
-@@ -5193,6 +5216,17 @@ struct TvDetailsContent: View {
+                                             simkl: uiState.simklRatings,
+@@ -5193,6 +5218,17 @@ struct TvDetailsContent: View {
                  cancelFocusRestoration()
              }
              #endif
@@ -109,7 +120,7 @@ index 85b3d8f6..cfe08362 100644
              // tvOS doesn't re-run default-focus when this content swaps in after
              // the async load finishes, so focus lands nowhere / off the Play
              // button. Move it onto Play explicitly once the content appears
-@@ -6669,9 +6703,42 @@ private struct TvDetailsActionButton: View {
+@@ -6669,9 +6705,42 @@ private struct TvDetailsActionButton: View {
      var onBack: (() -> Void)? = nil
  
      @State private var didTriggerHold = false
@@ -152,7 +163,7 @@ index 85b3d8f6..cfe08362 100644
          Button(action: {
              if didTriggerHold {
                  didTriggerHold = false
-@@ -6698,9 +6765,12 @@ private struct TvDetailsActionButton: View {
+@@ -6698,9 +6767,12 @@ private struct TvDetailsActionButton: View {
              }
              .foregroundColor(foregroundColor)
              .padding(.horizontal, isPrimary ? 44 : (isWide && title != nil ? 32 : 0))
@@ -168,7 +179,7 @@ index 85b3d8f6..cfe08362 100644
              .shadow(color: .black.opacity(isFocused ? 0.35 : 0.18), radius: isFocused ? 18 : 7, y: 8)
          }
          .buttonStyle(TvPlayActionButtonStyle(onHold: longPressAction, didTriggerHold: $didTriggerHold))
-@@ -6729,6 +6799,46 @@ private struct TvDetailsActionButton: View {
+@@ -6729,6 +6801,46 @@ private struct TvDetailsActionButton: View {
      }
  }
  
@@ -215,7 +226,140 @@ index 85b3d8f6..cfe08362 100644
  private struct OptionalAccessibilityHint: ViewModifier {
      let hint: String?
  
-@@ -6913,11 +7023,18 @@ private struct TvDetailsSummary: View {
+@@ -6755,7 +6867,132 @@ private struct TvDetailsSummary: View {
+         return 1.0
+     }
+ 
++    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixLayout = false
++
+     var body: some View {
++        if forkNetflixLayout {
++            forkNetflixBody
++                .opacity(textOpacity)
++                .animation(.easeInOut(duration: 0.35), value: textOpacity)
++        } else {
++            standardBody
++        }
++    }
++
++    // MARK: Fork: Netflix Style info column
++    // Length and date, genres, country, rating, cast, director, then the synopsis;
++    // the buttons follow underneath.
++
++    private var forkTimeLine: String {
++        var items: [String] = []
++        if let runtime = NuvioRuntimeDisplay.formatted(meta.runtime) { items.append(runtime) }
++        if meta.isSeries {
++            if let info = meta.releaseInfo, !info.isEmpty { items.append(info) }
++            else if let year = meta.year { items.append(String(year)) }
++        } else if let date = releaseDisplay {
++            items.append(date)
++        } else if let year = meta.year {
++            items.append(String(year))
++        }
++        if let ends = ForkEndsAt.text(for: meta) { items.append(ends) }
++        return items.joined(separator: "   ")
++    }
++
++    private var forkCastNames: [String] {
++        Array((meta.cast ?? [])
++            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
++            .filter { !$0.isEmpty }
++            .prefix(4))
++    }
++
++    private var forkNetflixBody: some View {
++        VStack(alignment: .leading, spacing: 0) {
++            if !forkTimeLine.isEmpty {
++                Text(forkTimeLine)
++                    .font(.appFont(size: 28, weight: .semibold))
++                    .foregroundColor(.white)
++                    .lineLimit(1)
++            }
++
++            if let genres = meta.genres, !genres.isEmpty {
++                Text(genres.prefix(4).joined(separator: "  •  "))
++                    .font(.appFont(size: 25, weight: .medium))
++                    .foregroundColor(.white.opacity(0.78))
++                    .lineLimit(1)
++                    .padding(.top, 14)
++            }
++
++            HStack(spacing: 12) {
++                if let rating = meta.rating, rating > 0 {
++                    Text("IMDb " + String(format: "%.1f", rating) + "/10")
++                        .font(.appFont(size: 22, weight: .semibold))
++                        .foregroundColor(.white)
++                        .padding(.horizontal, 14)
++                        .padding(.vertical, 7)
++                        .background(Color.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
++                }
++                if let label = [certificationLabel, statusLabel].compactMap({ $0 }).first {
++                    Text(label)
++                        .font(.appFont(size: 20, weight: .semibold))
++                        .foregroundColor(.white.opacity(0.88))
++                        .padding(.horizontal, 12)
++                        .padding(.vertical, 6)
++                        .overlay(
++                            RoundedRectangle(cornerRadius: 8, style: .continuous)
++                                .stroke(Color.white.opacity(0.45), lineWidth: 1.5)
++                        )
++                }
++                if let country = normalizedCountry(meta.country) {
++                    Text([country, normalizedLanguage(meta.language)].compactMap { $0 }.joined(separator: "  •  "))
++                        .font(.appFont(size: 23, weight: .medium))
++                        .foregroundColor(.white.opacity(0.6))
++                        .lineLimit(1)
++                }
++            }
++            .padding(.top, 18)
++
++            if !forkCastNames.isEmpty {
++                Text("Cast")
++                    .font(.appFont(size: 20, weight: .medium))
++                    .foregroundColor(.white.opacity(0.6))
++                    .padding(.top, 20)
++                HStack(spacing: 12) {
++                    ForEach(forkCastNames, id: \.self) { name in
++                        Text(name)
++                            .font(.appFont(size: 22, weight: .medium))
++                            .foregroundColor(.white)
++                            .lineLimit(1)
++                            .padding(.horizontal, 18)
++                            .padding(.vertical, 8)
++                            .background(Color.white.opacity(0.14), in: Capsule())
++                    }
++                }
++                .frame(maxWidth: 1000, alignment: .leading)
++                .padding(.top, 10)
++            }
++
++            if let creatorLine {
++                Text(creatorLine)
++                    .font(.appFont(size: 23, weight: .medium))
++                    .foregroundColor(.white.opacity(0.65))
++                    .lineLimit(1)
++                    .padding(.top, 16)
++            }
++
++            if let description = meta.description, !description.isEmpty {
++                Text(description)
++                    .font(.appFont(size: 28, weight: .regular))
++                    .foregroundColor(.white)
++                    .lineSpacing(6)
++                    .lineLimit(3)
++                    .frame(maxWidth: 960, alignment: .leading)
++                    .padding(.top, 22)
++            }
++        }
++        .frame(maxWidth: 1000, alignment: .leading)
++    }
++
++    private var standardBody: some View {
+         VStack(alignment: .leading, spacing: 0) {
+             if let creatorLine {
+                 Text(creatorLine)
+@@ -6913,11 +7150,18 @@ private struct TvDetailsSummary: View {
          guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
              return nil
          }
@@ -238,7 +382,7 @@ index 85b3d8f6..cfe08362 100644
      }
  
      private var releaseDisplay: String? {
-@@ -10198,6 +10315,8 @@ private struct TvStreamPickerOverlay: View {
+@@ -10198,6 +10442,8 @@ private struct TvStreamPickerOverlay: View {
      @State private var focusedStreamWarmTask: Task<Void, Never>? = nil
      @State private var focusedStreamWarmToken: UUID? = nil
  
@@ -247,7 +391,7 @@ index 85b3d8f6..cfe08362 100644
  
      private let filterAllKey = "filter::all"
      private let sortKey = "filter::sort"
-@@ -10382,6 +10501,16 @@ private struct TvStreamPickerOverlay: View {
+@@ -10382,6 +10628,16 @@ private struct TvStreamPickerOverlay: View {
              // cards before landing on the next one; re-seeding on that blip
              // snaps focus back to the first stream (the reported bug), so we
              // debounce and bail when focus has already landed somewhere.
@@ -264,7 +408,7 @@ index 85b3d8f6..cfe08362 100644
              .onChange(of: focusedItem) { _, newValue in
                  if let newValue, newValue != filterAllKey, !didSeedStreamFocus {
                      didSeedStreamFocus = true
-@@ -10542,7 +10671,8 @@ private struct TvStreamPickerOverlay: View {
+@@ -10542,7 +10798,8 @@ private struct TvStreamPickerOverlay: View {
              includeDebrid: includeDebrid,
              cachedOnly: effectiveCachedOnly,
              preserveAddonStreams: preserveAddonOrder,
@@ -274,7 +418,7 @@ index 85b3d8f6..cfe08362 100644
          )
          displayedStreams = refreshedStreams
          displayedStreamsCacheKey = key
-@@ -10934,6 +11064,20 @@ private struct TvStreamPickerOverlay: View {
+@@ -10934,6 +11191,20 @@ private struct TvStreamPickerOverlay: View {
                                      action: { select(stream, player: nil) },
                                      onSelectPlayer: { player in select(stream, player: player) }
                                  )
@@ -295,7 +439,7 @@ index 85b3d8f6..cfe08362 100644
                                  .id(stream.id)
                                  .onAppear {
                                      if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -11567,8 +11711,11 @@ private struct TvStreamCardPresentation {
+@@ -11567,8 +11838,11 @@ private struct TvStreamCardPresentation {
      let fileSizeLabel: String?
      let badgePlacement: StreamBadgePlacement
      let showAddonLogo: Bool
@@ -307,7 +451,7 @@ index 85b3d8f6..cfe08362 100644
          let matched = StreamBadgeMatcher.matchedBadges(
              for: stream,
              rules: badgeSettings.rules
-@@ -11636,6 +11783,7 @@ private struct TvStreamCard: View {
+@@ -11636,6 +11910,7 @@ private struct TvStreamCard: View {
      private let style: StreamListStyle
      /// The Stream List preview draws its first card as focused.
      private let previewFocused: Bool
@@ -315,7 +459,7 @@ index 85b3d8f6..cfe08362 100644
      let externalFocus: FocusState<String?>.Binding
      let action: () -> Void
      var onSelectPlayer: ((ExternalPlayer) -> Void)? = nil
-@@ -11665,6 +11813,7 @@ private struct TvStreamCard: View {
+@@ -11665,6 +11940,7 @@ private struct TvStreamCard: View {
          self.fileSizeLabel = style.hideFileSize ? nil : presentation.fileSizeLabel
          self.badgePlacement = presentation.badgePlacement
          self.showAddonLogo = presentation.showAddonLogo
@@ -323,7 +467,7 @@ index 85b3d8f6..cfe08362 100644
          self.externalFocus = externalFocus
          self.action = action
          self.onSelectPlayer = onSelectPlayer
-@@ -11699,11 +11848,20 @@ private struct TvStreamCard: View {
+@@ -11699,11 +11975,20 @@ private struct TvStreamCard: View {
                          )
                      }
  
@@ -349,7 +493,7 @@ index 85b3d8f6..cfe08362 100644
  
                      if let secondaryName {
                          Text(secondaryName)
-@@ -11714,12 +11872,9 @@ private struct TvStreamCard: View {
+@@ -11714,12 +11999,9 @@ private struct TvStreamCard: View {
                      }
  
                      if let description = descriptionText, !description.isEmpty {

@@ -2437,10 +2437,10 @@ index 00000000..8b5ec083
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..a562112f
+index 00000000..f9f6fd9e
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,98 @@
 +import Foundation
 +
 +// MARK: - Fork: "What's new in your fork"
@@ -2455,6 +2455,13 @@ index 00000000..a562112f
 +    }
 +
 +    static let entries: [Entry] = [
++        Entry(
++            id: 9,
++            date: "Nov 13, 2026",
++            items: [
++                "Netflix Style details page: under the title, the length, date and (for movies) when it would end, then genres, the IMDb rating, country, the first few cast members, the director and the summary, with the Play and round buttons underneath."
++            ]
++        ),
 +        Entry(
 +            id: 8,
 +            date: "Nov 12, 2026",
