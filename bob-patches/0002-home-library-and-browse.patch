@@ -1590,7 +1590,7 @@ index 00000000..cb3e4bcc
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..1e51fb1a
+index 00000000..0e7583e4
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 @@ -0,0 +1,347 @@
@@ -1848,7 +1848,7 @@ index 00000000..1e51fb1a
 +    }
 +}
 +
-+// MARK: - Fork: Netflix Style card facts and "Ends at" (ideas from Notflix, github.com/DaoeZ/notflix, GPL-3.0)
++// MARK: - Fork: Netflix Style card facts and "Ends at"
 +
 +enum ForkEndsAt {
 +    /// Minutes from a runtime like "96 min", "1h 36m" or "1:36".
