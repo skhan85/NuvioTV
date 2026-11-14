@@ -2145,10 +2145,10 @@ index 00000000..df14cfb1
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 new file mode 100644
-index 00000000..bf5cc107
+index 00000000..dcc3b40e
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
-@@ -0,0 +1,177 @@
+@@ -0,0 +1,192 @@
 +import Foundation
 +import SwiftUI
 +
@@ -2201,8 +2201,22 @@ index 00000000..bf5cc107
 +            }
 +            return .netflix
 +        }
++        if raw == ForkStyle.netflix.rawValue, !store.bool(forKey: labelsOffKey) {
++            // Netflix Style shows no titles under posters. Profiles that picked it before this
++            // rule existed get the titles turned off once; the Settings switch still works after.
++            DispatchQueue.main.async {
++                guard !store.bool(forKey: labelsOffKey) else { return }
++                store.set(true, forKey: labelsOffKey)
++                if store.bool(forKey: SettingsKey.posterLabels) {
++                    store.set(false, forKey: SettingsKey.posterLabels)
++                    ProfileSettings.notifySettingsChanged()
++                }
++            }
++        }
 +        return from(stored: raw)
 +    }
++
++    private static let labelsOffKey = "fork_netflix_labels_off_v1"
 +
 +    /// Writes Netflix Style's settings into a profile's store: the same values that picking
 +    /// Netflix Style in Settings > Layout sets.
@@ -2213,6 +2227,7 @@ index 00000000..bf5cc107
 +        store.set(SettingsAccent.white.rawValue, forKey: SettingsKey.theme)
 +        store.set(CardCornerRadiusOption.classic.rawValue, forKey: SettingsKey.cardCornerRadius)
 +        store.set(false, forKey: SettingsKey.landscapePosters)
++        store.set(false, forKey: SettingsKey.posterLabels)
 +        store.set(true, forKey: SettingsKey.useTopNavigation)
 +        store.set(true, forKey: ForkNetflixDetails.enabledKey)
 +        store.set("Modern", forKey: SettingsKey.homeLayout)
@@ -2328,10 +2343,10 @@ index 00000000..bf5cc107
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..2e2424c3
+index 00000000..e09a5bb1
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
-@@ -0,0 +1,112 @@
+@@ -0,0 +1,119 @@
 +import Foundation
 +
 +// MARK: - Fork: "What's new in your fork"
@@ -2346,6 +2361,13 @@ index 00000000..2e2424c3
 +    }
 +
 +    static let entries: [Entry] = [
++        Entry(
++            id: 12,
++            date: "Nov 13, 2026",
++            items: [
++                "Netflix Style shows posters without titles underneath, like Netflix. Profiles already on Netflix Style switch the titles off once; Settings > Layout still lets you turn them back on. Posters also come without the ratings strip now."
++            ]
++        ),
 +        Entry(
 +            id: 11,
 +            date: "Nov 13, 2026",
