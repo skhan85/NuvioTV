@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-index c08f011f..4bd8f81e 100644
+index 7bd7902c..1186ede1 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
 @@ -3987,6 +3987,20 @@ final class NuvioAPIClient {
@@ -32,7 +32,7 @@ index c08f011f..4bd8f81e 100644
                  "genres": item.meta.genres ?? [],
                  "addon_base_url": NSNull(),
                  "added_at": Self.milliseconds(from: item.addedAt)
-@@ -4969,8 +4983,7 @@ enum EpisodeMetadataEnrichment {
+@@ -4979,8 +4993,7 @@ enum EpisodeMetadataEnrichment {
              return nil
          }
  

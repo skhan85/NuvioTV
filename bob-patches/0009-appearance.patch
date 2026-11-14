@@ -16,10 +16,10 @@ index dba1090c..d1cf3c5b 100644
          "color-space": "srgb"
        },
 diff --git a/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift b/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
-index 2e988561..57bb5f2e 100644
+index 305b6588..a96310b1 100644
 --- a/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
-@@ -572,6 +572,7 @@ enum AppFont: String, CaseIterable, Identifiable, Hashable {
+@@ -585,6 +585,7 @@ enum AppFont: String, CaseIterable, Identifiable, Hashable {
      case inter = "Inter"
      case system = "System"
      case rounded = "Rounded"
@@ -27,7 +27,7 @@ index 2e988561..57bb5f2e 100644
  
      var id: String { rawValue }
  
-@@ -580,6 +581,7 @@ enum AppFont: String, CaseIterable, Identifiable, Hashable {
+@@ -593,6 +594,7 @@ enum AppFont: String, CaseIterable, Identifiable, Hashable {
          case .inter: return "Inter"
          case .system: return "System (San Francisco)"
          case .rounded: return "System (Rounded)"
@@ -35,7 +35,7 @@ index 2e988561..57bb5f2e 100644
          }
      }
  
-@@ -630,6 +632,22 @@ final class AppFontManager: ObservableObject {
+@@ -643,6 +645,22 @@ final class AppFontManager: ObservableObject {
              return .system(size: size, weight: weight, design: design == .default ? .default : design)
          case .rounded:
              return .system(size: size, weight: weight, design: .rounded)
