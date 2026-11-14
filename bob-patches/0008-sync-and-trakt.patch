@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-index f70ae84f..814b6ae7 100644
+index c08f011f..4bd8f81e 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-@@ -3851,6 +3851,20 @@ final class NuvioAPIClient {
+@@ -3987,6 +3987,20 @@ final class NuvioAPIClient {
          }
      }
  
@@ -23,7 +23,7 @@ index f70ae84f..814b6ae7 100644
      func pushLibrary(
          session: AuthSession,
          remoteProfileId: Int,
-@@ -3866,7 +3880,7 @@ final class NuvioAPIClient {
+@@ -4002,7 +4016,7 @@ final class NuvioAPIClient {
                  "poster_shape": "POSTER",
                  "background": Self.jsonValue(item.meta.backgroundUrl),
                  "description": Self.jsonValue(item.meta.description),
@@ -32,7 +32,7 @@ index f70ae84f..814b6ae7 100644
                  "genres": item.meta.genres ?? [],
                  "addon_base_url": NSNull(),
                  "added_at": Self.milliseconds(from: item.addedAt)
-@@ -4833,8 +4847,7 @@ enum EpisodeMetadataEnrichment {
+@@ -4969,8 +4983,7 @@ enum EpisodeMetadataEnrichment {
              return nil
          }
  

@@ -1109,7 +1109,7 @@ index bcc5d4dc..293a16a8 100644
          requestID = UUID()
          server.stop()
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index 97c93908..4b5fd14b 100644
+index 76459d9f..e1cb631e 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 @@ -412,6 +412,10 @@ class PlayerViewModel: ObservableObject {

@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index bea0b1af..d858d3d7 100644
+index 6b8cbc98..f68fc72d 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 @@ -192,8 +192,8 @@ enum TmdbDetailsService {
@@ -43,7 +43,7 @@ index bea0b1af..d858d3d7 100644
      }
  
      static var preferredLanguage: String {
-@@ -506,6 +509,446 @@ enum TmdbDetailsService {
+@@ -516,6 +519,446 @@ enum TmdbDetailsService {
          )
      }
  

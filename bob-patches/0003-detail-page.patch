@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
-index 85b3d8f6..662c9bb5 100644
+index 93d22410..acaf5df2 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Details/DetailsScreen.swift
 @@ -526,6 +526,14 @@ struct DetailsScreen: View {
@@ -439,7 +439,7 @@ index 85b3d8f6..662c9bb5 100644
                                  .id(stream.id)
                                  .onAppear {
                                      if let index = streamsToShow.firstIndex(where: { $0.id == stream.id }),
-@@ -11567,8 +11838,11 @@ private struct TvStreamCardPresentation {
+@@ -11577,8 +11848,11 @@ private struct TvStreamCardPresentation {
      let fileSizeLabel: String?
      let badgePlacement: StreamBadgePlacement
      let showAddonLogo: Bool
@@ -451,7 +451,7 @@ index 85b3d8f6..662c9bb5 100644
          let matched = StreamBadgeMatcher.matchedBadges(
              for: stream,
              rules: badgeSettings.rules
-@@ -11636,6 +11910,7 @@ private struct TvStreamCard: View {
+@@ -11646,6 +11920,7 @@ private struct TvStreamCard: View {
      private let style: StreamListStyle
      /// The Stream List preview draws its first card as focused.
      private let previewFocused: Bool
@@ -459,7 +459,7 @@ index 85b3d8f6..662c9bb5 100644
      let externalFocus: FocusState<String?>.Binding
      let action: () -> Void
      var onSelectPlayer: ((ExternalPlayer) -> Void)? = nil
-@@ -11665,6 +11940,7 @@ private struct TvStreamCard: View {
+@@ -11675,6 +11950,7 @@ private struct TvStreamCard: View {
          self.fileSizeLabel = style.hideFileSize ? nil : presentation.fileSizeLabel
          self.badgePlacement = presentation.badgePlacement
          self.showAddonLogo = presentation.showAddonLogo
@@ -467,7 +467,7 @@ index 85b3d8f6..662c9bb5 100644
          self.externalFocus = externalFocus
          self.action = action
          self.onSelectPlayer = onSelectPlayer
-@@ -11699,11 +11975,20 @@ private struct TvStreamCard: View {
+@@ -11709,11 +11985,20 @@ private struct TvStreamCard: View {
                          )
                      }
  
@@ -493,7 +493,7 @@ index 85b3d8f6..662c9bb5 100644
  
                      if let secondaryName {
                          Text(secondaryName)
-@@ -11714,12 +11999,9 @@ private struct TvStreamCard: View {
+@@ -11724,12 +12009,9 @@ private struct TvStreamCard: View {
                      }
  
                      if let description = descriptionText, !description.isEmpty {
