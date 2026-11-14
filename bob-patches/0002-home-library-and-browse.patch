@@ -1453,10 +1453,10 @@ index 00000000..cb3e4bcc
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..2ece7b79
+index 00000000..5e061053
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
-@@ -0,0 +1,356 @@
+@@ -0,0 +1,485 @@
 +import Foundation
 +import SwiftUI
 +
@@ -1811,6 +1811,135 @@ index 00000000..2ece7b79
 +                .tracking(4)
 +                .foregroundColor(.white.opacity(0.9))
 +        }
++    }
++}
++
++// MARK: - Fork: buttons inside an opened Home card (Netflix Style)
++
++/// The buttons along the bottom of an opened Home card. Down from the card moves into them,
++/// Left/Right walks them, Up returns to the card and Down again carries on to the next row.
++enum ForkCardAction: Hashable {
++    case play, myList, info
++
++    /// Height of the band the buttons sit in, at the bottom of the card.
++    static let bandHeight: CGFloat = 78
++}
++
++struct ForkCardActionsBar: View {
++    let meta: NuvioMeta
++    let focus: FocusState<ForkCardAction?>.Binding
++    let onPlay: (() -> Void)?
++    let onInfo: () -> Void
++
++    @State private var inLibrary = false
++
++    private var unreleased: Bool {
++        ContentReleasePolicy.isUnreleased(meta, today: ContentReleasePolicy.todayIsoDay())
++    }
++
++    var body: some View {
++        HStack(spacing: 14) {
++            if let onPlay, !unreleased {
++                Button(action: onPlay) {
++                    HStack(spacing: 8) {
++                        Image(systemName: "play.fill")
++                        Text("Play")
++                    }
++                    .font(.system(size: 22, weight: .bold))
++                }
++                .buttonStyle(ForkCardActionButtonStyle(primary: true))
++                .nuvioFocusEffectDisabledIfAvailable()
++                .focused(focus, equals: .play)
++            }
++
++            Button {
++                let current = inLibrary
++                inLibrary.toggle()
++                ForkCardActionsBar.toggleLibrary(meta: meta, currentlyInLibrary: current)
++            } label: {
++                Image(systemName: libraryIcon)
++                    .font(.system(size: 22, weight: .bold))
++            }
++            .buttonStyle(ForkCardActionButtonStyle(primary: false))
++            .nuvioFocusEffectDisabledIfAvailable()
++            .focused(focus, equals: .myList)
++
++            Button(action: onInfo) {
++                Image(systemName: "chevron.down")
++                    .font(.system(size: 22, weight: .bold))
++            }
++            .buttonStyle(ForkCardActionButtonStyle(primary: false))
++            .nuvioFocusEffectDisabledIfAvailable()
++            .focused(focus, equals: .info)
++        }
++        .onAppear(perform: refreshLibrary)
++        .onReceive(NotificationCenter.default.publisher(for: LibraryStore.changedNotification).receive(on: RunLoop.main)) { _ in
++            refreshLibrary()
++        }
++        .onReceive(NotificationCenter.default.publisher(for: TraktSettingsStore.libraryChangedNotification).receive(on: RunLoop.main)) { _ in
++            refreshLibrary()
++        }
++    }
++
++    private var libraryIcon: String {
++        if unreleased { return inLibrary ? "bell.fill" : "bell" }
++        return inLibrary ? "checkmark" : "plus"
++    }
++
++    private func refreshLibrary() {
++        inLibrary = LibraryStore.contains(metaId: meta.id, type: meta.type)
++    }
++
++    /// Same rule as the card's long-press menu: the local library, or the selected list service.
++    static func toggleLibrary(meta: NuvioMeta, currentlyInLibrary: Bool) {
++        guard TraktSettingsStore.librarySourceMode != .local else {
++            _ = LibraryStore.toggle(meta: meta)
++            return
++        }
++        guard SelectedLibraryService.isSelectedAndAuthenticated else { return }
++        Task {
++            _ = await SelectedLibraryService.setWatchlist(meta, isInWatchlist: !currentlyInLibrary)
++        }
++    }
++}
++
++/// White Play button and round icon buttons; the focused one fills white with black glyphs.
++struct ForkCardActionButtonStyle: ButtonStyle {
++    let primary: Bool
++
++    func makeBody(configuration: Configuration) -> some View {
++        ForkCardActionButtonBody(configuration: configuration, primary: primary)
++    }
++}
++
++private struct ForkCardActionButtonBody: View {
++    let configuration: ButtonStyleConfiguration
++    let primary: Bool
++    @Environment(\.isFocused) private var isFocused
++
++    var body: some View {
++        Group {
++            if primary {
++                configuration.label
++                    .foregroundColor(.black)
++                    .padding(.horizontal, 24)
++                    .frame(height: 54)
++                    .background(
++                        RoundedRectangle(cornerRadius: 8, style: .continuous)
++                            .fill(Color.white.opacity(isFocused ? 1 : 0.88))
++                    )
++            } else {
++                configuration.label
++                    .foregroundColor(isFocused ? .black : .white)
++                    .frame(width: 54, height: 54)
++                    .background(Circle().fill(isFocused ? Color.white : Color.black.opacity(0.55)))
++                    .overlay(Circle().stroke(Color.white.opacity(isFocused ? 0 : 0.75), lineWidth: 2))
++            }
++        }
++        .scaleEffect(configuration.isPressed ? 0.94 : (isFocused ? 1.1 : 1))
++        .shadow(color: .black.opacity(isFocused ? 0.5 : 0), radius: 8)
++        .animation(.easeOut(duration: 0.15), value: isFocused)
++        .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/PlaySomethingFork.swift b/tvosApp/NuvioTV/Sources/Fork/PlaySomethingFork.swift
@@ -2349,10 +2478,10 @@ index 00000000..3ab12fc2
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..a445ea60
+index 00000000..269e5f80
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
-@@ -0,0 +1,119 @@
+@@ -0,0 +1,126 @@
 +import Foundation
 +
 +// MARK: - Fork: "What's new in your fork"
@@ -2367,6 +2496,13 @@ index 00000000..a445ea60
 +    }
 +
 +    static let entries: [Entry] = [
++        Entry(
++            id: 13,
++            date: "Nov 14, 2026",
++            items: [
++                "Netflix Style: an opened card on Home has Play, My List (+) and More Info buttons along its bottom. Press down on the card to reach them, left/right to move between them, up to go back to the card, and down again for the next row. Clicking the card still opens its page."
++            ]
++        ),
 +        Entry(
 +            id: 12,
 +            date: "Nov 13, 2026",
@@ -2473,7 +2609,7 @@ index 00000000..a445ea60
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index b190950c..861034f9 100644
+index b190950c..a01cbaa5 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -18,6 +18,7 @@ import AetherEngine
@@ -3057,7 +3193,20 @@ index b190950c..861034f9 100644
                  addonName: section.addonName,
                  showAddonName: catalogAddonNames,
                  showsSectionTitle: true,
-@@ -8628,6 +8987,23 @@ struct TVHomeView: View {
+@@ -8426,7 +8785,11 @@ struct TVHomeView: View {
+                     onStartContinueWatchingFromBeginning?(item)
+                 },
+                 onRemoveFromContinueWatching: onRemoveFromContinueWatching,
+-                onRefreshCatalog: { refreshHomeSection(sectionId: section.id) }
++                onRefreshCatalog: { refreshHomeSection(sectionId: section.id) },
++                forkOnPlay: { meta in
++                    prepareForOverlayPresentation(restoreCardID: TVHomeCardIdentity.key(rowID: section.id, item: meta))
++                    onPlayTitle(meta.id, meta.type)
++                }
+             )
+             .equatable()
+             .frame(
+@@ -8628,6 +8991,23 @@ struct TVHomeView: View {
              : estimatedCollectionRowHeight(for: section)
      }
  
@@ -3081,7 +3230,7 @@ index b190950c..861034f9 100644
      private func prepareForOverlayPresentation(restoreCardID: String? = nil) {
          focusWork.defersOverlayPreparation = true
          focusWork.pendingOverlayRestoreCardID = restoreCardID
-@@ -8699,6 +9075,8 @@ struct TVHomeView: View {
+@@ -8699,6 +9079,8 @@ struct TVHomeView: View {
  
      private var visibleSections: [TVHomeSection] {
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -3090,7 +3239,7 @@ index b190950c..861034f9 100644
              cwVisible: continueWatchingVisible,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
              cwFirstId: continueWatchingVisible ? continueWatchingMetas.first?.id : nil,
-@@ -8710,7 +9088,11 @@ struct TVHomeView: View {
+@@ -8710,7 +9092,11 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
@@ -3103,7 +3252,7 @@ index b190950c..861034f9 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -8719,7 +9101,9 @@ struct TVHomeView: View {
+@@ -8719,7 +9105,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -3114,7 +3263,7 @@ index b190950c..861034f9 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster"
          )
-@@ -8740,7 +9124,16 @@ struct TVHomeView: View {
+@@ -8740,7 +9128,16 @@ struct TVHomeView: View {
              + ((calendarToday.isEmpty || !homeCalendarToday) ? [] : [calendarTodaySection])
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
@@ -3132,7 +3281,7 @@ index b190950c..861034f9 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -8752,18 +9145,41 @@ struct TVHomeView: View {
+@@ -8752,18 +9149,41 @@ struct TVHomeView: View {
                  if !section.collectionFolders.isEmpty
                      || section.id == TVHomeSection.localTitlesId
                      || section.id == TVHomeSection.jellyfinId
@@ -3175,7 +3324,7 @@ index b190950c..861034f9 100644
          focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
              signature: signature,
              sections: contentSections
-@@ -8829,11 +9245,53 @@ struct TVHomeView: View {
+@@ -8829,11 +9249,53 @@ struct TVHomeView: View {
      }
  
  
@@ -3229,7 +3378,7 @@ index b190950c..861034f9 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -9254,6 +9712,7 @@ struct TVHomeView: View {
+@@ -9254,6 +9716,7 @@ struct TVHomeView: View {
          collectionSections: [TVHomeSection],
          resetFocusIfEmpty: Bool
      ) {
@@ -3237,7 +3386,7 @@ index b190950c..861034f9 100644
          TVHomeDebugTrace.measure("home.publishHomeSections catalog=\(catalogSections.count) col=\(collectionSections.count)") {
              let pinned = collectionSections.filter(\.isPinnedCollection)
              let unpinned = collectionSections.filter { !$0.isPinnedCollection }
-@@ -12465,6 +12924,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -12465,6 +12928,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -3245,7 +3394,7 @@ index b190950c..861034f9 100644
      let meta: NuvioMeta
      /// Continue Watching entry for this title, when one exists. Lets the hero
      /// say which episode is in progress, how much is left, and show the
-@@ -12473,6 +12933,8 @@ private struct TVHeroView: View {
+@@ -12473,6 +12937,8 @@ private struct TVHeroView: View {
      /// Home supplies this only for a matched Continue Watching / Upcoming item.
      /// Calendar cards intentionally do not carry spoiler reveal evidence.
      var continueIsNextEpisodeSpoilerRevealable: Bool = false
@@ -3254,7 +3403,7 @@ index b190950c..861034f9 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
      @AppStorage(SettingsKey.hideUnwatchedEpisodeDescriptions) private var hideUnwatchedEpisodeDescriptions = false
-@@ -12521,6 +12983,11 @@ private struct TVHeroView: View {
+@@ -12521,6 +12987,11 @@ private struct TVHeroView: View {
          // up a line, so the name never has to be cut short in the hero's fixed height.
          let nameBelow = meta.logoUrl == nil ? nil : AniListMetaBuilder.nameUnderLogo(meta)
          VStack(alignment: .leading, spacing: 18) {
@@ -3266,7 +3415,7 @@ index b190950c..861034f9 100644
              if let logoUrl = meta.logoUrl {
                  CachedHeroLogo(url: logoUrl, title: meta.name, nameBelow: nameBelow, logoMaxHeight: nameBelow == nil ? 136 : 100)
                      .layoutPriority(nameBelow == nil ? 0 : 1)
-@@ -12531,6 +12998,14 @@ private struct TVHeroView: View {
+@@ -12531,6 +13002,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
@@ -3281,7 +3430,7 @@ index b190950c..861034f9 100644
              TVHeroMetaLine(meta: meta, episodeLine: episodeLine, continueItem: continueItem)
  
              if let continueItem {
-@@ -12549,6 +13024,8 @@ private struct TVHeroView: View {
+@@ -12549,6 +13028,8 @@ private struct TVHeroView: View {
                          .lineLimit(nameBelow == nil ? 4 : 3)
                          .frame(maxWidth: 900, alignment: .leading)
                          .padding(.top, 4)
@@ -3290,7 +3439,7 @@ index b190950c..861034f9 100644
                  } else {
                      Text(description.wrappedEveryNWords(9))
                          .font(.appFont(size: 24, weight: .regular))
-@@ -12557,6 +13034,8 @@ private struct TVHeroView: View {
+@@ -12557,6 +13038,8 @@ private struct TVHeroView: View {
                          .lineLimit(nameBelow == nil ? 4 : 3)
                          .frame(maxWidth: 900, alignment: .leading)
                          .padding(.top, 4)
@@ -3299,7 +3448,7 @@ index b190950c..861034f9 100644
                  }
              }
          }
-@@ -12612,6 +13091,7 @@ extension TVHeroView: Equatable {
+@@ -12612,6 +13095,7 @@ extension TVHeroView: Equatable {
              && lhs.revealNextEpisodeSpoilers == rhs.revealNextEpisodeSpoilers
              && lhs.hideUnwatchedEpisodeDescriptions == rhs.hideUnwatchedEpisodeDescriptions
              && lhs.hideUnwatchedEpisodeTitles == rhs.hideUnwatchedEpisodeTitles
@@ -3307,7 +3456,7 @@ index b190950c..861034f9 100644
      }
  }
  
-@@ -14026,12 +14506,21 @@ private struct TVHeroMetaLine: View {
+@@ -14026,12 +14510,21 @@ private struct TVHeroMetaLine: View {
      }
  
      var body: some View {
@@ -3335,7 +3484,7 @@ index b190950c..861034f9 100644
  
          let badge = meta.statusBadgeLabel
          let isEpisodeMode = episodeRatingsIdentifier != nil
-@@ -14077,7 +14566,7 @@ private struct TVHeroMetaLine: View {
+@@ -14077,7 +14570,7 @@ private struct TVHeroMetaLine: View {
              if hasPrimary || showSecondLine {
                  VStack(alignment: .leading, spacing: 10) {
                      if hasPrimary {
@@ -3345,20 +3494,31 @@ index b190950c..861034f9 100644
                              .foregroundColor(.white.opacity(0.66))
                              .lineLimit(1)
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index 7a7d75ee..14f1c34d 100644
+index 7a7d75ee..86f5250b 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-@@ -253,6 +253,9 @@ struct PosterCard: View {
+@@ -235,6 +235,9 @@ struct PosterCard: View {
+     /// handler deliberately stays off the default path for other directions.
+     var onMove: ((MoveCommandDirection) -> Void)? = nil
+     var isWatched: Bool? = nil
++    /// Fork: Home's catalogue rows pass this so an opened card in Netflix Style shows its
++    /// Play / My List / More Info buttons. Nil keeps the card without buttons.
++    var forkOnPlay: (() -> Void)? = nil
+     let onClick: () -> Void
+ 
+     private let landscapeTransitionDuration: TimeInterval = 0.3
+@@ -253,6 +256,10 @@ struct PosterCard: View {
      @AppStorage(SettingsKey.hideUnwatchedEpisodeTitles) private var hideUnwatchedEpisodeTitles = false
      @AppStorage(SettingsKey.revealNextEpisodeSpoilers) private var revealNextEpisodeSpoilers = false
      @State private var loadedCustomLandscapeArtworkURL: String?
 +    // Fork: Netflix look (Continue Watching play circle, red progress) and card tags.
 +    @AppStorage(ForkNetflixDetails.enabledKey) private var forkNetflixUI = false
 +    @AppStorage(ForkNetflixUI.cardBadgesKey) private var forkCardBadges = true
++    @FocusState private var forkActionFocus: ForkCardAction?
  
      private var shouldBlurNextUpArtwork: Bool {
          (continueWatchingBlurNextUp
-@@ -270,6 +273,8 @@ struct PosterCard: View {
+@@ -270,6 +277,8 @@ struct PosterCard: View {
      @State private var landscapeArtworkPrepared = false
      @AppStorage(SettingsKey.trailersEnabled) private var trailersEnabled = true
      @AppStorage(SettingsKey.trailerDelay) private var trailerDelay = 7
@@ -3367,7 +3527,57 @@ index 7a7d75ee..14f1c34d 100644
      @AppStorage(SettingsKey.cardCornerRadius) private var cardCornerRadiusSetting = AppCardStyle.defaultCornerRadiusRaw
      @AppStorage(SettingsKey.liquidGlassCards) private var liquidGlassCards = true
      @State private var isTrailerPreviewActive = false
-@@ -444,7 +449,7 @@ struct PosterCard: View {
+@@ -294,7 +303,14 @@ struct PosterCard: View {
+                 posterContent
+             }
+             .buttonStyle(PosterCardButtonStyle(onNativeFocusChange: { focused in
+-                if focused { onFocus?(meta) } else { onBlur?(meta) }
++                if focused {
++                    onFocus?(meta)
++                } else if forkShowsCardActions {
++                    // Fork: focus may be moving into this card's own buttons; keep the card open.
++                    forkBlurUnlessActionsFocused()
++                } else {
++                    onBlur?(meta)
++                }
+             }))
+             .accessibilityIdentifier("poster-card-\(externalFocusValue ?? meta.id)")
+             .disabled(!allowsFocus)
+@@ -365,9 +381,32 @@ struct PosterCard: View {
+                     didRequestInitialFocus = false
+                 }
+             }
+-            .frame(width: layoutWidth, height: totalCardHeight, alignment: .topLeading)
++            // Fork: with the buttons showing, the card's own focus area stops above them so
++            // Down from the card lands on the buttons.
++            .frame(
++                width: layoutWidth,
++                height: forkShowsCardActions ? cardHeight - ForkCardAction.bandHeight : totalCardHeight,
++                alignment: .topLeading
++            )
++
++            if forkShowsCardActions {
++                ForkCardActionsBar(
++                    meta: meta,
++                    focus: $forkActionFocus,
++                    onPlay: forkOnPlay,
++                    onInfo: onOpenDetails ?? onClick
++                )
++                .padding(.leading, 22)
++                .frame(height: ForkCardAction.bandHeight, alignment: .center)
++                .frame(width: cardWidth, height: cardHeight, alignment: .bottomLeading)
++                .transition(.opacity)
++            }
+         }
+         .frame(width: cardWidth, height: totalCardHeight, alignment: .topLeading)
++        .animation(.easeInOut(duration: 0.2), value: forkShowsCardActions)
++        .onChange(of: forkActionFocus) { oldValue, newValue in
++            if oldValue != nil, newValue == nil { forkBlurUnlessActionsFocused() }
++        }
+         .titleActionsContextMenu(
+             meta: meta,
+             onOpenDetails: onOpenDetails ?? onClick,
+@@ -444,7 +483,7 @@ struct PosterCard: View {
              .overlay {
                  // Prepare during the delay, but keep playback and visibility
                  // gated by isTrailerPreviewActive until the timer completes.
@@ -3376,7 +3586,7 @@ index 7a7d75ee..14f1c34d 100644
                      && !isContinueOrUpcomingCard && !didFinishTrailerPreview {
                      TrailerPreviewPlayer(
                          meta: meta,
-@@ -475,6 +480,27 @@ struct PosterCard: View {
+@@ -475,6 +514,27 @@ struct PosterCard: View {
              .overlay(alignment: effectiveLandscape ? .topTrailing : .top) {
                  continueBadge
              }
@@ -3404,7 +3614,7 @@ index 7a7d75ee..14f1c34d 100644
              .overlay(alignment: .bottomTrailing) {
                  if let origin = shownOrigin {
                      CollectionOriginBadge(origin: origin)
-@@ -505,7 +531,7 @@ struct PosterCard: View {
+@@ -505,7 +565,7 @@ struct PosterCard: View {
                  RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
                      .stroke(focusedBorderColor, lineWidth: focusedBorderWidth)
              )
@@ -3413,7 +3623,7 @@ index 7a7d75ee..14f1c34d 100644
  
              if showsPosterTitle {
                  MarqueeText(
-@@ -562,26 +588,47 @@ struct PosterCard: View {
+@@ -562,26 +622,83 @@ struct PosterCard: View {
                          .frame(maxWidth: cardWidth * 0.82, alignment: .leading)
                          .padding(EdgeInsets(top: 22, leading: 22, bottom: 54, trailing: 22))
                  } else if let logoURL = landscapeLogoURL {
@@ -3444,7 +3654,8 @@ index 7a7d75ee..14f1c34d 100644
                          }
                      }
 -                    .frame(width: landscapeLogoWidth, height: landscapeLogoHeight, alignment: .leading)
-                     .padding(22)
+-                    .padding(22)
++                    .padding(EdgeInsets(top: 22, leading: 22, bottom: forkActionsInset, trailing: 22))
 +                    .animation(.easeInOut(duration: 0.25), value: forkShowsCardFacts)
                  } else if !isEffectivelyAlwaysLandscape || !showsPosterTitle {
 -                    fallbackTitle
@@ -3458,12 +3669,48 @@ index 7a7d75ee..14f1c34d 100644
 +                                .frame(width: cardWidth - 44, alignment: .leading)
 +                        }
 +                    }
-+                    .padding(22)
++                    .padding(EdgeInsets(top: 22, leading: 22, bottom: forkActionsInset, trailing: 22))
                  }
              }
          }
      }
  
++    /// Fork: an opened Home catalogue card in Netflix Style carries Play / My List / More Info.
++    private var forkShowsCardActions: Bool {
++        forkOnPlay != nil
++            && allowsFocus
++            && ForkStyle.current == .netflix
++            && effectiveLandscape
++            && !isEffectivelyAlwaysLandscape
++            && !isContinueOrUpcomingCard
++            && forkCardOrActionsFocused
++    }
++
++    private var forkCardOrActionsFocused: Bool {
++        #if os(tvOS)
++        return isFocused || forkActionFocus != nil
++        #else
++        return false
++        #endif
++    }
++
++    /// Room left under the logo and facts line for the buttons.
++    private var forkActionsInset: CGFloat {
++        forkShowsCardActions ? ForkCardAction.bandHeight + 6 : 22
++    }
++
++    /// Reports the card as left only once focus is on neither the card nor its buttons.
++    private func forkBlurUnlessActionsFocused() {
++        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
++            #if os(tvOS)
++            guard forkActionFocus == nil, !isFocused else { return }
++            #else
++            guard forkActionFocus == nil else { return }
++            #endif
++            onBlur?(meta)
++        }
++    }
++
 +    /// Fork: the facts line shows on the focused catalogue card in Netflix Style.
 +    private var forkShowsCardFacts: Bool {
 +        ForkStyle.current == .netflix && showsFocusedAppearance && !isContinueOrUpcomingCard
@@ -3472,7 +3719,7 @@ index 7a7d75ee..14f1c34d 100644
      private var continueLandscapeSummary: some View {
          VStack(alignment: .leading, spacing: 3) {
              if showsContinueWatchingLabels, let continueEpisodeText {
-@@ -684,9 +731,22 @@ struct PosterCard: View {
+@@ -684,9 +801,22 @@ struct PosterCard: View {
          }
      }
  
@@ -3495,7 +3742,7 @@ index 7a7d75ee..14f1c34d 100644
          if let continueEpisodeText {
              return "\(continueEpisodeText) • \(continueRemainingText)"
          }
-@@ -707,7 +767,7 @@ struct PosterCard: View {
+@@ -707,7 +837,7 @@ struct PosterCard: View {
                          .frame(width: width, height: 8)
  
                      Capsule()
@@ -3504,7 +3751,7 @@ index 7a7d75ee..14f1c34d 100644
                          .frame(width: max(8, width * progress), height: 8)
                  }
                  .padding(.leading, 22)
-@@ -952,11 +1012,24 @@ struct PosterCard: View {
+@@ -952,11 +1082,24 @@ struct PosterCard: View {
  
      private var focusedBorderColor: Color {
          guard showsFocusedAppearance else { return .clear }
@@ -3531,7 +3778,16 @@ index 7a7d75ee..14f1c34d 100644
      }
  
      private var shadowOpacity: Double {
-@@ -984,7 +1057,12 @@ struct PosterCard: View {
+@@ -972,7 +1115,7 @@ struct PosterCard: View {
+     }
+ 
+     private var showsFocusedAppearance: Bool {
+-        isFocused || retainFocusAppearance
++        isFocused || retainFocusAppearance || forkActionFocus != nil
+     }
+ 
+     private var showsPosterTitle: Bool {
+@@ -984,7 +1127,12 @@ struct PosterCard: View {
      }
  
      private var trailerActivationIdentity: String {
@@ -3545,7 +3801,7 @@ index 7a7d75ee..14f1c34d 100644
      }
  
      private var isTrailerPreviewVisible: Bool {
-@@ -996,7 +1074,7 @@ struct PosterCard: View {
+@@ -996,7 +1144,7 @@ struct PosterCard: View {
          isTrailerPreviewActive = false
          isTrailerPreviewReady = false
          didFinishTrailerPreview = false
@@ -3554,7 +3810,7 @@ index 7a7d75ee..14f1c34d 100644
  
          let delay = min(15, max(0, trailerDelay))
          do {
-@@ -1004,7 +1082,7 @@ struct PosterCard: View {
+@@ -1004,7 +1152,7 @@ struct PosterCard: View {
          } catch {
              return
          }
@@ -3563,7 +3819,15 @@ index 7a7d75ee..14f1c34d 100644
          isTrailerPreviewActive = true
      }
  
-@@ -3595,6 +3673,9 @@ struct TitleActionsMenuContent: View {
+@@ -1128,6 +1276,7 @@ extension PosterCard: Equatable {
+             && lhs.externalFocusValue == rhs.externalFocusValue
+             && lhs.cardIndex == rhs.cardIndex
+             && (lhs.onLongPress != nil) == (rhs.onLongPress != nil)
++            && (lhs.forkOnPlay != nil) == (rhs.forkOnPlay != nil)
+             && (lhs.onOpenDetails != nil) == (rhs.onOpenDetails != nil)
+             && (lhs.onPlayManually != nil) == (rhs.onPlayManually != nil)
+             && (lhs.onStartFromBeginning != nil) == (rhs.onStartFromBeginning != nil)
+@@ -3595,6 +3744,9 @@ struct TitleActionsMenuContent: View {
              let isItemWatched = libraryWatchedContext == nil
                  ? WatchedStore.contains(meta: meta)
                  : isLibraryWatched
@@ -3573,7 +3837,7 @@ index 7a7d75ee..14f1c34d 100644
  
              Button {
                  scheduleOpenDetails()
-@@ -3602,17 +3683,19 @@ struct TitleActionsMenuContent: View {
+@@ -3602,17 +3754,19 @@ struct TitleActionsMenuContent: View {
                  Label(L10n.string("action_go_to_details", fallback: "Go to details"), systemImage: "info.circle")
              }
  
@@ -3603,7 +3867,7 @@ index 7a7d75ee..14f1c34d 100644
  
              if let onRefreshCatalog {
                  Button {
-@@ -3630,7 +3713,11 @@ struct TitleActionsMenuContent: View {
+@@ -3630,7 +3784,11 @@ struct TitleActionsMenuContent: View {
                          toggleLibrary(currentlyInLibrary: true)
                      }
                  } label: {
@@ -3616,7 +3880,7 @@ index 7a7d75ee..14f1c34d 100644
                  }
              } else {
                  Button {
-@@ -3638,7 +3725,11 @@ struct TitleActionsMenuContent: View {
+@@ -3638,7 +3796,11 @@ struct TitleActionsMenuContent: View {
                          toggleLibrary(currentlyInLibrary: false)
                      }
                  } label: {
@@ -3944,10 +4208,19 @@ index 44f6743c..5f32e351 100644
  /// Displays a clear focus outline (theme accent color) when navigated to,
  /// and highlights selected tabs.
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-index 989a3e2c..4d38cc58 100644
+index 989a3e2c..bfcbb6ed 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-@@ -652,7 +652,7 @@ struct TVCatalogRow: View {
+@@ -417,6 +417,8 @@ struct TVCatalogRow: View {
+     var onRemoveFromContinueWatching: ((ContinueWatchingItem) -> Void)? = nil
+     var onRefreshCatalog: (() -> Void)? = nil
+     var onMove: ((MoveCommandDirection) -> Void)? = nil
++    /// Fork: Play button inside an opened card (Netflix Style).
++    var forkOnPlay: ((NuvioMeta) -> Void)? = nil
+ 
+     @State private var scrollIndex: Int?
+     @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
+@@ -652,7 +654,7 @@ struct TVCatalogRow: View {
                      isAlwaysLandscape: rowTileShape == .landscape || item.tileShape == .landscape,
                      tileShape: item.tileShape != .poster ? item.tileShape : rowTileShape,
                      continueProgress: progressItem?.progress,
@@ -3956,7 +4229,13 @@ index 989a3e2c..4d38cc58 100644
                      continueEpisodeText: episodeText,
                      continueEpisodeTitleText: episodeTitleText,
                      continueEpisodeArtworkURL: episodeArtworkURL,
-@@ -698,6 +698,12 @@ struct TVCatalogRow: View {
+@@ -694,10 +696,17 @@ struct TVCatalogRow: View {
+                         restrictFocusToCardKey: restrictFocusToCardKey,
+                         suppressFocusAnimations: suppressFocusAnimations
+                     ),
+-                    onMove: onMove
++                    onMove: onMove,
++                    forkOnPlay: forkOnPlay.map { play -> () -> Void in { play(item) } }
                  ) {
                      onSelect(item)
                  }
@@ -3969,7 +4248,7 @@ index 989a3e2c..4d38cc58 100644
              }
          }
          .padding(
-@@ -882,7 +888,7 @@ struct TVHomeCatalogGridSection: View {
+@@ -882,7 +891,7 @@ struct TVHomeCatalogGridSection: View {
      var body: some View {
          VStack(alignment: .leading, spacing: 18) {
              HStack(alignment: .center, spacing: 14) {
@@ -3978,7 +4257,7 @@ index 989a3e2c..4d38cc58 100644
                      .font(.appFont(size: 30, weight: .bold))
                      .foregroundColor(.white)
  
-@@ -930,7 +936,7 @@ struct TVHomeCatalogGridSection: View {
+@@ -930,7 +939,7 @@ struct TVHomeCatalogGridSection: View {
                  }
  
                  TVHomeSeeAllCard(
@@ -3987,7 +4266,7 @@ index 989a3e2c..4d38cc58 100644
                      externalFocus: externalFocus,
                      externalFocusValue: seeAllKey,
                      retainFocusAppearance: (retainFocusAppearanceForCardKey ?? restrictFocusToCardKey) == seeAllKey,
-@@ -1093,7 +1099,7 @@ struct TVHomeCatalogBrowseView: View {
+@@ -1093,7 +1102,7 @@ struct TVHomeCatalogBrowseView: View {
  
              VStack(alignment: .leading, spacing: 20) {
                  VStack(alignment: .leading, spacing: 6) {
