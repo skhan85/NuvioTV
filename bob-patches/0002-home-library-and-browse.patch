@@ -1453,16 +1453,27 @@ index 00000000..cb3e4bcc
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..e7de8f3d
+index 00000000..2ece7b79
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
-@@ -0,0 +1,345 @@
+@@ -0,0 +1,356 @@
 +import Foundation
 +import SwiftUI
 +
 +// MARK: - Fork: Netflix home touches
 +
 +enum ForkNetflixUI {
++    /// A catalogue row's name as shown: Netflix Style drops a " - Movies" / " - Series" ending.
++    static func rowTitle(_ title: String) -> String {
++        guard ForkStyle.current == .netflix else { return title }
++        let trimmed = title.replacingOccurrences(
++            of: #"\s+[-–]\s+(Movies?|Series|Shows?|TV|Anime|Films?)$"#,
++            with: "",
++            options: [.regularExpression, .caseInsensitive]
++        )
++        return trimmed.isEmpty ? title : trimmed
++    }
++
 +    /// Red TOP 10 tag and New Episode / New Season / Recently Added tags on every card.
 +    static let cardBadgesKey = "fork_card_badges"
 +    static let netflixRed = Color(red: 0xE5 / 255, green: 0x09 / 255, blue: 0x14 / 255)
@@ -2145,10 +2156,10 @@ index 00000000..df14cfb1
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
 new file mode 100644
-index 00000000..dcc3b40e
+index 00000000..3ab12fc2
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StyleFork.swift
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,187 @@
 +import Foundation
 +import SwiftUI
 +
@@ -2201,22 +2212,17 @@ index 00000000..dcc3b40e
 +            }
 +            return .netflix
 +        }
-+        if raw == ForkStyle.netflix.rawValue, !store.bool(forKey: labelsOffKey) {
-+            // Netflix Style shows no titles under posters. Profiles that picked it before this
-+            // rule existed get the titles turned off once; the Settings switch still works after.
++        if raw == ForkStyle.netflix.rawValue, store.bool(forKey: SettingsKey.posterLabels) {
++            // Netflix Style never shows titles under posters (the artwork carries the title), and
++            // its Settings hide the Poster Labels switch, so a profile that had it on loses it here.
 +            DispatchQueue.main.async {
-+                guard !store.bool(forKey: labelsOffKey) else { return }
-+                store.set(true, forKey: labelsOffKey)
-+                if store.bool(forKey: SettingsKey.posterLabels) {
-+                    store.set(false, forKey: SettingsKey.posterLabels)
-+                    ProfileSettings.notifySettingsChanged()
-+                }
++                guard store.bool(forKey: SettingsKey.posterLabels) else { return }
++                store.set(false, forKey: SettingsKey.posterLabels)
++                ProfileSettings.notifySettingsChanged()
 +            }
 +        }
 +        return from(stored: raw)
 +    }
-+
-+    private static let labelsOffKey = "fork_netflix_labels_off_v1"
 +
 +    /// Writes Netflix Style's settings into a profile's store: the same values that picking
 +    /// Netflix Style in Settings > Layout sets.
@@ -2343,7 +2349,7 @@ index 00000000..dcc3b40e
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..e09a5bb1
+index 00000000..a445ea60
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 @@ -0,0 +1,119 @@
@@ -2365,7 +2371,7 @@ index 00000000..e09a5bb1
 +            id: 12,
 +            date: "Nov 13, 2026",
 +            items: [
-+                "Netflix Style shows posters without titles underneath, like Netflix. Profiles already on Netflix Style switch the titles off once; Settings > Layout still lets you turn them back on. Posters also come without the ratings strip now."
++                "Netflix Style: posters have no title underneath (the Poster Labels switch only shows under Custom), and row names drop the \" - Movies\" / \" - Series\" ending, as on the iPhone. Posters also come without the ratings strip now."
 +            ]
 +        ),
 +        Entry(
@@ -2467,7 +2473,7 @@ index 00000000..e09a5bb1
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index b190950c..c08aa82f 100644
+index b190950c..861034f9 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -18,6 +18,7 @@ import AetherEngine
@@ -3024,6 +3030,33 @@ index b190950c..c08aa82f 100644
                                      #if os(tvOS)
                                      // Place the configurator inside the scroll content so its
                                      // ancestor is the UIScrollView that owns the row offset.
+@@ -6974,7 +7333,7 @@ struct TVHomeView: View {
+                             TVCatalogRow(
+                                 id: section.id,
+                                 customPosterScreen: isCalendarToday ? .home : .continueWatching,
+-                                title: section.title,
++                                title: ForkNetflixUI.rowTitle(section.title),
+                                 addonName: section.addonName,
+                                 showAddonName: catalogAddonNames,
+                                 showsSectionTitle: true,
+@@ -8155,7 +8514,7 @@ struct TVHomeView: View {
+         if section.isLoadingPlaceholder {
+             TVLoadingCatalogRow(
+                 id: section.id,
+-                title: section.title,
++                title: ForkNetflixUI.rowTitle(section.title),
+                 tileShape: effectiveTileShape(for: section),
+                 requestsFocus: false,
+                 addonName: section.addonName,
+@@ -8287,7 +8646,7 @@ struct TVHomeView: View {
+             TVCatalogRow(
+                 id: section.id,
+                 customPosterScreen: collectionHome == nil ? .home : .collections,
+-                title: section.title,
++                title: ForkNetflixUI.rowTitle(section.title),
+                 addonName: section.addonName,
+                 showAddonName: catalogAddonNames,
+                 showsSectionTitle: true,
 @@ -8628,6 +8987,23 @@ struct TVHomeView: View {
              : estimatedCollectionRowHeight(for: section)
      }
@@ -3111,11 +3144,12 @@ index b190950c..c08aa82f 100644
                  copy.items = section.items.filter {
                      !ContentReleasePolicy.isUnreleased($0, today: today)
 +                        && !cinemaOnly.isCinemaOnly($0, today: today)
-+                }
-+                return copy
-+            }
-+        }
-+
+                 }
+                 return copy
+             }
+         }
+ 
+-        let contentSections = result.filter(\.hasContent)
 +        // Fork: kids rating limit — only titles rated up to PG / TV-PG (your own Continue
 +        // Watching, collection folders and local/Jellyfin rows are left as they are).
 +        let kidsFiltered: [TVHomeSection]
@@ -3128,16 +3162,15 @@ index b190950c..c08aa82f 100644
 +                    || section.id == TVHomeSection.jellyfinId
 +                    || section.id.hasPrefix(TVHomeSection.jellyfinLibraryIdPrefix) {
 +                    return section
-                 }
++                }
 +                var copy = section
 +                copy.items = forkKids.visible(section.items)
-                 return copy
-             }
++                return copy
++            }
 +        } else {
 +            kidsFiltered = result
-         }
- 
--        let contentSections = result.filter(\.hasContent)
++        }
++
 +        let contentSections = kidsFiltered.filter(\.hasContent)
          focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
              signature: signature,
@@ -3911,7 +3944,7 @@ index 44f6743c..5f32e351 100644
  /// Displays a clear focus outline (theme accent color) when navigated to,
  /// and highlights selected tabs.
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-index 989a3e2c..7dd1a084 100644
+index 989a3e2c..4d38cc58 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 @@ -652,7 +652,7 @@ struct TVCatalogRow: View {
@@ -3936,6 +3969,33 @@ index 989a3e2c..7dd1a084 100644
              }
          }
          .padding(
+@@ -882,7 +888,7 @@ struct TVHomeCatalogGridSection: View {
+     var body: some View {
+         VStack(alignment: .leading, spacing: 18) {
+             HStack(alignment: .center, spacing: 14) {
+-                Text(section.title)
++                Text(ForkNetflixUI.rowTitle(section.title))
+                     .font(.appFont(size: 30, weight: .bold))
+                     .foregroundColor(.white)
+ 
+@@ -930,7 +936,7 @@ struct TVHomeCatalogGridSection: View {
+                 }
+ 
+                 TVHomeSeeAllCard(
+-                    title: section.title,
++                    title: ForkNetflixUI.rowTitle(section.title),
+                     externalFocus: externalFocus,
+                     externalFocusValue: seeAllKey,
+                     retainFocusAppearance: (retainFocusAppearanceForCardKey ?? restrictFocusToCardKey) == seeAllKey,
+@@ -1093,7 +1099,7 @@ struct TVHomeCatalogBrowseView: View {
+ 
+             VStack(alignment: .leading, spacing: 20) {
+                 VStack(alignment: .leading, spacing: 6) {
+-                    Text(section.title)
++                    Text(ForkNetflixUI.rowTitle(section.title))
+                         .font(.system(size: 42, weight: .bold))
+                         .foregroundColor(.white)
+                         .lineLimit(1)
 diff --git a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift b/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
 index 864be9a5..80604623 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Library/LibraryView.swift
