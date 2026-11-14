@@ -296,10 +296,10 @@ index 00000000..b03ae552
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
 new file mode 100644
-index 00000000..116aec06
+index 00000000..ce5c523c
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/HomeFork.swift
-@@ -0,0 +1,401 @@
+@@ -0,0 +1,433 @@
 +import SwiftUI
 +
 +// MARK: - Fork: Top 10 numerals
@@ -438,12 +438,18 @@ index 00000000..116aec06
 +            }
 +        } else {
 +            async let showsList = TmdbDetailsService.fetchTrending(mediaType: "tv", window: "day", limit: 10)
-+            async let moviesList = TmdbDetailsService.fetchTrending(mediaType: "movie", window: "day", limit: 10)
++            // Fork: films still in cinemas or not out yet don't count (all 20 of the day's
++            // trending films are checked so ten home releases are usually left).
++            async let moviesList = TmdbDetailsService.fetchTrending(mediaType: "movie", window: "day", limit: 20)
 +            async let weekList = TmdbDetailsService.fetchTrending(mediaType: "all", window: "week", limit: 20)
++            let today = ContentReleasePolicy.todayIsoDay()
 +            shows = await showsList.map(\.asMeta)
-+            movies = await moviesList.map(\.asMeta)
++            movies = Array(await CinemaOnlyReleases.keepingOutAtHome(moviesList.map(\.asMeta), today: today).prefix(10))
 +            let topIds = Set((shows + movies).map(\.id))
-+            week = await weekList.map(\.asMeta).filter { !topIds.contains($0.id) }
++            week = await CinemaOnlyReleases.keepingOutAtHome(
++                weekList.map(\.asMeta).filter { !topIds.contains($0.id) },
++                today: today
++            )
 +        }
 +
 +        // Fork: check which films are still cinema-only before the rows show, so the
@@ -673,6 +679,32 @@ index 00000000..116aec06
 +        if daysBetween(firstRelease, todayDate) > windowDays { return false }
 +        let atHome = days.contains { $0.0 >= 4 && $0.1 <= todayDate }
 +        return !atHome
++    }
++
++    /// Fork: the Top 10 Movies and Trending Now rows only list films people can watch at home:
++    /// TMDB must show a digital, physical or TV release (types 4-6) on or before today. Films
++    /// first out more than `windowDays` ago, and films TMDB can't answer for, stay in.
++    nonisolated static func isOutAtHome(_ meta: NuvioMeta, today: String) async -> Bool {
++        guard meta.type.lowercased() == "movie", let todayDate = day(today) else { return true }
++        guard let releases = await TmdbDetailsService.fetchMovieReleaseDates(for: meta) else { return true }
++        let days = releases.compactMap { release in day(release.date).map { (release.type, $0) } }
++        guard let firstRelease = days.map(\.1).min() else { return true }
++        if days.contains(where: { $0.0 >= 4 && $0.1 <= todayDate }) { return true }
++        // Not out anywhere yet, or only in cinemas so far.
++        return firstRelease <= todayDate && daysBetween(firstRelease, todayDate) > windowDays
++    }
++
++    /// `metas` in their order, films not yet out at home left out (checked all at once).
++    nonisolated static func keepingOutAtHome(_ metas: [NuvioMeta], today: String) async -> [NuvioMeta] {
++        let verdicts = await withTaskGroup(of: (Int, Bool).self) { group in
++            for (index, meta) in metas.enumerated() {
++                group.addTask { (index, await isOutAtHome(meta, today: today)) }
++            }
++            var collected: [Int: Bool] = [:]
++            for await (index, keep) in group { collected[index] = keep }
++            return collected
++        }
++        return metas.enumerated().filter { verdicts[$0.offset] ?? true }.map(\.element)
 +    }
 +
 +    /// Films first released in the last `windowDays` days, or (no full date) this year or last year.
@@ -2567,10 +2599,10 @@ index 00000000..3ab12fc2
 +#endif
 diff --git a/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
 new file mode 100644
-index 00000000..c99bf5c3
+index 00000000..a1d905fe
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/WhatsNewFork.swift
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,135 @@
 +import Foundation
 +
 +// MARK: - Fork: "What's new in your fork"
@@ -2590,7 +2622,8 @@ index 00000000..c99bf5c3
 +            date: "Nov 14, 2026",
 +            items: [
 +                "Netflix Style: the top menu no longer sits half off the screen. It shows in full on Home's first row and hides below it (press up or Menu to get back to it).",
-+                "Netflix Style: collection folders (moods, streaming services, studios) show their first title's picture with the folder's name, like on the iPhone, instead of the imported cover art."
++                "Netflix Style: collection folders (moods, streaming services, studios) show their first title's picture with the folder's name, like on the iPhone, instead of the imported cover art.",
++                "Top 10 Movies Today and Trending Now only list films you can watch at home (out on digital, disc or TV), not ones still in cinemas or not out yet. A Top 10 number steps aside while its card is open."
 +            ]
 +        ),
 +        Entry(
@@ -4338,7 +4371,7 @@ index 44f6743c..5f32e351 100644
  /// Displays a clear focus outline (theme accent color) when navigated to,
  /// and highlights selected tabs.
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-index 989a3e2c..e4306dbd 100644
+index 989a3e2c..4f1fb5da 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 @@ -417,6 +417,8 @@ struct TVCatalogRow: View {
@@ -4359,7 +4392,7 @@ index 989a3e2c..e4306dbd 100644
                      continueEpisodeText: episodeText,
                      continueEpisodeTitleText: episodeTitleText,
                      continueEpisodeArtworkURL: episodeArtworkURL,
-@@ -694,10 +696,17 @@ struct TVCatalogRow: View {
+@@ -694,10 +696,19 @@ struct TVCatalogRow: View {
                          restrictFocusToCardKey: restrictFocusToCardKey,
                          suppressFocusAnimations: suppressFocusAnimations
                      ),
@@ -4371,14 +4404,16 @@ index 989a3e2c..e4306dbd 100644
                  }
 +                // Fork: Netflix-style rank numeral on the first ten cards of a "Top 10" row.
 +                .overlay(alignment: .bottomLeading) {
-+                    if itemIndex < 10, rowTileShape != .landscape, ForkTop10.isTop10(title) {
++                    // Hidden while its card is open, so the number doesn't cover the card's buttons.
++                    if itemIndex < 10, rowTileShape != .landscape, ForkTop10.isTop10(title),
++                       !(rowHomeLayout == "Modern" && landscapeFocusedId == cardKey) {
 +                        ForkTop10Numeral(rank: itemIndex + 1, cardWidth: rowPosterWidth)
 +                    }
 +                }
              }
          }
          .padding(
-@@ -882,7 +891,7 @@ struct TVHomeCatalogGridSection: View {
+@@ -882,7 +893,7 @@ struct TVHomeCatalogGridSection: View {
      var body: some View {
          VStack(alignment: .leading, spacing: 18) {
              HStack(alignment: .center, spacing: 14) {
@@ -4387,7 +4422,7 @@ index 989a3e2c..e4306dbd 100644
                      .font(.appFont(size: 30, weight: .bold))
                      .foregroundColor(.white)
  
-@@ -930,7 +939,7 @@ struct TVHomeCatalogGridSection: View {
+@@ -930,7 +941,7 @@ struct TVHomeCatalogGridSection: View {
                  }
  
                  TVHomeSeeAllCard(
@@ -4396,7 +4431,7 @@ index 989a3e2c..e4306dbd 100644
                      externalFocus: externalFocus,
                      externalFocusValue: seeAllKey,
                      retainFocusAppearance: (retainFocusAppearanceForCardKey ?? restrictFocusToCardKey) == seeAllKey,
-@@ -1093,7 +1102,7 @@ struct TVHomeCatalogBrowseView: View {
+@@ -1093,7 +1104,7 @@ struct TVHomeCatalogBrowseView: View {
  
              VStack(alignment: .leading, spacing: 20) {
                  VStack(alignment: .leading, spacing: 6) {
@@ -4405,7 +4440,7 @@ index 989a3e2c..e4306dbd 100644
                          .font(.system(size: 42, weight: .bold))
                          .foregroundColor(.white)
                          .lineLimit(1)
-@@ -1756,7 +1765,13 @@ struct TVCollectionFolderCard: View {
+@@ -1756,7 +1767,13 @@ struct TVCollectionFolderCard: View {
  
      @ViewBuilder
      private var artTile: some View {
