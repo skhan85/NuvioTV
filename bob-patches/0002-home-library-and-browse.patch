@@ -218,10 +218,10 @@ index 08899f30..762f77c1 100644
  
 diff --git a/tvosApp/NuvioTV/Sources/Fork/BillboardFork.swift b/tvosApp/NuvioTV/Sources/Fork/BillboardFork.swift
 new file mode 100644
-index 00000000..b03ae552
+index 00000000..fe23a141
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/BillboardFork.swift
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,75 @@
 +import SwiftUI
 +
 +/// Fork: Netflix-style billboard. Once focus rests on a title, its trailer plays
@@ -256,6 +256,8 @@ index 00000000..b03ae552
 +
 +    @State private var isActive = false
 +    @State private var isFinished = false
++    // The preview-sound setting, as the card previews use it.
++    @AppStorage(SettingsKey.trailerPreviewSound) private var trailerPreviewSound = false
 +
 +    var body: some View {
 +        ZStack {
@@ -263,6 +265,7 @@ index 00000000..b03ae552
 +                TrailerPreviewPlayer(
 +                    meta: meta,
 +                    isActive: isActive,
++                    soundEnabled: $trailerPreviewSound,
 +                    onPlaybackReady: {
 +                        guard isActive else { return }
 +                        onPlayingChange(true)
