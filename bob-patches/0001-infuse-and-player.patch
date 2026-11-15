@@ -1007,7 +1007,7 @@ index cd88a01c..832ffd63 100644
              break
          }
 diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
-index f985b0c0..c2f9d34f 100644
+index 540cab38..dd296fee 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
 @@ -57,6 +57,24 @@ extension PlayerView {
@@ -1035,7 +1035,7 @@ index f985b0c0..c2f9d34f 100644
          }
      }
  
-@@ -238,6 +256,7 @@ extension PlayerView {
+@@ -250,6 +268,7 @@ extension PlayerView {
                      && !viewModel.isSceneDetailVisible
                      && viewModel.sidePanel == nil
                      && !viewModel.postPlayState.isVisible
@@ -1043,7 +1043,7 @@ index f985b0c0..c2f9d34f 100644
                      && !viewModel.isHoldingSeek
                      && viewModel.pendingSeekDelta == 0
                      && (!viewModel.showControls || viewModel.isScrubbing || viewModel.isTimelineFocused)
-@@ -280,6 +299,7 @@ extension PlayerView {
+@@ -292,6 +311,7 @@ extension PlayerView {
                  && viewModel.sidePanel == nil
                  && !viewModel.isScrubbing
                  && !viewModel.postPlayState.isVisible
@@ -1109,10 +1109,10 @@ index 134ddbcb..6a7e579c 100644
          requestID = UUID()
          server.stop()
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index 33e1984e..3e7f4dad 100644
+index 402f318b..d0d89326 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-@@ -437,6 +437,10 @@ class PlayerViewModel: ObservableObject {
+@@ -439,6 +439,10 @@ class PlayerViewModel: ObservableObject {
      @Published var nextEpisodeCountdown: Int?
      /// Cancellation applies only to the currently configured episode.
      @Published private(set) var isAutoPlayCancelled = false
@@ -1123,7 +1123,7 @@ index 33e1984e..3e7f4dad 100644
      /// True while the next episode's stream is being resolved and loaded, so the
      /// card can show a spinner instead of a Play button.
      @Published var isAdvancingEpisode: Bool = false
-@@ -832,7 +836,8 @@ class PlayerViewModel: ObservableObject {
+@@ -848,7 +852,8 @@ class PlayerViewModel: ObservableObject {
      private var loadWatchdogGeneration: UInt64?
      private var loadWatchdogDiscGraceGranted = false
      /// A source that hasn't started within this long is treated as dead.
@@ -1133,7 +1133,7 @@ index 33e1984e..3e7f4dad 100644
  
      init(
          sessionCoordinator suppliedCoordinator: PlaybackSessionCoordinator? = nil,
-@@ -2800,9 +2805,24 @@ class PlayerViewModel: ObservableObject {
+@@ -2860,9 +2865,24 @@ class PlayerViewModel: ObservableObject {
      /// Play the next episode now (the card's Play button).
      func playNextEpisode() {
          guard !isAdvanceInFlight, !isAwaitingStreamStart else { return }
@@ -1158,7 +1158,7 @@ index 33e1984e..3e7f4dad 100644
      func cancelAutoPlay() {
          isAutoPlayCancelled = true
          nextEpisodeCountdown = nil
-@@ -3105,7 +3125,24 @@ class PlayerViewModel: ObservableObject {
+@@ -3165,7 +3185,24 @@ class PlayerViewModel: ObservableObject {
          }
          let timeoutSeconds = loadTimeoutSeconds
          loadWatchdogTask = Task { [weak self] in
@@ -1184,7 +1184,7 @@ index 33e1984e..3e7f4dad 100644
              guard !Task.isCancelled, let self,
                    self.sessionCoordinator.loadGeneration == targetGeneration,
                    self.sessionCoordinator.lastLoadError == nil,
-@@ -3166,7 +3203,7 @@ class PlayerViewModel: ObservableObject {
+@@ -3226,7 +3263,7 @@ class PlayerViewModel: ObservableObject {
                  LastPlaybackStreamStore.remove(metaId: meta.id, season: numbers?.season, episode: numbers?.episode)
              }
              self.attemptFailover(
@@ -1193,7 +1193,7 @@ index 33e1984e..3e7f4dad 100644
                  toast: nil
              )
          }
-@@ -4198,6 +4235,14 @@ class PlayerViewModel: ObservableObject {
+@@ -4263,6 +4300,14 @@ class PlayerViewModel: ObservableObject {
                      }
                  }
                  if autoPlayNextEnabled && !isAutoPlayCancelled {
@@ -1208,7 +1208,7 @@ index 33e1984e..3e7f4dad 100644
                      advance()
                      return
                  }
-@@ -4910,6 +4955,7 @@ class PlayerViewModel: ObservableObject {
+@@ -4976,6 +5021,7 @@ class PlayerViewModel: ObservableObject {
      }
  
      func togglePlayPause() {
@@ -1216,7 +1216,7 @@ index 33e1984e..3e7f4dad 100644
          recordWatchPartyTransportIntent()
          if isScrubbing {
              commitScrub(andPlay: true)
-@@ -6138,6 +6184,8 @@ class PlayerViewModel: ObservableObject {
+@@ -6209,6 +6255,8 @@ class PlayerViewModel: ObservableObject {
      }
  
      func dpadSample(x: Double, y: Double) {
@@ -1225,7 +1225,7 @@ index 33e1984e..3e7f4dad 100644
          for observer in gesturePadObservers.values { observer(x, y) }
          guard !showScenePanel, !isSceneDetailVisible else { return }
          if isScrubbing {
-@@ -6175,6 +6223,8 @@ class PlayerViewModel: ObservableObject {
+@@ -6246,6 +6294,8 @@ class PlayerViewModel: ObservableObject {
      /// Handles GameController buttonA (physical click on Siri Remote touchpad).
      /// On 1st Gen Siri Remotes (black remote), clicks on the left/right sides trigger discrete seek or hold-to-seek.
      func handleGCButtonA(isPressed: Bool, pad: GCMicroGamepad? = nil, touchX: Double? = nil) {
