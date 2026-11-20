@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift b/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
-index 94915dae2..33fe8e28d 100644
+index 94915dae..33fe8e28 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Profile/UserProfileView.swift
 @@ -15,6 +15,7 @@ public struct UserProfileView: View {
