@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Images.xcassets/SplashScreenBackground.colorset/Contents.json b/tvosApp/NuvioTV/Images.xcassets/SplashScreenBackground.colorset/Contents.json
-index dba1090c..d1cf3c5b 100644
+index dba1090cc..d1cf3c5b4 100644
 --- a/tvosApp/NuvioTV/Images.xcassets/SplashScreenBackground.colorset/Contents.json
 +++ b/tvosApp/NuvioTV/Images.xcassets/SplashScreenBackground.colorset/Contents.json
 @@ -4,9 +4,9 @@
@@ -16,10 +16,10 @@ index dba1090c..d1cf3c5b 100644
          "color-space": "srgb"
        },
 diff --git a/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift b/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
-index 305b6588..a96310b1 100644
+index 615c70c19..bab506aae 100644
 --- a/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/AppLanguage.swift
-@@ -585,6 +585,7 @@ enum AppFont: String, CaseIterable, Identifiable, Hashable {
+@@ -587,6 +587,7 @@ enum AppFont: String, CaseIterable, Identifiable, Hashable {
      case inter = "Inter"
      case system = "System"
      case rounded = "Rounded"
@@ -27,7 +27,7 @@ index 305b6588..a96310b1 100644
  
      var id: String { rawValue }
  
-@@ -593,6 +594,7 @@ enum AppFont: String, CaseIterable, Identifiable, Hashable {
+@@ -595,6 +596,7 @@ enum AppFont: String, CaseIterable, Identifiable, Hashable {
          case .inter: return "Inter"
          case .system: return "System (San Francisco)"
          case .rounded: return "System (Rounded)"
@@ -35,7 +35,7 @@ index 305b6588..a96310b1 100644
          }
      }
  
-@@ -643,6 +645,22 @@ final class AppFontManager: ObservableObject {
+@@ -644,6 +646,22 @@ final class AppFontManager: ObservableObject {
              return .system(size: size, weight: weight, design: design == .default ? .default : design)
          case .rounded:
              return .system(size: size, weight: weight, design: .rounded)
@@ -59,7 +59,7 @@ index 305b6588..a96310b1 100644
      }
  
 diff --git a/tvosApp/NuvioTV/SplashScreen.storyboard b/tvosApp/NuvioTV/SplashScreen.storyboard
-index 102a9d5c..919f53ed 100644
+index 102a9d5c9..919f53edd 100644
 --- a/tvosApp/NuvioTV/SplashScreen.storyboard
 +++ b/tvosApp/NuvioTV/SplashScreen.storyboard
 @@ -42,7 +42,7 @@

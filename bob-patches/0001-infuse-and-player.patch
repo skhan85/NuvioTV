@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
-index 0ddbb07f..26a62d89 100644
+index 0ddbb07fe..26a62d895 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 @@ -1242,6 +1242,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
@@ -213,7 +213,7 @@ index 0ddbb07f..26a62d89 100644
                      }
                  case MPV_EVENT_END_FILE:
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
-index acd1c857..ab266154 100644
+index acd1c857c..ab266154e 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
 @@ -89,7 +89,14 @@ final class MPVStreamProtocolBridge: @unchecked Sendable {
@@ -310,7 +310,7 @@ index acd1c857..ab266154 100644
              case .sequential where isLiveStream:
                  break
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
-index 69823a1d..78c6d200 100644
+index 69823a1d6..78c6d2006 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackBackendPolicy.swift
 @@ -266,13 +266,14 @@ enum PlaybackBackendPolicy {
@@ -335,7 +335,7 @@ index 69823a1d..78c6d200 100644
              )
          }
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
-index b9bb0fca..d4c5e13b 100644
+index b9bb0fcad..d4c5e13ba 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
 @@ -101,11 +101,28 @@ struct MPVPlaybackCachePolicy: Equatable {
@@ -371,7 +371,7 @@ index b9bb0fca..d4c5e13b 100644
          )
      }
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
-index afc9092e..94bb5b93 100644
+index afc9092e5..94bb5b935 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
 @@ -17,7 +17,7 @@ final class PlaybackDiagnosticExportServer: @unchecked Sendable {
@@ -384,7 +384,7 @@ index afc9092e..94bb5b93 100644
                  changed(.failed)
                  return
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticLogStore.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticLogStore.swift
-index 6ce2242a..f5c534f5 100644
+index 6ce2242af..f5c534f52 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticLogStore.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticLogStore.swift
 @@ -18,7 +18,7 @@ struct PlaybackDiagnosticLogEntry: Identifiable, Equatable, Sendable {
@@ -397,7 +397,7 @@ index 6ce2242a..f5c534f5 100644
  
      private let lock = NSLock()
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
-index 2be4c67c..90c5ec5f 100644
+index 2be4c67c5..90c5ec5f8 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
 @@ -19,6 +19,8 @@ struct PlaybackDiagnosticTimeline: Codable, Sendable, Equatable {
@@ -411,7 +411,7 @@ index 2be4c67c..90c5ec5f 100644
      enum Engine: String, Codable, Sendable { case aether, mpv }
 diff --git a/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
 new file mode 100644
-index 00000000..ccdd468e
+index 000000000..ccdd468e9
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/InfuseFork.swift
 @@ -0,0 +1,484 @@
@@ -901,7 +901,7 @@ index 00000000..ccdd468e
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/StillWatchingFork.swift b/tvosApp/NuvioTV/Sources/Fork/StillWatchingFork.swift
 new file mode 100644
-index 00000000..1603ec76
+index 000000000..1603ec76f
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/StillWatchingFork.swift
 @@ -0,0 +1,66 @@
@@ -972,7 +972,7 @@ index 00000000..1603ec76
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
-index cd88a01c..832ffd63 100644
+index cd88a01c9..832ffd63a 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerLoadingOverlay.swift
 @@ -86,20 +86,25 @@ final class PlaybackStartupBenchmark {
@@ -1007,10 +1007,10 @@ index cd88a01c..832ffd63 100644
              break
          }
 diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
-index 540cab38..dd296fee 100644
+index 4ca486e7d..3aaad861a 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+Layers.swift
-@@ -57,6 +57,24 @@ extension PlayerView {
+@@ -63,6 +63,24 @@ extension PlayerView {
              settingsPanelLayer
              sidePanelLayer
              debugOverlayLayer
@@ -1035,7 +1035,7 @@ index 540cab38..dd296fee 100644
          }
      }
  
-@@ -250,6 +268,7 @@ extension PlayerView {
+@@ -256,6 +274,7 @@ extension PlayerView {
                      && !viewModel.isSceneDetailVisible
                      && viewModel.sidePanel == nil
                      && !viewModel.postPlayState.isVisible
@@ -1043,7 +1043,7 @@ index 540cab38..dd296fee 100644
                      && !viewModel.isHoldingSeek
                      && viewModel.pendingSeekDelta == 0
                      && (!viewModel.showControls || viewModel.isScrubbing || viewModel.isTimelineFocused)
-@@ -292,6 +311,7 @@ extension PlayerView {
+@@ -298,6 +317,7 @@ extension PlayerView {
                  && viewModel.sidePanel == nil
                  && !viewModel.isScrubbing
                  && !viewModel.postPlayState.isVisible
@@ -1052,12 +1052,12 @@ index 540cab38..dd296fee 100644
                  && !isGestureCaptureActive,
                  isNextEpisodeFocused: nextEpisodeFocused,
 diff --git a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift
-index 886801c7..ab91c0d8 100644
+index 5c871b991..d0d23410f 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Player/PlayerView+RemoteCommands.swift
-@@ -23,6 +23,11 @@ extension PlayerView {
-     /// Back / Menu during playback (also from the remote-gesture layer, which takes the remote).
-     func handleRemoteBack() {
+@@ -27,6 +27,11 @@ extension PlayerView {
+         viewModel.lastRemoteBackHandledAt = now
+ 
          PlaybackTimelineRecorder.record(.backPressed, engine: viewModel.activeEngineKind)
 +        if viewModel.forkStillWatchingVisible { // Fork: Back on the prompt leaves the player
 +            viewModel.forkDismissStillWatching()
@@ -1068,7 +1068,7 @@ index 886801c7..ab91c0d8 100644
              withAnimation(.easeInOut(duration: 0.2)) {
                  viewModel.closeSceneDetail()
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
-index 134ddbcb..6a7e579c 100644
+index 134ddbcbe..6a7e579c1 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/PlaybackDiagnosticHistoryView.swift
 @@ -31,7 +31,8 @@ private final class PlaybackDiagnosticHistoryModel: ObservableObject {
@@ -1109,10 +1109,10 @@ index 134ddbcb..6a7e579c 100644
          requestID = UUID()
          server.stop()
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index 402f318b..d0d89326 100644
+index 76d139f0f..f5b4a04f6 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-@@ -439,6 +439,10 @@ class PlayerViewModel: ObservableObject {
+@@ -441,6 +441,10 @@ class PlayerViewModel: ObservableObject {
      @Published var nextEpisodeCountdown: Int?
      /// Cancellation applies only to the currently configured episode.
      @Published private(set) var isAutoPlayCancelled = false
@@ -1123,7 +1123,7 @@ index 402f318b..d0d89326 100644
      /// True while the next episode's stream is being resolved and loaded, so the
      /// card can show a spinner instead of a Play button.
      @Published var isAdvancingEpisode: Bool = false
-@@ -848,7 +852,8 @@ class PlayerViewModel: ObservableObject {
+@@ -850,7 +854,8 @@ class PlayerViewModel: ObservableObject {
      private var loadWatchdogGeneration: UInt64?
      private var loadWatchdogDiscGraceGranted = false
      /// A source that hasn't started within this long is treated as dead.
@@ -1133,7 +1133,7 @@ index 402f318b..d0d89326 100644
  
      init(
          sessionCoordinator suppliedCoordinator: PlaybackSessionCoordinator? = nil,
-@@ -2860,9 +2865,24 @@ class PlayerViewModel: ObservableObject {
+@@ -2864,9 +2869,24 @@ class PlayerViewModel: ObservableObject {
      /// Play the next episode now (the card's Play button).
      func playNextEpisode() {
          guard !isAdvanceInFlight, !isAwaitingStreamStart else { return }
@@ -1158,7 +1158,7 @@ index 402f318b..d0d89326 100644
      func cancelAutoPlay() {
          isAutoPlayCancelled = true
          nextEpisodeCountdown = nil
-@@ -3165,7 +3185,24 @@ class PlayerViewModel: ObservableObject {
+@@ -3169,7 +3189,24 @@ class PlayerViewModel: ObservableObject {
          }
          let timeoutSeconds = loadTimeoutSeconds
          loadWatchdogTask = Task { [weak self] in
@@ -1184,7 +1184,7 @@ index 402f318b..d0d89326 100644
              guard !Task.isCancelled, let self,
                    self.sessionCoordinator.loadGeneration == targetGeneration,
                    self.sessionCoordinator.lastLoadError == nil,
-@@ -3226,7 +3263,7 @@ class PlayerViewModel: ObservableObject {
+@@ -3230,7 +3267,7 @@ class PlayerViewModel: ObservableObject {
                  LastPlaybackStreamStore.remove(metaId: meta.id, season: numbers?.season, episode: numbers?.episode)
              }
              self.attemptFailover(
@@ -1193,7 +1193,7 @@ index 402f318b..d0d89326 100644
                  toast: nil
              )
          }
-@@ -4263,6 +4300,14 @@ class PlayerViewModel: ObservableObject {
+@@ -4267,6 +4304,14 @@ class PlayerViewModel: ObservableObject {
                      }
                  }
                  if autoPlayNextEnabled && !isAutoPlayCancelled {
@@ -1208,7 +1208,7 @@ index 402f318b..d0d89326 100644
                      advance()
                      return
                  }
-@@ -4976,6 +5021,7 @@ class PlayerViewModel: ObservableObject {
+@@ -4980,6 +5025,7 @@ class PlayerViewModel: ObservableObject {
      }
  
      func togglePlayPause() {
@@ -1216,7 +1216,7 @@ index 402f318b..d0d89326 100644
          recordWatchPartyTransportIntent()
          if isScrubbing {
              commitScrub(andPlay: true)
-@@ -6209,6 +6255,8 @@ class PlayerViewModel: ObservableObject {
+@@ -6214,6 +6260,8 @@ class PlayerViewModel: ObservableObject {
      }
  
      func dpadSample(x: Double, y: Double) {
@@ -1225,7 +1225,7 @@ index 402f318b..d0d89326 100644
          for observer in gesturePadObservers.values { observer(x, y) }
          guard !showScenePanel, !isSceneDetailVisible else { return }
          if isScrubbing {
-@@ -6246,6 +6294,8 @@ class PlayerViewModel: ObservableObject {
+@@ -6251,6 +6299,8 @@ class PlayerViewModel: ObservableObject {
      /// Handles GameController buttonA (physical click on Siri Remote touchpad).
      /// On 1st Gen Siri Remotes (black remote), clicks on the left/right sides trigger discrete seek or hold-to-seek.
      func handleGCButtonA(isPressed: Bool, pad: GCMicroGamepad? = nil, touchX: Double? = nil) {

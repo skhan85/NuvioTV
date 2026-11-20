@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
-index d5cfbf77..1b1df3e3 100644
+index d5cfbf77e..1b1df3e3e 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Search/NativeSearchView.swift
 @@ -281,6 +281,7 @@ struct NativeSearchView: View {
@@ -30,7 +30,7 @@ index d5cfbf77..1b1df3e3 100644
  
      private var gridSuggestionTitles: [String] {
 diff --git a/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
-index b585538e..84329a1e 100644
+index b585538ea..84329a1e8 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Search/NetflixSearchView.swift
 @@ -112,6 +112,7 @@ struct NetflixSearchView: View {
@@ -63,7 +63,7 @@ index b585538e..84329a1e 100644
  
      private var visibleResultIDs: [String] { visibleResults.map(\.id) }
 diff --git a/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift b/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift
-index 7a382d5d..46289461 100644
+index 7a382d5da..462894611 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Search/SearchView.swift
 @@ -47,6 +47,7 @@ struct SearchView: View {
@@ -87,7 +87,7 @@ index 7a382d5d..46289461 100644
  
      @ViewBuilder
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
-index cb0b9952..73aa9870 100644
+index cb0b9952a..73aa9870a 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/NetflixSearchViewModel.swift
 @@ -59,7 +59,7 @@ class NetflixSearchViewModel: ObservableObject {
@@ -100,7 +100,7 @@ index cb0b9952..73aa9870 100644
                  self?.performSearch(query: text)
              }
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
-index b33286ed..76bc7756 100644
+index b33286edc..76bc7756f 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/SearchViewModel.swift
 @@ -80,7 +80,7 @@ class SearchViewModel: ObservableObject {
