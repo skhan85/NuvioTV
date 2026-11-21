@@ -218,10 +218,10 @@ index 08899f30..762f77c1 100644
  
 diff --git a/tvosApp/NuvioTV/Sources/Fork/BillboardFork.swift b/tvosApp/NuvioTV/Sources/Fork/BillboardFork.swift
 new file mode 100644
-index 00000000..fe23a141
+index 00000000..1add9808
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/BillboardFork.swift
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,85 @@
 +import SwiftUI
 +
 +/// Fork: Netflix-style billboard. Once focus rests on a title, its trailer plays
@@ -256,12 +256,16 @@ index 00000000..fe23a141
 +
 +    @State private var isActive = false
 +    @State private var isFinished = false
++    /// Fork: the trailer player (YouTube lookup + video item) is only created once focus has
++    /// rested on the title for a while. Creating one for every title focus passed over made
++    /// moving along a row slow.
++    @State private var isMounted = false
 +    // The preview-sound setting, as the card previews use it.
 +    @AppStorage(SettingsKey.trailerPreviewSound) private var trailerPreviewSound = false
 +
 +    var body: some View {
 +        ZStack {
-+            if !isFinished {
++            if isMounted && !isFinished {
 +                TrailerPreviewPlayer(
 +                    meta: meta,
 +                    isActive: isActive,
@@ -280,8 +284,14 @@ index 00000000..fe23a141
 +        .allowsHitTesting(false)
 +        .accessibilityHidden(true)
 +        .task {
-+            let delay = UInt64(min(15, max(0, delaySeconds)))
-+            try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
++            // Start loading a couple of seconds before the trailer is due (never sooner than
++            // 1.5 s after focus lands), then play once the full delay has passed.
++            let delay = Double(min(15, max(0, delaySeconds)))
++            let mountAfter = min(delay, max(1.5, delay - 2))
++            try? await Task.sleep(nanoseconds: UInt64(mountAfter * 1_000_000_000))
++            guard !Task.isCancelled else { return }
++            isMounted = true
++            try? await Task.sleep(nanoseconds: UInt64((delay - mountAfter) * 1_000_000_000))
 +            guard !Task.isCancelled else { return }
 +            isActive = true
 +        }
@@ -1488,10 +1498,10 @@ index 00000000..cb3e4bcc
 +}
 diff --git a/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
 new file mode 100644
-index 00000000..202c206f
+index 00000000..eb44afa9
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/NetflixUIFork.swift
-@@ -0,0 +1,574 @@
+@@ -0,0 +1,592 @@
 +import Foundation
 +import SwiftUI
 +
@@ -1548,6 +1558,7 @@ index 00000000..202c206f
 +    private var queue: [NuvioMeta] = []
 +    private var running = 0
 +    private var publishScheduled = false
++    private var persistScheduled = false
 +    private static let maxConcurrent = 6
 +    private static let storeKey = "fork_card_badges_v4"
 +    private static let ttl: Double = 12 * 3600
@@ -1626,6 +1637,18 @@ index 00000000..202c206f
 +            guard let self else { return }
 +            publishScheduled = false
 +            revision &+= 1
++            schedulePersist()
++        }
++    }
++
++    /// Fork: saving every half second encoded thousands of entries on the main thread while
++    /// Home was loading tags, which made moving around Home stutter. Save at most every 20 s.
++    private func schedulePersist() {
++        guard !persistScheduled else { return }
++        persistScheduled = true
++        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
++            guard let self else { return }
++            persistScheduled = false
 +            persist()
 +        }
 +    }
@@ -1636,8 +1659,13 @@ index 00000000..202c206f
 +        if entries.count > 3000 {
 +            entries = Dictionary(uniqueKeysWithValues: entries.sorted { $0.value.at > $1.value.at }.prefix(2000).map { ($0.key, $0.value) })
 +        }
-+        if let data = try? JSONEncoder().encode(entries) {
-+            UserDefaults.standard.set(data, forKey: Self.storeKey)
++        // Encoded off the main thread so saving never holds up focus moves.
++        let snapshot = entries
++        let key = Self.storeKey
++        Task.detached(priority: .utility) {
++            if let data = try? JSONEncoder().encode(snapshot) {
++                UserDefaults.standard.set(data, forKey: key)
++            }
 +        }
 +    }
 +}
@@ -2742,7 +2770,7 @@ index 00000000..a1d905fe
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index 9b8e08fe..6faf7c3c 100644
+index 9b8e08fe..6f2bc10c 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -18,6 +18,7 @@ import AetherEngine
@@ -3131,7 +3159,22 @@ index 9b8e08fe..6faf7c3c 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -5386,6 +5652,8 @@ private struct TVHomeFocusedCardObserver: View {
+@@ -5218,7 +5484,13 @@ private struct TVMainTabView: View {
+                 title: profileTabTitle,
+                 avatar: profileTabAvatar.image,
+                 avatarSymbol: ProfileAvatarCatalog.symbolName(for: displayedProfile?.avatarId),
+-                needsReauth: sessionNeedsReauthentication
++                needsReauth: sessionNeedsReauthentication,
++                // Fork: Left from Home's tab reaches the profile name; a click opens the picker.
++                onSelect: {
++                    guard !isProfileFocusPending else { return }
++                    if selectedTab == .settings { syncManager.flushPendingPushes() }
++                    onSwitchProfile()
++                }
+             )
+         )
+         .background(NativeTopBarClock(enabled: useTopNavigation))
+@@ -5386,6 +5658,8 @@ private struct TVHomeFocusedCardObserver: View {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -3140,7 +3183,7 @@ index 9b8e08fe..6faf7c3c 100644
          let cwVisible: Bool
          let cwPlaceholder: Bool
          let cwCount: Int
-@@ -5400,6 +5668,13 @@ private final class TVHomeFocusWork {
+@@ -5400,6 +5674,13 @@ private final class TVHomeFocusWork {
          let cwLandscape: Bool
          let landscapePosters: Bool
          let calendarToday: [NuvioMeta]
@@ -3154,7 +3197,7 @@ index 9b8e08fe..6faf7c3c 100644
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -5929,6 +6204,19 @@ struct TVHomeView: View {
+@@ -5929,6 +6210,19 @@ struct TVHomeView: View {
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.heroEnabled) private var heroEnabled = true
      @AppStorage(SettingsKey.fullscreenHeroBackdrop) private var fullscreenHeroBackdrop = true
@@ -3174,7 +3217,7 @@ index 9b8e08fe..6faf7c3c 100644
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
-@@ -5989,6 +6277,19 @@ struct TVHomeView: View {
+@@ -5989,6 +6283,19 @@ struct TVHomeView: View {
      @State private var didRemoteContinueWatchingAnswer = false
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -3194,7 +3237,7 @@ index 9b8e08fe..6faf7c3c 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -6180,6 +6481,46 @@ struct TVHomeView: View {
+@@ -6180,6 +6487,46 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -3241,7 +3284,7 @@ index 9b8e08fe..6faf7c3c 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -6195,6 +6536,7 @@ struct TVHomeView: View {
+@@ -6195,6 +6542,7 @@ struct TVHomeView: View {
                      )
                      .equatable()
                      .frame(width: proxy.size.width, height: proxy.size.height)
@@ -3249,7 +3292,7 @@ index 9b8e08fe..6faf7c3c 100644
                      .clipped()
                  } else {
                      let backdropWidth = proxy.size.width * 0.65
-@@ -6210,6 +6552,7 @@ struct TVHomeView: View {
+@@ -6210,6 +6558,7 @@ struct TVHomeView: View {
                          )
                          .equatable()
                          .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
@@ -3257,7 +3300,7 @@ index 9b8e08fe..6faf7c3c 100644
                          .mask(
                              LinearGradient(
                                  stops: [
-@@ -6320,7 +6663,8 @@ struct TVHomeView: View {
+@@ -6320,7 +6669,8 @@ struct TVHomeView: View {
                                  continueIsNextEpisodeSpoilerRevealable:
                                      (focusedSectionId == TVHomeSection.continueWatchingId
                                          || focusedSectionId == TVHomeSection.upcomingId)
@@ -3267,7 +3310,7 @@ index 9b8e08fe..6faf7c3c 100644
                              ) {
                                  navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
                              }
-@@ -6366,6 +6710,11 @@ struct TVHomeView: View {
+@@ -6366,6 +6716,11 @@ struct TVHomeView: View {
                                              .padding(.horizontal, horizontalEdgeInset)
                                          }
  
@@ -3279,7 +3322,7 @@ index 9b8e08fe..6faf7c3c 100644
                                          ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                                              let isInBuildWindow = (index >= focusedRowIndex - min(3, max(0, rowBuildReach))
                                                      && index <= focusedRowIndex + min(3, rowBuildReach + 2))
-@@ -6427,11 +6776,31 @@ struct TVHomeView: View {
+@@ -6427,11 +6782,31 @@ struct TVHomeView: View {
                                              }
                                          }
                                      }
@@ -3312,7 +3355,7 @@ index 9b8e08fe..6faf7c3c 100644
                                      #endif
                                      .onAppear {
                                          prepareInitialFocusViewport(
-@@ -7042,6 +7411,17 @@ struct TVHomeView: View {
+@@ -7042,6 +7417,17 @@ struct TVHomeView: View {
                  browseSectionView(section: section)
              }
              .onExitCommand(perform: canHandleExitCommand ? handleBackCommand : nil)
@@ -3330,7 +3373,7 @@ index 9b8e08fe..6faf7c3c 100644
      }
  
      /// Settings > Layout > Ambient Mode: backdrops from the rows on Home after a
-@@ -7307,7 +7687,7 @@ struct TVHomeView: View {
+@@ -7307,7 +7693,7 @@ struct TVHomeView: View {
                              TVCatalogRow(
                                  id: section.id,
                                  customPosterScreen: isCalendarToday ? .home : .continueWatching,
@@ -3339,7 +3382,7 @@ index 9b8e08fe..6faf7c3c 100644
                                  addonName: section.addonName,
                                  showAddonName: catalogAddonNames,
                                  showsSectionTitle: true,
-@@ -7461,7 +7841,7 @@ struct TVHomeView: View {
+@@ -7461,7 +7847,7 @@ struct TVHomeView: View {
                      heroEnabled && !heroItems.isEmpty ? 0 : TVHomeLayout.rowsTopPadding
                  )
                  .padding(.bottom, 80)
@@ -3348,7 +3391,7 @@ index 9b8e08fe..6faf7c3c 100644
                  .onAppear {
                      prepareInitialFocusViewport(
                          for: sections,
-@@ -8589,7 +8969,7 @@ struct TVHomeView: View {
+@@ -8589,7 +8975,7 @@ struct TVHomeView: View {
          if section.isLoadingPlaceholder {
              TVLoadingCatalogRow(
                  id: section.id,
@@ -3357,7 +3400,7 @@ index 9b8e08fe..6faf7c3c 100644
                  tileShape: effectiveTileShape(for: section),
                  requestsFocus: false,
                  addonName: section.addonName,
-@@ -8728,7 +9108,7 @@ struct TVHomeView: View {
+@@ -8728,7 +9114,7 @@ struct TVHomeView: View {
              TVCatalogRow(
                  id: section.id,
                  customPosterScreen: collectionHome == nil ? .home : .collections,
@@ -3366,7 +3409,7 @@ index 9b8e08fe..6faf7c3c 100644
                  addonName: section.addonName,
                  showAddonName: catalogAddonNames,
                  showsSectionTitle: true,
-@@ -8873,7 +9253,11 @@ struct TVHomeView: View {
+@@ -8873,7 +9259,11 @@ struct TVHomeView: View {
                      onStartContinueWatchingFromBeginning?(item)
                  },
                  onRemoveFromContinueWatching: onRemoveFromContinueWatching,
@@ -3379,7 +3422,7 @@ index 9b8e08fe..6faf7c3c 100644
              )
              .equatable()
              // Outside the row: while focus is put back on a card in another row, this row
-@@ -9117,6 +9501,23 @@ struct TVHomeView: View {
+@@ -9117,6 +9507,23 @@ struct TVHomeView: View {
              : estimatedCollectionRowHeight(for: section)
      }
  
@@ -3403,7 +3446,7 @@ index 9b8e08fe..6faf7c3c 100644
      private func prepareForOverlayPresentation(restoreCardID: String? = nil) {
          focusWork.defersOverlayPreparation = true
          focusWork.pendingOverlayRestoreCardID = restoreCardID
-@@ -9193,6 +9594,8 @@ struct TVHomeView: View {
+@@ -9193,6 +9600,8 @@ struct TVHomeView: View {
              && !didRemoteContinueWatchingAnswer
              && continueWatching.isEmpty
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -3412,7 +3455,7 @@ index 9b8e08fe..6faf7c3c 100644
              cwVisible: continueWatchingVisible,
              cwPlaceholder: showsResumePlaceholder,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
-@@ -9206,7 +9609,11 @@ struct TVHomeView: View {
+@@ -9206,7 +9615,11 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
@@ -3425,7 +3468,7 @@ index 9b8e08fe..6faf7c3c 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -9215,7 +9622,9 @@ struct TVHomeView: View {
+@@ -9215,7 +9628,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -3436,7 +3479,7 @@ index 9b8e08fe..6faf7c3c 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster",
              isLoadingPlaceholder: showsResumePlaceholder
-@@ -9239,7 +9648,16 @@ struct TVHomeView: View {
+@@ -9239,7 +9654,16 @@ struct TVHomeView: View {
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
              + plexSections
@@ -3454,7 +3497,7 @@ index 9b8e08fe..6faf7c3c 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -9251,6 +9669,7 @@ struct TVHomeView: View {
+@@ -9251,6 +9675,7 @@ struct TVHomeView: View {
                  if !section.collectionFolders.isEmpty
                      || section.id == TVHomeSection.localTitlesId
                      || section.id == TVHomeSection.jellyfinId
@@ -3462,7 +3505,7 @@ index 9b8e08fe..6faf7c3c 100644
                      || section.id.hasPrefix(TVHomeSection.jellyfinLibraryIdPrefix)
                      || section.id.hasPrefix(TVHomeSection.plexLibraryIdPrefix) {
                      return section
-@@ -9258,12 +9677,34 @@ struct TVHomeView: View {
+@@ -9258,12 +9683,34 @@ struct TVHomeView: View {
                  var copy = section
                  copy.items = section.items.filter {
                      !ContentReleasePolicy.isUnreleased($0, today: today)
@@ -3498,7 +3541,7 @@ index 9b8e08fe..6faf7c3c 100644
          focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
              signature: signature,
              sections: contentSections
-@@ -9329,11 +9770,53 @@ struct TVHomeView: View {
+@@ -9329,11 +9776,53 @@ struct TVHomeView: View {
      }
  
  
@@ -3552,7 +3595,7 @@ index 9b8e08fe..6faf7c3c 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -9763,6 +10246,7 @@ struct TVHomeView: View {
+@@ -9763,6 +10252,7 @@ struct TVHomeView: View {
          collectionSections: [TVHomeSection],
          resetFocusIfEmpty: Bool
      ) {
@@ -3560,7 +3603,7 @@ index 9b8e08fe..6faf7c3c 100644
          TVHomeDebugTrace.measure("home.publishHomeSections catalog=\(catalogSections.count) col=\(collectionSections.count)") {
              let pinned = collectionSections.filter(\.isPinnedCollection)
              let unpinned = collectionSections.filter { !$0.isPinnedCollection }
-@@ -13085,6 +13569,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -13085,6 +13575,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -3568,7 +3611,7 @@ index 9b8e08fe..6faf7c3c 100644
      let meta: NuvioMeta
      /// Continue Watching entry for this title, when one exists. Lets the hero
      /// say which episode is in progress, how much is left, and show the
-@@ -13093,6 +13578,8 @@ private struct TVHeroView: View {
+@@ -13093,6 +13584,8 @@ private struct TVHeroView: View {
      /// Home supplies this only for a matched Continue Watching / Upcoming item.
      /// Calendar cards intentionally do not carry spoiler reveal evidence.
      var continueIsNextEpisodeSpoilerRevealable: Bool = false
@@ -3577,7 +3620,7 @@ index 9b8e08fe..6faf7c3c 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
      @AppStorage(SettingsKey.hideUnwatchedEpisodeDescriptions) private var hideUnwatchedEpisodeDescriptions = false
-@@ -13141,6 +13628,11 @@ private struct TVHeroView: View {
+@@ -13141,6 +13634,11 @@ private struct TVHeroView: View {
          // up a line, so the name never has to be cut short in the hero's fixed height.
          let nameBelow = meta.logoUrl == nil ? nil : AniListMetaBuilder.nameUnderLogo(meta)
          VStack(alignment: .leading, spacing: 18) {
@@ -3589,7 +3632,7 @@ index 9b8e08fe..6faf7c3c 100644
              if let logoUrl = meta.logoUrl {
                  CachedHeroLogo(url: logoUrl, title: meta.name, nameBelow: nameBelow, logoMaxHeight: nameBelow == nil ? 136 : 100)
                      .layoutPriority(nameBelow == nil ? 0 : 1)
-@@ -13151,6 +13643,14 @@ private struct TVHeroView: View {
+@@ -13151,6 +13649,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
@@ -3604,7 +3647,7 @@ index 9b8e08fe..6faf7c3c 100644
              TVHeroMetaLine(meta: meta, episodeLine: episodeLine, continueItem: continueItem)
  
              if let continueItem {
-@@ -13169,6 +13669,8 @@ private struct TVHeroView: View {
+@@ -13169,6 +13675,8 @@ private struct TVHeroView: View {
                          .lineLimit(nameBelow == nil ? 4 : 3)
                          .frame(maxWidth: 900, alignment: .leading)
                          .padding(.top, 4)
@@ -3613,7 +3656,7 @@ index 9b8e08fe..6faf7c3c 100644
                  } else {
                      Text(description.wrappedEveryNWords(9))
                          .font(.appFont(size: 24, weight: .regular))
-@@ -13177,6 +13679,8 @@ private struct TVHeroView: View {
+@@ -13177,6 +13685,8 @@ private struct TVHeroView: View {
                          .lineLimit(nameBelow == nil ? 4 : 3)
                          .frame(maxWidth: 900, alignment: .leading)
                          .padding(.top, 4)
@@ -3622,7 +3665,7 @@ index 9b8e08fe..6faf7c3c 100644
                  }
              }
          }
-@@ -13232,6 +13736,7 @@ extension TVHeroView: Equatable {
+@@ -13232,6 +13742,7 @@ extension TVHeroView: Equatable {
              && lhs.revealNextEpisodeSpoilers == rhs.revealNextEpisodeSpoilers
              && lhs.hideUnwatchedEpisodeDescriptions == rhs.hideUnwatchedEpisodeDescriptions
              && lhs.hideUnwatchedEpisodeTitles == rhs.hideUnwatchedEpisodeTitles
@@ -3630,7 +3673,7 @@ index 9b8e08fe..6faf7c3c 100644
      }
  }
  
-@@ -14652,12 +15157,21 @@ private struct TVHeroMetaLine: View {
+@@ -14652,12 +15163,21 @@ private struct TVHeroMetaLine: View {
      }
  
      var body: some View {
@@ -3658,7 +3701,7 @@ index 9b8e08fe..6faf7c3c 100644
  
          let badge = meta.statusBadgeLabel
          let isEpisodeMode = episodeRatingsIdentifier != nil
-@@ -14703,7 +15217,7 @@ private struct TVHeroMetaLine: View {
+@@ -14703,7 +15223,7 @@ private struct TVHeroMetaLine: View {
              if hasPrimary || showSecondLine {
                  VStack(alignment: .leading, spacing: 10) {
                      if hasPrimary {
@@ -3667,6 +3710,155 @@ index 9b8e08fe..6faf7c3c 100644
                              .font(.appFont(size: 22, weight: .semibold))
                              .foregroundColor(.white.opacity(0.66))
                              .lineLimit(1)
+diff --git a/tvosApp/NuvioTV/Sources/UI/Components/NativeTopBarClock.swift b/tvosApp/NuvioTV/Sources/UI/Components/NativeTopBarClock.swift
+index 80935ead..ce57ca41 100644
+--- a/tvosApp/NuvioTV/Sources/UI/Components/NativeTopBarClock.swift
++++ b/tvosApp/NuvioTV/Sources/UI/Components/NativeTopBarClock.swift
+@@ -20,13 +20,16 @@ struct NativeTopBarClock: View {
+     }
+ }
+ 
+-/// A non-selectable profile placeholder in the system tab bar's leading accessory area.
++/// A profile placeholder in the system tab bar's leading accessory area.
++/// Fork: when `onSelect` is set it can be focused (Left from the first tab) and a click
++/// opens the profile picker, so profiles can be switched from Home.
+ struct NativeTopBarProfilePlaceholder: View {
+     let enabled: Bool
+     let title: String
+     let avatar: UIImage?
+     let avatarSymbol: String
+     let needsReauth: Bool
++    var onSelect: (() -> Void)? = nil
+ 
+     var body: some View {
+         NativeTopBarProfileMarker(
+@@ -34,7 +37,8 @@ struct NativeTopBarProfilePlaceholder: View {
+             title: title,
+             avatar: avatar,
+             avatarSymbol: avatarSymbol,
+-            needsReauth: needsReauth
++            needsReauth: needsReauth,
++            onSelect: onSelect
+         )
+         .frame(width: 0, height: 0)
+         .allowsHitTesting(false)
+@@ -76,6 +80,7 @@ private struct NativeTopBarProfileMarker: UIViewRepresentable {
+     let avatar: UIImage?
+     let avatarSymbol: String
+     let needsReauth: Bool
++    let onSelect: (() -> Void)?
+ 
+     func makeUIView(context: Context) -> Marker { Marker() }
+ 
+@@ -85,7 +90,8 @@ private struct NativeTopBarProfileMarker: UIViewRepresentable {
+             title: title,
+             avatar: avatar,
+             avatarSymbol: avatarSymbol,
+-            needsReauth: needsReauth
++            needsReauth: needsReauth,
++            onSelect: onSelect
+         )
+     }
+ 
+@@ -95,13 +101,40 @@ private struct NativeTopBarProfileMarker: UIViewRepresentable {
+ 
+     final class PlaceholderContainer: UIView {
+         var onWindowChange: (() -> Void)?
++        /// Fork: set when the placeholder opens the profile picker.
++        var onSelect: (() -> Void)? {
++            didSet {
++                isUserInteractionEnabled = onSelect != nil
++                if onSelect == nil, isFocused { setNeedsFocusUpdate() }
++            }
++        }
++        var onFocusChange: ((Bool) -> Void)?
+ 
+         override func didMoveToWindow() {
+             super.didMoveToWindow()
+             onWindowChange?()
+         }
+ 
+-        override var canBecomeFocused: Bool { false }
++        override var canBecomeFocused: Bool { onSelect != nil }
++
++        override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
++            super.didUpdateFocus(in: context, with: coordinator)
++            let focused = isFocused
++            coordinator.addCoordinatedAnimations({ [weak self] in self?.onFocusChange?(focused) })
++        }
++
++        override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
++            if isFocused, onSelect != nil, presses.contains(where: { $0.type == .select }) { return }
++            super.pressesBegan(presses, with: event)
++        }
++
++        override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
++            if isFocused, let onSelect, presses.contains(where: { $0.type == .select }) {
++                onSelect()
++                return
++            }
++            super.pressesEnded(presses, with: event)
++        }
+     }
+ 
+     final class Marker: UIView {
+@@ -120,6 +153,8 @@ private struct NativeTopBarProfileMarker: UIViewRepresentable {
+ 
+             container.isUserInteractionEnabled = false
+             container.backgroundColor = .clear
++            container.layer.cornerRadius = 30
++            container.onFocusChange = { [weak self] focused in self?.applyFocus(focused) }
+ 
+             avatarImageView.contentMode = .scaleAspectFill
+             avatarImageView.clipsToBounds = true
+@@ -135,13 +170,15 @@ private struct NativeTopBarProfileMarker: UIViewRepresentable {
+             container.addSubview(nameLabel)
+ 
+             NSLayoutConstraint.activate([
+-                avatarImageView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
++                // Fork: padding and a fixed height so the focused pill has room around the name.
++                container.heightAnchor.constraint(equalToConstant: 60),
++                avatarImageView.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
+                 avatarImageView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                 avatarImageView.widthAnchor.constraint(equalToConstant: 28),
+                 avatarImageView.heightAnchor.constraint(equalToConstant: 28),
+ 
+                 nameLabel.leadingAnchor.constraint(equalTo: avatarImageView.trailingAnchor, constant: 10),
+-                nameLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor),
++                nameLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
+                 nameLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor)
+             ])
+ 
+@@ -156,8 +193,19 @@ private struct NativeTopBarProfileMarker: UIViewRepresentable {
+             scheduleAttach()
+         }
+ 
+-        func configure(enabled: Bool, title: String, avatar: UIImage?, avatarSymbol: String, needsReauth: Bool) {
++        /// Fork: white pill with dark text while focused, like the tabs beside it.
++        private func applyFocus(_ focused: Bool) {
++            container.backgroundColor = focused ? .white : .clear
++            nameLabel.textColor = focused ? .black : UIColor.white.withAlphaComponent(0.85)
++            container.transform = focused ? CGAffineTransform(scaleX: 1.06, y: 1.06) : .identity
++        }
++
++        func configure(enabled: Bool, title: String, avatar: UIImage?, avatarSymbol: String, needsReauth: Bool,
++                       onSelect: (() -> Void)? = nil) {
+             nameLabel.text = title
++            let wasSelectable = container.onSelect != nil
++            container.onSelect = enabled ? onSelect : nil
++            if wasSelectable && container.onSelect == nil { applyFocus(false) }
+             if needsReauth {
+                 avatarImageView.image = UIImage(systemName: "person.crop.circle.badge.exclamationmark")
+             } else if let avatar {
+@@ -219,7 +267,7 @@ private struct NativeTopBarProfileMarker: UIViewRepresentable {
+                     target.addSubview(container)
+                     container.translatesAutoresizingMaskIntoConstraints = false
+                     NSLayoutConstraint.activate([
+-                        container.leadingAnchor.constraint(equalTo: target.leadingAnchor, constant: 14),
++                        container.leadingAnchor.constraint(equalTo: target.leadingAnchor, constant: 0),
+                         container.centerYAnchor.constraint(equalTo: target.centerYAnchor),
+                         container.trailingAnchor.constraint(lessThanOrEqualTo: target.trailingAnchor)
+                     ])
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 index f29549d2..6c198ece 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift

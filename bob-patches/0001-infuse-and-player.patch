@@ -335,22 +335,24 @@ index 69823a1d..78c6d200 100644
              )
          }
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
-index b9bb0fca..d4c5e13b 100644
+index b9bb0fca..6359a87c 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
-@@ -101,11 +101,28 @@ struct MPVPlaybackCachePolicy: Equatable {
+@@ -101,11 +101,30 @@ struct MPVPlaybackCachePolicy: Equatable {
          let source: Source = isLocal ? .localOrLoopback : (isLiveStream ? .liveRemote : .remote)
          let useDisk = !isLocal && nativeDiskAvailable
          let duration = isLocal ? 30 : max(1, Int(ceil(profile.hybridCacheTargetLeadSeconds)))
 +        // Fork: a fixed 32 MiB readahead holds about 3 s of a 77 Mbps 4K remux, so
 +        // any CDN hiccup froze playback. Remote sources now read ahead much further:
-+        // on libmpv's disk packet cache that costs no RAM; without it, use the
-+        // memory-aware Network Cache size (Auto picks by device headroom).
++        // on libmpv's disk packet cache (without it, use the memory-aware Network Cache
++        // size; Auto picks by device headroom). 768 MiB is about 80 s of a 77 Mbps remux
++        // and 5 minutes of 1080p. It was 1.5 GiB + 256 MiB, but writing that much during a
++        // movie can crowd the Apple TV's memory, and the whole box was slow after a film.
 +        let buffers: PlaybackCacheSettings
 +        if isLocal {
 +            buffers = PlaybackCacheSettings(forwardBuffer: "32MiB", backBuffer: "16MiB")
 +        } else if useDisk {
-+            buffers = PlaybackCacheSettings(forwardBuffer: "1536MiB", backBuffer: "256MiB")
++            buffers = PlaybackCacheSettings(forwardBuffer: "768MiB", backBuffer: "128MiB")
 +        } else {
 +            buffers = PlaybackCacheSettings.current
 +        }
