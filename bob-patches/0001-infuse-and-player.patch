@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
-index ec7e1ab6..3d8452d9 100644
+index ec7e1ab6..bd556257 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 @@ -1329,6 +1329,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
@@ -106,15 +106,16 @@ index ec7e1ab6..3d8452d9 100644
              }
          }
      }
-@@ -2804,6 +2859,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2804,6 +2859,8 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          let seeking = getFlag("seeking")
          isSeekingForWatchParty = seeking
          let bufferingCache = getFlag("paused-for-cache")
-+        logPlaybackHealth(paused: paused, buffering: bufferingCache, cachedSeconds: cached)
++        let cachedSeconds = readDoubleProperty("demuxer-cache-duration") ?? max(0, (cacheEnd ?? 0) - (position ?? 0))
++        logPlaybackHealth(paused: paused, buffering: bufferingCache, cachedSeconds: cachedSeconds)
  
          isAtEndOfFile = eofReached
  
-@@ -2984,6 +3040,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2984,6 +3041,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          chapters = PlaybackChapters.chapters(from: items, totalDuration: duration)
      }
  
@@ -160,7 +161,7 @@ index ec7e1ab6..3d8452d9 100644
      private func refreshTracks() {
          guard mpv != nil else { return }
          var audio = [PlaybackTrackInfo]()
-@@ -3503,7 +3598,14 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3503,7 +3599,14 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          )
          clearStartupVideoResyncState(clearAnchor: true)
          if shouldPlay {
@@ -175,7 +176,7 @@ index ec7e1ab6..3d8452d9 100644
          }
          updateState()
      }
-@@ -3678,6 +3780,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3678,6 +3781,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          markStartupVideoDetachedIfNeeded()
          setStringProperty("vid", "no")
  
@@ -183,7 +184,7 @@ index ec7e1ab6..3d8452d9 100644
          manager.preferredDisplayCriteria = AVDisplayCriteria(
              refreshRate: Float(fps),
              formatDescription: formatDescription
-@@ -3875,6 +3978,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3875,6 +3979,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          }
          isDisplaySwitchInFlight = false
          removeDisplayModeSwitchObservers()
@@ -191,7 +192,7 @@ index ec7e1ab6..3d8452d9 100644
          setStringProperty("vid", "auto")
          recordMPVRenderContext(event: "display_mode_settled")
          if pendingURL != nil {
-@@ -3893,6 +3997,8 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3893,6 +3998,8 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          displaySwitchGeneration &+= 1
          isDisplaySwitchInFlight = false
          removeDisplayModeSwitchObservers()
@@ -200,7 +201,7 @@ index ec7e1ab6..3d8452d9 100644
          displayCriteriaWindow?.avDisplayManager.preferredDisplayCriteria = nil
          displayCriteriaWindow = nil
          appliedDisplayCriteriaSignature = nil
-@@ -4063,6 +4169,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -4063,6 +4170,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
  #endif
                          self.clearPlaybackError()
                          guard !self.rejectUnsupportedSimulatorCodecIfNeeded() else { return }
@@ -208,7 +209,7 @@ index ec7e1ab6..3d8452d9 100644
                          self.isPlayerLoading = false
                          self.attachPendingAudioIfNeeded()
                          self.applyPendingLoadConfiguration()
-@@ -4138,6 +4245,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -4138,6 +4246,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
                          self.memoryWatchdog.record(event: "video_reconfig")
  #endif
                          self.recordMPVRenderContext(event: "video_reconfig")
