@@ -14,7 +14,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "41 18 * * *" # once a day; every 6 hours got Actions disabled on this fork
+    - cron: "41 6,18 * * *" # twice a day; checks for upstream bobsupra commits and builds new release
   push:
     paths:
       - "bob-patches/**"
