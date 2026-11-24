@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 3099c11f..68368349 100644
+index 269d4f72..86f4f931 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-@@ -222,8 +222,8 @@ enum TmdbDetailsService {
+@@ -238,8 +238,8 @@ enum TmdbDetailsService {
      ) async -> T {
          if requestContext != nil { return await operation() }
          let store = defaults ?? ProfileSettings.current
@@ -13,7 +13,7 @@ index 3099c11f..68368349 100644
          let keys = [
              SettingsKey.tmdbUseTrailers, SettingsKey.tmdbUseArtwork,
              SettingsKey.tmdbUseBasicInfo, SettingsKey.tmdbUseDetails,
-@@ -237,7 +237,8 @@ enum TmdbDetailsService {
+@@ -253,7 +253,8 @@ enum TmdbDetailsService {
          })
          let context = RequestContext(
              apiKey: rawKey.isEmpty ? nil : rawKey,
@@ -23,7 +23,7 @@ index 3099c11f..68368349 100644
              language: TmdbMetadataLanguage.resolvedLanguage(in: store),
              flags: flags
          )
-@@ -278,14 +279,16 @@ enum TmdbDetailsService {
+@@ -294,14 +295,16 @@ enum TmdbDetailsService {
      static var currentApiKey: String? { apiKey }
      private static var apiKey: String? {
          if let requestContext { return requestContext.apiKey }
@@ -43,7 +43,7 @@ index 3099c11f..68368349 100644
      }
  
      static var preferredLanguage: String {
-@@ -625,6 +628,446 @@ enum TmdbDetailsService {
+@@ -642,6 +645,446 @@ enum TmdbDetailsService {
          return result
      }
  

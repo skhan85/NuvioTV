@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
-index 97f56d56..2f14d681 100644
+index ec7e1ab6..10358f8f 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
-@@ -1267,6 +1267,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -1329,6 +1329,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          checkError(mpv_set_option_string(mpv, "gpu-api", "vulkan"))
          checkError(mpv_set_option_string(mpv, "gpu-context", "moltenvk"))
          checkError(mpv_set_option_string(mpv, "hwdec", "videotoolbox"))
@@ -15,7 +15,7 @@ index 97f56d56..2f14d681 100644
          checkError(mpv_set_option_string(mpv, "ao", Self.defaultAudioOutput))
          // AVSampleBufferAudioRenderer follows tvOS's active output route without
          // using the failing RemoteIO callback from MPV's AudioUnit backend.
-@@ -1345,11 +1351,10 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -1407,11 +1413,10 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          checkError(mpv_set_option_string(mpv, "keep-open", "yes"))
          checkError(mpv_set_option_string(mpv, "target-colorspace-hint", "yes"))
          checkError(mpv_set_option_string(mpv, "tone-mapping", "auto"))
@@ -30,7 +30,7 @@ index 97f56d56..2f14d681 100644
          checkError(mpv_set_option_string(mpv, "target-prim", "auto"))
          checkError(mpv_set_option_string(mpv, "target-trc", "auto"))
  
-@@ -1669,11 +1674,59 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -1860,11 +1865,59 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          }
      }
  
@@ -90,28 +90,15 @@ index 97f56d56..2f14d681 100644
  #if NUVIO_MPV_MEMORY_WATCHDOG && os(tvOS)
          memoryDiagnosticSessionID = UUID().uuidString
          memoryDiagnosticCacheMode = "pending"
-@@ -2218,12 +2271,17 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
-         case .off:
-             break
-         case .enhance:
--            filters.append("lavfi=[dynaudnorm=f=150:g=15:m=10.0]")
-+            // Fork: MPVKit's FFmpeg has no dynaudnorm or acompressor (the filter chain
-+            // failed with "No such filter"), so dialogue is lifted with the equalizers it
-+            // does ship: speech band up, rumble down, a little headroom against clipping.
-+            filters.append("lavfi=[equalizer=f=2500:width_type=o:width=2:g=4,equalizer=f=80:width_type=o:width=2:g=-3,volume=-3dB]")
-         case .boost:
--            filters.append("lavfi=[dynaudnorm=f=100:g=21:m=20.0],equalizer=f=1500:width_type=o:width=1.5:g=8")
-+            filters.append("lavfi=[equalizer=f=1500:width_type=o:width=1.5:g=8,equalizer=f=3500:width_type=o:width=1:g=4,equalizer=f=80:width_type=o:width=2:g=-6,volume=-6dB]")
+@@ -2553,6 +2606,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         } else {
+             mpv_set_property_string(mpv, "af", "")
          }
-         if reduceLoud {
--            filters.append("lavfi=[acompressor=threshold=-20dB:ratio=4:attack=50:release=1000]")
-+            // Fork: no compressor filter exists in MPVKit's FFmpeg; adding one broke the
-+            // whole audio chain. Reduce Loud Sounds is a no-op on MPV until it does.
-+            print("[MPV] Reduce Loud Sounds unavailable: MPVKit's FFmpeg has no acompressor")
-         }
-         let filterString = filters.joined(separator: ",")
-         mpv_set_property_string(mpv, "af", filterString)
-@@ -2428,6 +2486,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
++        }
+     }
+ 
+     // MARK: - Track selection
+@@ -2762,6 +2816,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          // event pump; the nil assignment above makes all later calls no-op.
          eventQueue.async {
              mpv_terminate_destroy(ctx)
@@ -119,7 +106,7 @@ index 97f56d56..2f14d681 100644
          }
      }
  
-@@ -2443,6 +2502,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2777,6 +2832,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
              mpv_set_wakeup_callback(ctx, nil, nil)
              eventQueue.async {
                  mpv_terminate_destroy(ctx)
@@ -127,7 +114,7 @@ index 97f56d56..2f14d681 100644
              }
          }
      }
-@@ -2470,6 +2530,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2804,6 +2860,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          let seeking = getFlag("seeking")
          isSeekingForWatchParty = seeking
          let bufferingCache = getFlag("paused-for-cache")
@@ -135,7 +122,7 @@ index 97f56d56..2f14d681 100644
  
          isAtEndOfFile = eofReached
  
-@@ -2634,6 +2695,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2984,6 +3041,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          chapters = PlaybackChapters.chapters(from: items, totalDuration: duration)
      }
  
@@ -181,7 +168,7 @@ index 97f56d56..2f14d681 100644
      private func refreshTracks() {
          guard mpv != nil else { return }
          var audio = [PlaybackTrackInfo]()
-@@ -3153,7 +3253,14 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3503,7 +3599,14 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          )
          clearStartupVideoResyncState(clearAnchor: true)
          if shouldPlay {
@@ -196,7 +183,7 @@ index 97f56d56..2f14d681 100644
          }
          updateState()
      }
-@@ -3328,6 +3435,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3678,6 +3781,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          markStartupVideoDetachedIfNeeded()
          setStringProperty("vid", "no")
  
@@ -204,7 +191,7 @@ index 97f56d56..2f14d681 100644
          manager.preferredDisplayCriteria = AVDisplayCriteria(
              refreshRate: Float(fps),
              formatDescription: formatDescription
-@@ -3525,6 +3633,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3875,6 +3979,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          }
          isDisplaySwitchInFlight = false
          removeDisplayModeSwitchObservers()
@@ -212,7 +199,7 @@ index 97f56d56..2f14d681 100644
          setStringProperty("vid", "auto")
          recordMPVRenderContext(event: "display_mode_settled")
          if pendingURL != nil {
-@@ -3543,6 +3652,8 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3893,6 +3998,8 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          displaySwitchGeneration &+= 1
          isDisplaySwitchInFlight = false
          removeDisplayModeSwitchObservers()
@@ -221,7 +208,7 @@ index 97f56d56..2f14d681 100644
          displayCriteriaWindow?.avDisplayManager.preferredDisplayCriteria = nil
          displayCriteriaWindow = nil
          appliedDisplayCriteriaSignature = nil
-@@ -3697,6 +3808,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -4063,6 +4170,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
  #endif
                          self.clearPlaybackError()
                          guard !self.rejectUnsupportedSimulatorCodecIfNeeded() else { return }
@@ -229,7 +216,7 @@ index 97f56d56..2f14d681 100644
                          self.isPlayerLoading = false
                          self.attachPendingAudioIfNeeded()
                          self.applyPendingLoadConfiguration()
-@@ -3772,6 +3884,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -4138,6 +4246,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
                          self.memoryWatchdog.record(event: "video_reconfig")
  #endif
                          self.recordMPVRenderContext(event: "video_reconfig")
@@ -238,7 +225,7 @@ index 97f56d56..2f14d681 100644
                      }
                  case MPV_EVENT_END_FILE:
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
-index acd1c857..ab266154 100644
+index c91f31a4..215d272d 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVStreamProtocolBridge.swift
 @@ -89,7 +89,14 @@ final class MPVStreamProtocolBridge: @unchecked Sendable {
@@ -269,7 +256,7 @@ index acd1c857..ab266154 100644
      private var responseByteBudget: Int64?
      private var responseBytesReceived: Int64 = 0
      private var responseExpectedContentLength: Int64?
-@@ -349,6 +361,7 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+@@ -353,6 +365,7 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
                      taskError = nil
                      requestCompleted = false
                      isEOF = false
@@ -277,7 +264,7 @@ index acd1c857..ab266154 100644
                      startRangeRequest(from: isLiveStream ? 0 : currentPosition)
                      continue
                  }
-@@ -465,7 +478,9 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+@@ -469,7 +482,9 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
          responseExpectedContentLength = nil
          isEOF = false
  
@@ -288,7 +275,7 @@ index acd1c857..ab266154 100644
          request.httpMethod = "GET"
          for (k, v) in headers {
              request.setValue(v, forHTTPHeaderField: k)
-@@ -670,6 +685,14 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+@@ -674,6 +689,14 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
              return
          }
  
@@ -303,7 +290,7 @@ index acd1c857..ab266154 100644
          if status >= 400 {
              if taskError == nil {
                  taskError = NSError(domain: "HTTPError", code: status, userInfo: [NSLocalizedDescriptionKey: "HTTP \(status)"])
-@@ -682,6 +705,11 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+@@ -686,6 +709,11 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
              ? httpResponse.expectedContentLength
              : nil
  
@@ -315,7 +302,7 @@ index acd1c857..ab266154 100644
          if status == 206 {
              guard let contentRange = httpResponse.value(forHTTPHeaderField: "Content-Range"),
                    let parsedRange = PlaybackStreamCacheContentRange.parse(contentRange),
-@@ -896,6 +924,18 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
+@@ -900,6 +928,18 @@ final class MPVStreamSession: NSObject, URLSessionDataDelegate, @unchecked Senda
                      }
                  } else {
                      consecutiveReadFailures = 0
@@ -450,13 +437,13 @@ index 6ce2242a..f5c534f5 100644
  
      private let lock = NSLock()
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
-index 2be4c67c..90c5ec5f 100644
+index 7aae4366..e449bdbc 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticTimeline.swift
-@@ -19,6 +19,8 @@ struct PlaybackDiagnosticTimeline: Codable, Sendable, Equatable {
-         case partyBindingDeferredSample, partyBindingDeferredBehind, partyBindingDeferredBusy
-         case partyRemotePauseStarted, partyRemotePlayStarted
-         case partyRemoteTransportIssued, partyRemoteEffectFailed
+@@ -22,6 +22,8 @@ struct PlaybackDiagnosticTimeline: Codable, Sendable, Equatable {
+         case trailerResolvedAddonStreams, trailerResolvedTrailerio, trailerResolvedImdb
+         case trailerResolvedYouTube, trailerResolvedProxy, trailerResolutionFailed
+         case trailerPlaybackStarted, trailerPlaybackFailed
 +        // Fork: the engine's startup steps, so the export shows where a slow start spends its time.
 +        case engineDispatched, engineSourceOpened, engineStreamsProbed, engineDisplayPrepared, engineSessionConstructed
      }
@@ -1162,10 +1149,10 @@ index 134ddbcb..6a7e579c 100644
          requestID = UUID()
          server.stop()
 diff --git a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-index f3585611..2871d4e3 100644
+index f170f796..7852bb43 100644
 --- a/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
 +++ b/tvosApp/NuvioTV/Sources/ViewModels/PlayerViewModel.swift
-@@ -441,6 +441,10 @@ class PlayerViewModel: ObservableObject {
+@@ -444,6 +444,10 @@ class PlayerViewModel: ObservableObject {
      @Published var nextEpisodeCountdown: Int?
      /// Cancellation applies only to the currently configured episode.
      @Published private(set) var isAutoPlayCancelled = false
@@ -1176,7 +1163,7 @@ index f3585611..2871d4e3 100644
      /// True while the next episode's stream is being resolved and loaded, so the
      /// card can show a spinner instead of a Play button.
      @Published var isAdvancingEpisode: Bool = false
-@@ -850,7 +854,8 @@ class PlayerViewModel: ObservableObject {
+@@ -855,7 +859,8 @@ class PlayerViewModel: ObservableObject {
      private var loadWatchdogGeneration: UInt64?
      private var loadWatchdogGraceGranted = false
      /// A source that hasn't started within this long is treated as dead.
@@ -1186,7 +1173,7 @@ index f3585611..2871d4e3 100644
  
      init(
          sessionCoordinator suppliedCoordinator: PlaybackSessionCoordinator? = nil,
-@@ -2864,9 +2869,24 @@ class PlayerViewModel: ObservableObject {
+@@ -2890,9 +2895,24 @@ class PlayerViewModel: ObservableObject {
      /// Play the next episode now (the card's Play button).
      func playNextEpisode() {
          guard !isAdvanceInFlight, !isAwaitingStreamStart else { return }
@@ -1211,7 +1198,7 @@ index f3585611..2871d4e3 100644
      func cancelAutoPlay() {
          isAutoPlayCancelled = true
          nextEpisodeCountdown = nil
-@@ -3169,7 +3189,24 @@ class PlayerViewModel: ObservableObject {
+@@ -3195,7 +3215,24 @@ class PlayerViewModel: ObservableObject {
          }
          let timeoutSeconds = loadTimeoutSeconds
          loadWatchdogTask = Task { [weak self] in
@@ -1237,7 +1224,7 @@ index f3585611..2871d4e3 100644
              guard !Task.isCancelled, let self,
                    self.sessionCoordinator.loadGeneration == targetGeneration,
                    self.sessionCoordinator.lastLoadError == nil,
-@@ -3231,7 +3268,7 @@ class PlayerViewModel: ObservableObject {
+@@ -3257,7 +3294,7 @@ class PlayerViewModel: ObservableObject {
                  LastPlaybackStreamStore.remove(metaId: meta.id, season: numbers?.season, episode: numbers?.episode)
              }
              self.attemptFailover(
@@ -1246,7 +1233,7 @@ index f3585611..2871d4e3 100644
                  toast: nil
              )
          }
-@@ -4268,6 +4305,14 @@ class PlayerViewModel: ObservableObject {
+@@ -4322,6 +4359,14 @@ class PlayerViewModel: ObservableObject {
                      }
                  }
                  if autoPlayNextEnabled && !isAutoPlayCancelled {
@@ -1261,7 +1248,7 @@ index f3585611..2871d4e3 100644
                      advance()
                      return
                  }
-@@ -4981,6 +5026,7 @@ class PlayerViewModel: ObservableObject {
+@@ -5035,6 +5080,7 @@ class PlayerViewModel: ObservableObject {
      }
  
      func togglePlayPause() {
@@ -1269,7 +1256,7 @@ index f3585611..2871d4e3 100644
          recordWatchPartyTransportIntent()
          if isScrubbing {
              commitScrub(andPlay: true)
-@@ -6215,6 +6261,8 @@ class PlayerViewModel: ObservableObject {
+@@ -6276,6 +6322,8 @@ class PlayerViewModel: ObservableObject {
      }
  
      func dpadSample(x: Double, y: Double) {
@@ -1278,7 +1265,7 @@ index f3585611..2871d4e3 100644
          for observer in gesturePadObservers.values { observer(x, y) }
          guard !showScenePanel, !isSceneDetailVisible else { return }
          if isScrubbing {
-@@ -6252,6 +6300,8 @@ class PlayerViewModel: ObservableObject {
+@@ -6313,6 +6361,8 @@ class PlayerViewModel: ObservableObject {
      /// Handles GameController buttonA (physical click on Siri Remote touchpad).
      /// On 1st Gen Siri Remotes (black remote), clicks on the left/right sides trigger discrete seek or hold-to-seek.
      func handleGCButtonA(isPressed: Bool, pad: GCMicroGamepad? = nil, touchX: Double? = nil) {

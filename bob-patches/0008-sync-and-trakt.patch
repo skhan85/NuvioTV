@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-index 7bd7902c..1186ede1 100644
+index 49869543..4f5acb32 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-@@ -3987,6 +3987,20 @@ final class NuvioAPIClient {
+@@ -3993,6 +3993,20 @@ final class NuvioAPIClient {
          }
      }
  
@@ -23,7 +23,7 @@ index 7bd7902c..1186ede1 100644
      func pushLibrary(
          session: AuthSession,
          remoteProfileId: Int,
-@@ -4002,7 +4016,7 @@ final class NuvioAPIClient {
+@@ -4008,7 +4022,7 @@ final class NuvioAPIClient {
                  "poster_shape": "POSTER",
                  "background": Self.jsonValue(item.meta.backgroundUrl),
                  "description": Self.jsonValue(item.meta.description),
@@ -32,7 +32,7 @@ index 7bd7902c..1186ede1 100644
                  "genres": item.meta.genres ?? [],
                  "addon_base_url": NSNull(),
                  "added_at": Self.milliseconds(from: item.addedAt)
-@@ -4979,8 +4993,7 @@ enum EpisodeMetadataEnrichment {
+@@ -5004,8 +5018,7 @@ enum EpisodeMetadataEnrichment {
              return nil
          }
  
@@ -43,10 +43,10 @@ index 7bd7902c..1186ede1 100644
  
          let preferredLang = TmdbDetailsService.preferredLanguage
 diff --git a/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift b/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
-index d6839d35..226a6e08 100644
+index 1af5e1a2..b9840189 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
-@@ -1169,9 +1169,8 @@ enum RemoteTrackingState {
+@@ -1179,9 +1179,8 @@ enum RemoteTrackingState {
              return ProfileSettings.isActiveStore(store)
                  && SimklRuntimeSession.authenticatedState(store: store) != nil
          case .tmdb:
