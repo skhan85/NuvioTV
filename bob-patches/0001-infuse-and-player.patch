@@ -1,5 +1,5 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
-index 97f56d56..8d7b8623 100644
+index 97f56d56..2f14d681 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/MPVPlaybackController.swift
 @@ -1267,6 +1267,12 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
@@ -111,7 +111,23 @@ index 97f56d56..8d7b8623 100644
          }
          let filterString = filters.joined(separator: ",")
          mpv_set_property_string(mpv, "af", filterString)
-@@ -2470,6 +2528,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2428,6 +2486,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         // event pump; the nil assignment above makes all later calls no-op.
+         eventQueue.async {
+             mpv_terminate_destroy(ctx)
++            PlaybackCacheSettings.cleanMPVPacketCacheDirectory()
+         }
+     }
+ 
+@@ -2443,6 +2502,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+             mpv_set_wakeup_callback(ctx, nil, nil)
+             eventQueue.async {
+                 mpv_terminate_destroy(ctx)
++                PlaybackCacheSettings.cleanMPVPacketCacheDirectory()
+             }
+         }
+     }
+@@ -2470,6 +2530,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          let seeking = getFlag("seeking")
          isSeekingForWatchParty = seeking
          let bufferingCache = getFlag("paused-for-cache")
@@ -119,7 +135,7 @@ index 97f56d56..8d7b8623 100644
  
          isAtEndOfFile = eofReached
  
-@@ -2634,6 +2693,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -2634,6 +2695,45 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          chapters = PlaybackChapters.chapters(from: items, totalDuration: duration)
      }
  
@@ -165,7 +181,7 @@ index 97f56d56..8d7b8623 100644
      private func refreshTracks() {
          guard mpv != nil else { return }
          var audio = [PlaybackTrackInfo]()
-@@ -3153,7 +3251,14 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3153,7 +3253,14 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          )
          clearStartupVideoResyncState(clearAnchor: true)
          if shouldPlay {
@@ -180,7 +196,7 @@ index 97f56d56..8d7b8623 100644
          }
          updateState()
      }
-@@ -3328,6 +3433,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3328,6 +3435,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          markStartupVideoDetachedIfNeeded()
          setStringProperty("vid", "no")
  
@@ -188,7 +204,7 @@ index 97f56d56..8d7b8623 100644
          manager.preferredDisplayCriteria = AVDisplayCriteria(
              refreshRate: Float(fps),
              formatDescription: formatDescription
-@@ -3525,6 +3631,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3525,6 +3633,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
          }
          isDisplaySwitchInFlight = false
          removeDisplayModeSwitchObservers()
@@ -196,7 +212,16 @@ index 97f56d56..8d7b8623 100644
          setStringProperty("vid", "auto")
          recordMPVRenderContext(event: "display_mode_settled")
          if pendingURL != nil {
-@@ -3697,6 +3804,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3543,6 +3652,8 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+         displaySwitchGeneration &+= 1
+         isDisplaySwitchInFlight = false
+         removeDisplayModeSwitchObservers()
++        let window = displayCriteriaWindow ?? view.window
++        window?.avDisplayManager.preferredDisplayCriteria = nil
+         displayCriteriaWindow?.avDisplayManager.preferredDisplayCriteria = nil
+         displayCriteriaWindow = nil
+         appliedDisplayCriteriaSignature = nil
+@@ -3697,6 +3808,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
  #endif
                          self.clearPlaybackError()
                          guard !self.rejectUnsupportedSimulatorCodecIfNeeded() else { return }
@@ -204,7 +229,7 @@ index 97f56d56..8d7b8623 100644
                          self.isPlayerLoading = false
                          self.attachPendingAudioIfNeeded()
                          self.applyPendingLoadConfiguration()
-@@ -3772,6 +3880,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
+@@ -3772,6 +3884,7 @@ final class MPVPlayerViewController: UIViewController, PlaybackEngineControlling
                          self.memoryWatchdog.record(event: "video_reconfig")
  #endif
                          self.recordMPVRenderContext(event: "video_reconfig")
@@ -335,24 +360,23 @@ index 69823a1d..78c6d200 100644
              )
          }
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
-index b9bb0fca..6359a87c 100644
+index b9bb0fca..b4bf5a6c 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackCacheSettings.swift
-@@ -101,11 +101,30 @@ struct MPVPlaybackCachePolicy: Equatable {
+@@ -101,11 +101,29 @@ struct MPVPlaybackCachePolicy: Equatable {
          let source: Source = isLocal ? .localOrLoopback : (isLiveStream ? .liveRemote : .remote)
          let useDisk = !isLocal && nativeDiskAvailable
          let duration = isLocal ? 30 : max(1, Int(ceil(profile.hybridCacheTargetLeadSeconds)))
-+        // Fork: a fixed 32 MiB readahead holds about 3 s of a 77 Mbps 4K remux, so
-+        // any CDN hiccup froze playback. Remote sources now read ahead much further:
-+        // on libmpv's disk packet cache (without it, use the memory-aware Network Cache
-+        // size; Auto picks by device headroom). 768 MiB is about 80 s of a 77 Mbps remux
-+        // and 5 minutes of 1080p. It was 1.5 GiB + 256 MiB, but writing that much during a
-+        // movie can crowd the Apple TV's memory, and the whole box was slow after a film.
++        // Fork: upstream's fixed 32 MiB readahead held about 3 s of a 77 Mbps 4K remux,
++        // so any CDN hiccup froze playback. Remote sources now use the memory-aware
++        // Network Cache sizing (Auto dynamically scales 64-256 MiB based on device memory
++        // headroom and physical RAM, and user Network Cache settings in Settings are respected).
++        // Hardcoding massive disk readahead (1.5 GiB or 768 MiB) overloaded the Apple TV's
++        // unified memory page cache and memory compressor during movie playback, which left
++        // the entire tvOS box and app severely laggy and slow after playing a movie.
 +        let buffers: PlaybackCacheSettings
 +        if isLocal {
 +            buffers = PlaybackCacheSettings(forwardBuffer: "32MiB", backBuffer: "16MiB")
-+        } else if useDisk {
-+            buffers = PlaybackCacheSettings(forwardBuffer: "768MiB", backBuffer: "128MiB")
 +        } else {
 +            buffers = PlaybackCacheSettings.current
 +        }
@@ -372,6 +396,33 @@ index b9bb0fca..6359a87c 100644
              source: source
          )
      }
+@@ -124,10 +142,26 @@ extension PlaybackCacheSettings {
+         let directory = root.appendingPathComponent("MPVPacketCache", isDirectory: true)
+         do {
+             try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
++            cleanMPVPacketCacheDirectory(fileManager: fileManager, cachesDirectory: root)
+             return fileManager.isWritableFile(atPath: directory.path) ? directory : nil
+         } catch {
+             return nil
+         }
+     }
++
++    /// Fork: removes any lingering temporary packet cache files from disk.
++    static func cleanMPVPacketCacheDirectory(
++        fileManager: FileManager = .default,
++        cachesDirectory: URL? = nil
++    ) {
++        guard let root = cachesDirectory ?? fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
++        let directory = root.appendingPathComponent("MPVPacketCache", isDirectory: true)
++        guard fileManager.fileExists(atPath: directory.path) else { return }
++        if let files = try? fileManager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
++            for file in files {
++                try? fileManager.removeItem(at: file)
++            }
++        }
++    }
+ }
+ 
 diff --git a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift b/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
 index afc9092e..94bb5b93 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Player/PlaybackDiagnosticExportServer.swift
