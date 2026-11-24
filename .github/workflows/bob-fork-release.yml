@@ -19,7 +19,7 @@ on:
   push:
     paths:
       - "bob-patches/**"
-      - ".github/workflows/bob-fork-release.yml"
+      - ".github/workflows/**"
 
 permissions:
   contents: write
