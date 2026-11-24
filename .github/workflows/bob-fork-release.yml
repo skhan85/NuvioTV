@@ -51,6 +51,19 @@ jobs:
       - name: Check out this repo
         uses: actions/checkout@v6
 
+      # GitHub pauses scheduled workflows in repos with no commits for 60 days. Keep the
+      # schedule alive by pushing an empty commit every ~45 days (touches no watched path).
+      - name: Keep scheduled checks alive
+        if: github.event_name == 'schedule'
+        run: |
+          last="$(git log -1 --format=%ct)"
+          if (( $(date +%s) - last > 45 * 86400 )); then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "keepalive: keep scheduled release checks enabled"
+            git push
+          fi
+
       - name: Check out tvOS source (project file only)
         uses: actions/checkout@v6
         with:
