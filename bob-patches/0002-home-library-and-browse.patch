@@ -2770,7 +2770,7 @@ index 00000000..a1d905fe
 +    }
 +}
 diff --git a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
-index aa469017..3cb5b761 100644
+index aa469017..6f2a2abc 100644
 --- a/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 +++ b/tvosApp/NuvioTV/Sources/NuvioTVApp.swift
 @@ -9,6 +9,7 @@ import SwiftUI
@@ -2804,6 +2804,7 @@ index aa469017..3cb5b761 100644
      // then restores the exact card instead of reloading and jumping to the top.
      @StateObject private var homeStore = TVHomeStore()
  
+-    var body: some View {
 +    /// Fork: hosts for the Infuse Up Next alert and More like this cover, plus the profile
 +    /// name Netflix Style's "Continue Watching for <name>" row shows.
 +    @ViewBuilder
@@ -2851,7 +2852,7 @@ index aa469017..3cb5b761 100644
 +            }
 +    }
 +
-     var body: some View {
++    private var rootZStack: some View {
          ZStack {
              ProfileScopedRootBackground()
  
@@ -2861,7 +2862,278 @@ index aa469017..3cb5b761 100644
              switch activeScreen {
              case .login:
                  // `.login` is also the value this state starts at, before
-@@ -1588,6 +1644,15 @@ struct ContentView: View {
+@@ -890,6 +946,10 @@ struct ContentView: View {
+                 .allowsHitTesting(false)
+                 .frame(width: 0, height: 0)
+         }
++    }
++
++    private var rootBaseContent: some View {
++        rootZStack
+         // The card settings, read once here for every card below (inside the
+         // profile store that follows).
+         .modifier(CardAppearanceProvider())
+@@ -993,132 +1053,142 @@ struct ContentView: View {
+         // Deep links, and "Find on AniList / MyAnimeList" from a card's long-press menu, in one
+         // modifier: one more step in this chain is more than the type checker manages in time.
+         .modifier(AnimeFindOpening(openURL: handleDeepLink, open: openFoundAnimeTitle))
+-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+-            watchPartyOwner.suspendForInactivity()
+-        }
+-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+-            watchPartyOwner.resumeAfterForeground()
+-        }
+-        .onAppear {
+-            Task { await releaseUpdateService.checkIfNeeded() }
+-            Task { await announcementService.checkIfNeeded() }
+-            startAIOStreamsAndPlugins()
+-            if WatchPartyConfiguration.isEnabled {
+-                watchPartyOwner.attach(authManager: authManager, profiles: profileViewModel)
+-            }
+-            syncManager.attach(authManager: authManager, profileViewModel: profileViewModel)
+-            ICloudSettingsSyncManager.shared.start()
+-            setupPictureInPicture()
+-            guard !resolvedInitialScreen else { return }
+-            resolvedInitialScreen = true
+-            // Skip the login gate if a session was restored or the user has
+-            // previously chosen to continue without an account.
+-            if !authManager.shouldShowLoginGate {
+-                // Auto-select-last-profile (Settings → Profile) skips the
+-                // who's-watching stop on launch; navigation is otherwise
+-                // driven only by an explicit pick via `profileChosen`.
+-                let autoSelectLast = (UserDefaults.standard.object(
+-                    forKey: SettingsKey.profileAutoSelectLast
+-                ) as? Bool) ?? (ProfileSettings.current.object(
+-                    forKey: SettingsKey.profileAutoSelectLast
+-                ) as? Bool) ?? true
+-                // Signed in with the startup pull still running, so real
+-                // profiles are expected to land shortly and the local
+-                // placeholder must not be mistaken for the account.
+-                let awaitingRealProfiles = authManager.isAuthenticated
+-                    && AuthConfig.isConfigured
+-                    && syncManager.isPullingAccountProfiles
+-                if awaitingRealProfiles, hasOnlyLocalGuestPlaceholder {
+-                    // Nothing real to show or enter yet — a restored Keychain
+-                    // session can outlive missing/corrupt local profile data.
+-                    // Gate that startup pull exactly like a fresh login instead
+-                    // of auto-entering the local Guest.
+-                    awaitingPostLoginSync = true
+-                    enterMainAfterPostLoginSync = autoSelectLast
+-                    activeScreen = .profileSelection
+-                } else if autoSelectLast,
+-                          let activeProfile = profileViewModel.activeProfile,
+-                          !activeProfile.isPinProtected,
+-                          !(awaitingRealProfiles && isGuestPlaceholder(activeProfile)) {
+-                    beginProfileGate()
+-                    activeScreen = .main
+-                    resumePendingDeepLinkIfPossible()
+-                } else {
+-                    // Profiles are already on disk, so the picker can be shown
+-                    // right away and refreshes itself when the pull lands. This
+-                    // is the ordinary cold launch: waiting behind the sync
+-                    // screen every time taught nothing the picker didn't
+-                    // already know.
+-                    activeScreen = .profileSelection
+-                }
++    }
++
++    var body: some View {
++        rootBaseContent
++            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
++                watchPartyOwner.suspendForInactivity()
+             }
+-        }
+-        .onReceive(authManager.$authState.receive(on: RunLoop.main)) { state in
+-            let wasAuthenticated = previousAuthState?.isAuthenticated == true
+-            previousAuthState = state
+-            syncManager.authStateChanged(state)
+-            if wasAuthenticated, state == .signedOut, profileViewModel.activeProfile?.id != "guest" {
+-                profileViewModel.resetForSignedOut()
++            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
++                watchPartyOwner.resumeAfterForeground()
+             }
+-        }
+-        .onReceive(syncManager.$isPullingAccountProfiles.receive(on: RunLoop.main)) { pulling in
+-            if !pulling, awaitingPostLoginSync {
+-                let shouldEnterMain = enterMainAfterPostLoginSync
+-                    && authManager.isAuthenticated
+-                    && syncManager.profileSyncError == nil
+-                    && profileViewModel.activeProfile?.id != "guest"
+-                    && profileViewModel.activeProfile?.isPinProtected != true
+-                withAnimation(.easeInOut(duration: 0.28)) {
+-                    awaitingPostLoginSync = false
+-                    enterMainAfterPostLoginSync = false
+-                    if shouldEnterMain {
+-                        beginProfileGate()
+-                        activeScreen = .main
+-                        resumePendingDeepLinkIfPossible()
++            .onAppear { handleRootAppear() }
++            .onReceive(authManager.$authState.receive(on: RunLoop.main)) { state in
++                let wasAuthenticated = previousAuthState?.isAuthenticated == true
++                previousAuthState = state
++                syncManager.authStateChanged(state)
++                if wasAuthenticated, state == .signedOut, profileViewModel.activeProfile?.id != "guest" {
++                    profileViewModel.resetForSignedOut()
++                }
++            }
++            .onReceive(syncManager.$isPullingAccountProfiles.receive(on: RunLoop.main)) { pulling in
++                if !pulling, awaitingPostLoginSync {
++                    let shouldEnterMain = enterMainAfterPostLoginSync
++                        && authManager.isAuthenticated
++                        && syncManager.profileSyncError == nil
++                        && profileViewModel.activeProfile?.id != "guest"
++                        && profileViewModel.activeProfile?.isPinProtected != true
++                    withAnimation(.easeInOut(duration: 0.28)) {
++                        awaitingPostLoginSync = false
++                        enterMainAfterPostLoginSync = false
++                        if shouldEnterMain {
++                            beginProfileGate()
++                            activeScreen = .main
++                            resumePendingDeepLinkIfPossible()
++                        }
+                     }
+                 }
+             }
+-        }
+-        .onReceive(profileViewModel.$activeProfile.receive(on: RunLoop.main)) { profile in
+-            syncManager.activeProfileChanged(profile)
+-            guard profile != nil else { return }
+-            SMBServerStore.shared.reload()
+-            JellyfinServerStore.shared.reload()
+-            PlexServerStore.shared.reload()
+-            PlexLibraryIndex.shared.reload()
+-            Task(priority: .utility) {
+-                await SMBSessionManager.shared.connectAll()
+-                await JellyfinSessionManager.shared.connectAll()
+-                await PlexSessionManager.shared.connectAll()
++            .onReceive(profileViewModel.$activeProfile.receive(on: RunLoop.main)) { profile in
++                syncManager.activeProfileChanged(profile)
++                guard profile != nil else { return }
++                SMBServerStore.shared.reload()
++                JellyfinServerStore.shared.reload()
++                PlexServerStore.shared.reload()
++                PlexLibraryIndex.shared.reload()
++                Task(priority: .utility) {
++                    await SMBSessionManager.shared.connectAll()
++                    await JellyfinSessionManager.shared.connectAll()
++                    await PlexSessionManager.shared.connectAll()
++                }
++            }
++            .onChange(of: scenePhase) { _, phase in
++                handleRootScenePhaseChange(phase)
++            }
++    }
++
++    private func handleRootAppear() {
++        Task { await releaseUpdateService.checkIfNeeded() }
++        Task { await announcementService.checkIfNeeded() }
++        startAIOStreamsAndPlugins()
++        if WatchPartyConfiguration.isEnabled {
++            watchPartyOwner.attach(authManager: authManager, profiles: profileViewModel)
++        }
++        syncManager.attach(authManager: authManager, profileViewModel: profileViewModel)
++        ICloudSettingsSyncManager.shared.start()
++        setupPictureInPicture()
++        guard !resolvedInitialScreen else { return }
++        resolvedInitialScreen = true
++        // Skip the login gate if a session was restored or the user has
++        // previously chosen to continue without an account.
++        if !authManager.shouldShowLoginGate {
++            // Auto-select-last-profile (Settings → Profile) skips the
++            // who's-watching stop on launch; navigation is otherwise
++            // driven only by an explicit pick via `profileChosen`.
++            let autoSelectLast = (UserDefaults.standard.object(
++                forKey: SettingsKey.profileAutoSelectLast
++            ) as? Bool) ?? (ProfileSettings.current.object(
++                forKey: SettingsKey.profileAutoSelectLast
++            ) as? Bool) ?? true
++            // Signed in with the startup pull still running, so real
++            // profiles are expected to land shortly and the local
++            // placeholder must not be mistaken for the account.
++            let awaitingRealProfiles = authManager.isAuthenticated
++                && AuthConfig.isConfigured
++                && syncManager.isPullingAccountProfiles
++            if awaitingRealProfiles, hasOnlyLocalGuestPlaceholder {
++                // Nothing real to show or enter yet — a restored Keychain
++                // session can outlive missing/corrupt local profile data.
++                // Gate that startup pull exactly like a fresh login instead
++                // of auto-entering the local Guest.
++                awaitingPostLoginSync = true
++                enterMainAfterPostLoginSync = autoSelectLast
++                activeScreen = .profileSelection
++            } else if autoSelectLast,
++                      let activeProfile = profileViewModel.activeProfile,
++                      !activeProfile.isPinProtected,
++                      !(awaitingRealProfiles && isGuestPlaceholder(activeProfile)) {
++                beginProfileGate()
++                activeScreen = .main
++                resumePendingDeepLinkIfPossible()
++            } else {
++                // Profiles are already on disk, so the picker can be shown
++                // right away and refreshes itself when the pull lands. This
++                // is the ordinary cold launch: waiting behind the sync
++                // screen every time taught nothing the picker didn't
++                // already know.
++                activeScreen = .profileSelection
+             }
+         }
+-        .onChange(of: scenePhase) { _, phase in
+-            switch phase {
+-            case .background:
+-                watchPartyOwner.suspendForInactivity()
+-                backgroundedAt = Date()
+-                syncManager.flushPendingPushes()
+-                TopShelfLibraryFeed.write()
+-                TopShelfBackgroundRefresh.schedule()
+-            case .active:
+-                TopShelfLibraryFeed.prefetchRemoteLibraryIfNeeded()
+-                if backgroundedAt != nil {
+-                    releaseUpdateService.beginForegroundSession()
+-                    announcementService.beginForegroundSession()
+-                    Task(priority: .utility) {
+-                        await JellyfinSessionManager.shared.handleForegroundSession()
+-                        await PlexSessionManager.shared.handleForegroundSession()
+-                    }
+-                    pluginsBecameActive()
++    }
++
++    private func handleRootScenePhaseChange(_ phase: ScenePhase) {
++        switch phase {
++        case .background:
++            watchPartyOwner.suspendForInactivity()
++            backgroundedAt = Date()
++            syncManager.flushPendingPushes()
++            TopShelfLibraryFeed.write()
++            TopShelfBackgroundRefresh.schedule()
++        case .active:
++            TopShelfLibraryFeed.prefetchRemoteLibraryIfNeeded()
++            if backgroundedAt != nil {
++                releaseUpdateService.beginForegroundSession()
++                announcementService.beginForegroundSession()
++                Task(priority: .utility) {
++                    await JellyfinSessionManager.shared.handleForegroundSession()
++                    await PlexSessionManager.shared.handleForegroundSession()
+                 }
+-                Task { await releaseUpdateService.checkIfNeeded() }
+-                Task { await announcementService.checkIfNeeded() }
+-                syncManager.refreshAccountIfIdle()
+-                presentProfileSelectionAfterBackgroundIfNeeded()
+-                watchPartyOwner.resumeAfterForeground()
+-            default:
+-                break
++                pluginsBecameActive()
+             }
++            Task { await releaseUpdateService.checkIfNeeded() }
++            Task { await announcementService.checkIfNeeded() }
++            syncManager.refreshAccountIfIdle()
++            presentProfileSelectionAfterBackgroundIfNeeded()
++            watchPartyOwner.resumeAfterForeground()
++        default:
++            break
+         }
+     }
+ 
+@@ -1588,6 +1658,15 @@ struct ContentView: View {
      }
  
      private func handleExternalPlaybackCallback(_ callback: ExternalPlaybackCallback) {
@@ -2877,7 +3149,7 @@ index aa469017..3cb5b761 100644
          let profileID = profileViewModel.activeProfile?.id ?? WatchedStore.activeProfileId
          guard let session = ExternalPlaybackSessionStore.consume(id: callback.id, profileID: profileID) else {
              return
-@@ -1599,7 +1664,7 @@ struct ContentView: View {
+@@ -1599,7 +1678,7 @@ struct ContentView: View {
          let callbackDuration = callback.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
          let duration = callbackDuration
              ?? session.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
@@ -2886,7 +3158,7 @@ index aa469017..3cb5b761 100644
              guard let duration, position.isFinite, position >= 0 else { return nil }
              let normalizedProgress = position / duration
              guard callbackDuration != nil,
-@@ -1609,6 +1674,20 @@ struct ContentView: View {
+@@ -1609,6 +1688,20 @@ struct ContentView: View {
              }
              return 1
          }
@@ -2907,7 +3179,7 @@ index aa469017..3cb5b761 100644
          guard let progress, progress.isFinite, (0...1).contains(progress) else { return }
          // External callbacks can underreport EOF position; allow up to two minutes of grace,
          // with an 80% floor, while built-in playback keeps its stream-timed threshold.
-@@ -1687,6 +1766,10 @@ struct ContentView: View {
+@@ -1687,6 +1780,10 @@ struct ContentView: View {
              return
          }
  
@@ -2918,7 +3190,7 @@ index aa469017..3cb5b761 100644
          if progress >= callbackCompletionCutoff(WatchProgressLedger.completionFraction) {
              if let duration {
                  ContinueWatchingStore.markPlaybackCompleted(
-@@ -1717,6 +1800,129 @@ struct ContentView: View {
+@@ -1717,6 +1814,129 @@ struct ContentView: View {
          }
      }
  
@@ -3048,7 +3320,7 @@ index aa469017..3cb5b761 100644
      /// `stremio://…/manifest.json` installs the add-on (same as pasting the URL).
      private func handleStremioInstallDeepLink(_ url: URL) {
          switch activeScreen {
-@@ -1773,6 +1979,7 @@ struct ContentView: View {
+@@ -1773,6 +1993,7 @@ struct ContentView: View {
          profileGateReadiness = .waiting(hasFocusableContent: false, targetSignature: nil)
          isPreparingProfile = true
          profileGateStartedAt = Date()
@@ -3056,7 +3328,7 @@ index aa469017..3cb5b761 100644
          let generation = profileGateGeneration
          TVHomeDebugTrace.log("profileGate.begin gen=\(generation) timeout=\(Self.profileGateTimeout)s minDuration=\(Self.profileGateMinimumDuration)s")
          libraryViewModel.loadLibrary()
-@@ -1851,6 +2058,7 @@ struct ContentView: View {
+@@ -1851,6 +2072,7 @@ struct ContentView: View {
              return
          }
          TVHomeDebugTrace.log("profileGate.lift executing (isPreparingProfile was \(isPreparingProfile), gen=\(generation.map { String($0) } ?? "nil"))")
@@ -3064,7 +3336,7 @@ index aa469017..3cb5b761 100644
          profileGateTask?.cancel()
          profileGateTask = nil
          profileGateLiftTask?.cancel()
-@@ -2198,6 +2406,15 @@ struct ContentView: View {
+@@ -2198,6 +2420,15 @@ struct ContentView: View {
          }
      }
  
@@ -3080,7 +3352,7 @@ index aa469017..3cb5b761 100644
      private func presentPlayback(
          url: URL,
          meta: NuvioMeta,
-@@ -2214,7 +2431,8 @@ struct ContentView: View {
+@@ -2214,7 +2445,8 @@ struct ContentView: View {
          startupBenchmarkToken: UUID? = nil,
          sourceID: String? = nil,
          collectionContext: CollectionPlaybackContext? = nil,
@@ -3090,7 +3362,7 @@ index aa469017..3cb5b761 100644
      ) {
          // Usenet streams arrive as nuvio-usenet:// URLs: start the local
          // engine first, then play its 127.0.0.1 URL like any other stream.
-@@ -2256,13 +2474,47 @@ struct ContentView: View {
+@@ -2256,13 +2488,47 @@ struct ContentView: View {
          let store = ProfileSettings.store(for: profileViewModel.activeProfile?.id)
          let defaultPlayer = ExternalPlayer.from(store.string(forKey: SettingsKey.externalPlayer))
          let player = customPlayer ?? defaultPlayer
@@ -3140,7 +3412,7 @@ index aa469017..3cb5b761 100644
                ).compactMap { URL(string: $0.url) }
              : []
  
-@@ -2309,7 +2561,13 @@ struct ContentView: View {
+@@ -2309,7 +2575,13 @@ struct ContentView: View {
          // Hand off to the external app only when it is actually installed
          // (`canOpenURL` needs its scheme in LSApplicationQueriesSchemes); if it
          // isn't, fall through to the built-in player instead of a dead launch.
@@ -3155,7 +3427,7 @@ index aa469017..3cb5b761 100644
              meta: meta,
              season: meta.isSeries ? numbers?.season : nil,
              episode: meta.isSeries ? numbers?.episode : nil,
-@@ -2328,9 +2586,27 @@ struct ContentView: View {
+@@ -2328,9 +2600,27 @@ struct ContentView: View {
                 errorURL: errorCallback
             ),
             UIApplication.shared.canOpenURL(launchURL) {
@@ -3183,7 +3455,7 @@ index aa469017..3cb5b761 100644
              }
              UIApplication.shared.open(launchURL, options: [:], completionHandler: nil)
              return
-@@ -5936,7 +6212,13 @@ private struct TVMainTabView: View {
+@@ -5936,7 +6226,13 @@ private struct TVMainTabView: View {
                  title: profileTabTitle,
                  avatar: profileTabAvatar.image,
                  avatarSymbol: ProfileAvatarCatalog.symbolName(for: displayedProfile?.avatarId),
@@ -3198,7 +3470,7 @@ index aa469017..3cb5b761 100644
              )
          )
          .background(NativeTopBarClock(enabled: useTopNavigation))
-@@ -6497,6 +6779,8 @@ enum TVHomePrefetchPlanner {
+@@ -6497,6 +6793,8 @@ enum TVHomePrefetchPlanner {
  
  private final class TVHomeFocusWork {
      struct VisibleSectionsSignature: Equatable {
@@ -3207,7 +3479,7 @@ index aa469017..3cb5b761 100644
          let cwVisible: Bool
          let cwPlaceholder: Bool
          let cwCount: Int
-@@ -6511,6 +6795,13 @@ private final class TVHomeFocusWork {
+@@ -6511,6 +6809,13 @@ private final class TVHomeFocusWork {
          let cwLandscape: Bool
          let landscapePosters: Bool
          let calendarToday: [NuvioMeta]
@@ -3221,7 +3493,7 @@ index aa469017..3cb5b761 100644
      }
      struct CachedVisibleSections {
          let signature: VisibleSectionsSignature
-@@ -7219,7 +7510,7 @@ private struct TVHomeSettingsSnapshot: Equatable {
+@@ -7219,7 +7524,7 @@ private struct TVHomeSettingsSnapshot: Equatable {
              smbLocalRowEnabled: bool(SettingsKey.smbLocalRowEnabled, true),
              jellyfinLocalRowEnabled: bool(SettingsKey.jellyfinLocalRowEnabled, true),
              plexLocalRowEnabled: bool(SettingsKey.plexLocalRowEnabled, true),
@@ -3230,7 +3502,7 @@ index aa469017..3cb5b761 100644
          )
      }
  }
-@@ -7271,7 +7562,7 @@ private struct TVHomeSettingsObserver: View {
+@@ -7271,7 +7576,7 @@ private struct TVHomeSettingsObserver: View {
      @AppStorage(SettingsKey.smbLocalRowEnabled) private var smbLocalRowEnabled = true
      @AppStorage(SettingsKey.jellyfinLocalRowEnabled) private var jellyfinLocalRowEnabled = true
      @AppStorage(SettingsKey.plexLocalRowEnabled) private var plexLocalRowEnabled = true
@@ -3239,7 +3511,7 @@ index aa469017..3cb5b761 100644
  
      private var snapshot: TVHomeSettingsSnapshot {
          TVHomeSettingsSnapshot(
-@@ -7368,6 +7659,19 @@ struct TVHomeView: View {
+@@ -7368,6 +7673,19 @@ struct TVHomeView: View {
      @State private var homeSettingsReadThrough = TVHomeSettingsReadThrough()
      @AppStorage(SettingsKey.ambientMode) private var ambientModeEnabled = false
      @State private var ambientSlides: [AmbientModeOverlay.Slide] = []
@@ -3259,7 +3531,7 @@ index aa469017..3cb5b761 100644
      @Environment(\.scenePhase) private var scenePhase
  
      private var settingsProfileID: String? {
-@@ -7452,6 +7756,19 @@ struct TVHomeView: View {
+@@ -7452,6 +7770,19 @@ struct TVHomeView: View {
      @State private var didRemoteContinueWatchingAnswer = false
      @State private var appliedContinueWatchingSort: String?
      @State private var continueWatching: [ContinueWatchingItem] = []
@@ -3279,7 +3551,7 @@ index aa469017..3cb5b761 100644
      @State private var upcomingItems: [ContinueWatchingItem] = []
      @State private var calendarToday = CalendarHomeToday()
      /// Derived once when Continue Watching changes. Recomputing these from the
-@@ -7650,6 +7967,46 @@ struct TVHomeView: View {
+@@ -7650,6 +7981,46 @@ struct TVHomeView: View {
      // views, same modifiers, same order, just a `some View` boundary in the middle.
      @ViewBuilder private var homeBodyFirstHalf: some View {
          ZStack(alignment: .topLeading) {
@@ -3326,7 +3598,7 @@ index aa469017..3cb5b761 100644
              // Keep TVHomeView mounted in TabView across tab switches so that
              // tab transitions are instantaneous (0ms) and focus/scroll state is preserved.
              // 1. Bottom Layer: Crossfading Backdrop
-@@ -7665,6 +8022,7 @@ struct TVHomeView: View {
+@@ -7665,6 +8036,7 @@ struct TVHomeView: View {
                      )
                      .equatable()
                      .frame(width: proxy.size.width, height: proxy.size.height)
@@ -3334,7 +3606,7 @@ index aa469017..3cb5b761 100644
                      .clipped()
                  } else {
                      let backdropWidth = proxy.size.width * 0.65
-@@ -7680,6 +8038,7 @@ struct TVHomeView: View {
+@@ -7680,6 +8052,7 @@ struct TVHomeView: View {
                          )
                          .equatable()
                          .frame(width: backdropWidth, height: backdropHeight, alignment: .topTrailing)
@@ -3342,7 +3614,7 @@ index aa469017..3cb5b761 100644
                          .mask(
                              LinearGradient(
                                  stops: [
-@@ -7790,7 +8149,8 @@ struct TVHomeView: View {
+@@ -7790,7 +8163,8 @@ struct TVHomeView: View {
                                  continueIsNextEpisodeSpoilerRevealable:
                                      (focusedSectionId == TVHomeSection.continueWatchingId
                                          || focusedSectionId == TVHomeSection.upcomingId)
@@ -3352,7 +3624,7 @@ index aa469017..3cb5b761 100644
                              ) {
                                  navigateToDetailsFromHome(id: heroMeta.id, type: heroMeta.type)
                              }
-@@ -7852,6 +8212,11 @@ struct TVHomeView: View {
+@@ -7852,6 +8226,11 @@ struct TVHomeView: View {
                                              .padding(.horizontal, horizontalEdgeInset)
                                          }
  
@@ -3364,7 +3636,7 @@ index aa469017..3cb5b761 100644
                                          ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                                              // A row this run built stays until focus rests (see
                                              // `rowsBuiltDuringRun`); the eight-row bound keeps a long run
-@@ -7914,11 +8279,31 @@ struct TVHomeView: View {
+@@ -7914,11 +8293,31 @@ struct TVHomeView: View {
                                              }
                                          }
                                      }
@@ -3397,7 +3669,7 @@ index aa469017..3cb5b761 100644
                                      #endif
                                      .onAppear {
                                          prepareInitialFocusViewport(
-@@ -8644,6 +9029,17 @@ struct TVHomeView: View {
+@@ -8644,6 +9043,17 @@ struct TVHomeView: View {
                      .defaultAppStorage(ProfileSettings.store(for: settingsProfileID))
                      .id(settingsProfileID ?? "none")
              )
@@ -3415,7 +3687,7 @@ index aa469017..3cb5b761 100644
      }
  
      /// Settings > Layout > Ambient Mode: backdrops from the rows on Home after a
-@@ -8912,7 +9308,7 @@ struct TVHomeView: View {
+@@ -8912,7 +9322,7 @@ struct TVHomeView: View {
                              TVCatalogRow(
                                  id: section.id,
                                  customPosterScreen: isCalendarToday ? .home : .continueWatching,
@@ -3424,7 +3696,7 @@ index aa469017..3cb5b761 100644
                                  addonName: section.addonName,
                                  showAddonName: catalogAddonNames,
                                  showsSectionTitle: true,
-@@ -9066,7 +9462,7 @@ struct TVHomeView: View {
+@@ -9066,7 +9476,7 @@ struct TVHomeView: View {
                      heroEnabled && !heroItems.isEmpty ? 0 : TVHomeLayout.rowsTopPadding
                  )
                  .padding(.bottom, 80)
@@ -3433,7 +3705,7 @@ index aa469017..3cb5b761 100644
                  .onAppear {
                      prepareInitialFocusViewport(
                          for: sections,
-@@ -10291,7 +10687,7 @@ struct TVHomeView: View {
+@@ -10291,7 +10701,7 @@ struct TVHomeView: View {
          if section.isLoadingPlaceholder {
              TVLoadingCatalogRow(
                  id: section.id,
@@ -3442,7 +3714,7 @@ index aa469017..3cb5b761 100644
                  tileShape: effectiveTileShape(for: section),
                  requestsFocus: false,
                  addonName: section.addonName,
-@@ -10437,7 +10833,7 @@ struct TVHomeView: View {
+@@ -10437,7 +10847,7 @@ struct TVHomeView: View {
              TVCatalogRow(
                  id: section.id,
                  customPosterScreen: collectionHome == nil ? .home : .collections,
@@ -3451,7 +3723,7 @@ index aa469017..3cb5b761 100644
                  addonName: section.addonName,
                  showAddonName: catalogAddonNames,
                  showsSectionTitle: true,
-@@ -10584,7 +10980,11 @@ struct TVHomeView: View {
+@@ -10584,7 +10994,11 @@ struct TVHomeView: View {
                      onStartContinueWatchingFromBeginning?(item)
                  },
                  onRemoveFromContinueWatching: onRemoveFromContinueWatching,
@@ -3464,7 +3736,7 @@ index aa469017..3cb5b761 100644
              )
              .equatable()
              // Outside the row: while focus is put back on a card in another row, this row
-@@ -10834,6 +11234,23 @@ struct TVHomeView: View {
+@@ -10834,6 +11248,23 @@ struct TVHomeView: View {
              : estimatedCollectionRowHeight(for: section)
      }
  
@@ -3488,7 +3760,7 @@ index aa469017..3cb5b761 100644
      private func prepareForOverlayPresentation(restoreCardID: String? = nil) {
          focusWork.defersOverlayPreparation = true
          focusWork.pendingOverlayRestoreCardID = restoreCardID
-@@ -10914,6 +11331,8 @@ struct TVHomeView: View {
+@@ -10914,6 +11345,8 @@ struct TVHomeView: View {
              && !didRemoteContinueWatchingAnswer
              && continueWatching.isEmpty
          let signature = TVHomeFocusWork.VisibleSectionsSignature(
@@ -3497,7 +3769,7 @@ index aa469017..3cb5b761 100644
              cwVisible: continueWatchingVisible,
              cwPlaceholder: showsResumePlaceholder,
              cwCount: continueWatchingVisible ? continueWatchingMetas.count : 0,
-@@ -10927,7 +11346,11 @@ struct TVHomeView: View {
+@@ -10927,7 +11360,11 @@ struct TVHomeView: View {
              hideUnreleased: hideUnreleased,
              cwLandscape: continueWatchingLandscape,
              landscapePosters: landscapePosters,
@@ -3510,7 +3782,7 @@ index aa469017..3cb5b761 100644
          )
  
          if let cached = focusWork.cachedVisibleSections, cached.signature == signature {
-@@ -10936,7 +11359,9 @@ struct TVHomeView: View {
+@@ -10936,7 +11373,9 @@ struct TVHomeView: View {
  
          let resumeSection = TVHomeSection(
              id: TVHomeSection.continueWatchingId,
@@ -3521,7 +3793,7 @@ index aa469017..3cb5b761 100644
              items: continueWatchingMetas,
              posterShape: continueWatchingLandscape ? "landscape" : "poster",
              isLoadingPlaceholder: showsResumePlaceholder
-@@ -10960,7 +11385,16 @@ struct TVHomeView: View {
+@@ -10960,7 +11399,16 @@ struct TVHomeView: View {
              + [localTitlesSection].compactMap { $0 }
              + jellyfinSections
              + plexSections
@@ -3539,7 +3811,7 @@ index aa469017..3cb5b761 100644
  
          let result: [TVHomeSection]
          if !hideUnreleased {
-@@ -10972,6 +11406,7 @@ struct TVHomeView: View {
+@@ -10972,6 +11420,7 @@ struct TVHomeView: View {
                  if !section.collectionFolders.isEmpty
                      || section.id == TVHomeSection.localTitlesId
                      || section.id == TVHomeSection.jellyfinId
@@ -3547,7 +3819,7 @@ index aa469017..3cb5b761 100644
                      || section.id.hasPrefix(TVHomeSection.jellyfinLibraryIdPrefix)
                      || section.id.hasPrefix(TVHomeSection.plexLibraryIdPrefix) {
                      return section
-@@ -10979,12 +11414,34 @@ struct TVHomeView: View {
+@@ -10979,12 +11428,34 @@ struct TVHomeView: View {
                  var copy = section
                  copy.setPreFilteredUniqueItems(section.items.filter {
                      !ContentReleasePolicy.isUnreleased($0, today: today)
@@ -3583,7 +3855,7 @@ index aa469017..3cb5b761 100644
          focusWork.cachedVisibleSections = TVHomeFocusWork.CachedVisibleSections(
              signature: signature,
              sections: contentSections
-@@ -11050,11 +11507,53 @@ struct TVHomeView: View {
+@@ -11050,11 +11521,53 @@ struct TVHomeView: View {
      }
  
  
@@ -3637,7 +3909,7 @@ index aa469017..3cb5b761 100644
      /// Featured titles for Grid View's automatic hero. Start with one item from
      /// each catalog for variety, then fill any remaining carousel slots from
      /// the catalog order without duplicates.
-@@ -16373,6 +16872,7 @@ final class TVHomeStore: ObservableObject {
+@@ -16373,6 +16886,7 @@ final class TVHomeStore: ObservableObject {
          collectionSections: [TVHomeSection],
          resetFocusIfEmpty: Bool
      ) async {
@@ -3645,7 +3917,7 @@ index aa469017..3cb5b761 100644
          pendingDeferredPublicationTask?.cancel()
          pendingDeferredPublicationTask = nil
          pendingMainPublicationTask?.cancel()
-@@ -16752,6 +17252,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
+@@ -16752,6 +17266,7 @@ private struct TVCollectionFolderHeroView: View, Equatable {
  }
  
  private struct TVHeroView: View {
@@ -3653,7 +3925,7 @@ index aa469017..3cb5b761 100644
      let meta: NuvioMeta
      /// Continue Watching entry for this title, when one exists. Lets the hero
      /// say which episode is in progress, how much is left, and show the
-@@ -16760,6 +17261,8 @@ private struct TVHeroView: View {
+@@ -16760,6 +17275,8 @@ private struct TVHeroView: View {
      /// Home supplies this only for a matched Continue Watching / Upcoming item.
      /// Calendar cards intentionally do not carry spoiler reveal evidence.
      var continueIsNextEpisodeSpoilerRevealable: Bool = false
@@ -3662,7 +3934,7 @@ index aa469017..3cb5b761 100644
      let onSelect: () -> Void
      @AppStorage(SettingsKey.homeLayout) private var homeLayout = "Modern"
      @AppStorage(SettingsKey.hideUnwatchedEpisodeDescriptions) private var hideUnwatchedEpisodeDescriptions = false
-@@ -16808,6 +17311,11 @@ private struct TVHeroView: View {
+@@ -16808,6 +17325,11 @@ private struct TVHeroView: View {
          // up a line, so the name never has to be cut short in the hero's fixed height.
          let nameBelow = meta.logoUrl == nil ? nil : AniListMetaBuilder.nameUnderLogo(meta)
          VStack(alignment: .leading, spacing: 18) {
@@ -3674,7 +3946,7 @@ index aa469017..3cb5b761 100644
              if let logoUrl = meta.logoUrl {
                  CachedHeroLogo(url: logoUrl, title: meta.name, nameBelow: nameBelow, logoMaxHeight: nameBelow == nil ? 136 : 100)
                      .layoutPriority(nameBelow == nil ? 0 : 1)
-@@ -16818,6 +17326,14 @@ private struct TVHeroView: View {
+@@ -16818,6 +17340,14 @@ private struct TVHeroView: View {
                      .foregroundColor(.white)
              }
  
@@ -3689,7 +3961,7 @@ index aa469017..3cb5b761 100644
              TVHeroMetaLine(meta: meta, episodeLine: episodeLine, continueItem: continueItem)
  
              if let continueItem {
-@@ -16836,6 +17352,8 @@ private struct TVHeroView: View {
+@@ -16836,6 +17366,8 @@ private struct TVHeroView: View {
                          .lineLimit(nameBelow == nil ? 4 : 3)
                          .frame(maxWidth: 900, alignment: .leading)
                          .padding(.top, 4)
@@ -3698,7 +3970,7 @@ index aa469017..3cb5b761 100644
                  } else {
                      Text(description.wrappedEveryNWords(9))
                          .font(.appFont(size: 24, weight: .regular))
-@@ -16844,6 +17362,8 @@ private struct TVHeroView: View {
+@@ -16844,6 +17376,8 @@ private struct TVHeroView: View {
                          .lineLimit(nameBelow == nil ? 4 : 3)
                          .frame(maxWidth: 900, alignment: .leading)
                          .padding(.top, 4)
@@ -3707,7 +3979,7 @@ index aa469017..3cb5b761 100644
                  }
              }
          }
-@@ -16899,6 +17419,7 @@ extension TVHeroView: Equatable {
+@@ -16899,6 +17433,7 @@ extension TVHeroView: Equatable {
              && lhs.revealNextEpisodeSpoilers == rhs.revealNextEpisodeSpoilers
              && lhs.hideUnwatchedEpisodeDescriptions == rhs.hideUnwatchedEpisodeDescriptions
              && lhs.hideUnwatchedEpisodeTitles == rhs.hideUnwatchedEpisodeTitles
@@ -3715,7 +3987,7 @@ index aa469017..3cb5b761 100644
      }
  }
  
-@@ -18322,12 +18843,21 @@ private struct TVHeroMetaLine: View {
+@@ -18322,12 +18857,21 @@ private struct TVHeroMetaLine: View {
      }
  
      var body: some View {
@@ -3743,7 +4015,7 @@ index aa469017..3cb5b761 100644
  
          let badge = meta.statusBadgeLabel
          let isEpisodeMode = episodeRatingsIdentifier != nil
-@@ -18373,7 +18903,7 @@ private struct TVHeroMetaLine: View {
+@@ -18373,7 +18917,7 @@ private struct TVHeroMetaLine: View {
              if hasPrimary || showSecondLine {
                  VStack(alignment: .leading, spacing: 10) {
                      if hasPrimary {
