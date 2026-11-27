@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-index 49869543..4f5acb32 100644
+index bffc5c5bb..8c3407540 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Sync/NuvioSyncService.swift
-@@ -3993,6 +3993,20 @@ final class NuvioAPIClient {
+@@ -4141,6 +4141,20 @@ final class NuvioAPIClient {
          }
      }
  
@@ -23,7 +23,7 @@ index 49869543..4f5acb32 100644
      func pushLibrary(
          session: AuthSession,
          remoteProfileId: Int,
-@@ -4008,7 +4022,7 @@ final class NuvioAPIClient {
+@@ -4156,7 +4170,7 @@ final class NuvioAPIClient {
                  "poster_shape": "POSTER",
                  "background": Self.jsonValue(item.meta.backgroundUrl),
                  "description": Self.jsonValue(item.meta.description),
@@ -32,28 +32,28 @@ index 49869543..4f5acb32 100644
                  "genres": item.meta.genres ?? [],
                  "addon_base_url": NSNull(),
                  "added_at": Self.milliseconds(from: item.addedAt)
-@@ -5004,8 +5018,7 @@ enum EpisodeMetadataEnrichment {
+@@ -5215,8 +5229,7 @@ enum EpisodeMetadataEnrichment {
              return nil
          }
  
--        let apiKey = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
+-        let apiKey = ProviderCredentialStore.string(forKey: SettingsKey.tmdbApiKey, in: ProfileSettings.current)?
 -            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-+        let apiKey = ForkSecrets.tmdbKey(ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey))
++        let apiKey = ForkSecrets.tmdbKey(ProviderCredentialStore.string(forKey: SettingsKey.tmdbApiKey, in: ProfileSettings.current))
          guard !apiKey.isEmpty else { return nil }
  
          let preferredLang = TmdbDetailsService.preferredLanguage
 diff --git a/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift b/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
-index 1af5e1a2..b9840189 100644
+index f2e55e58f..69e1ca7de 100644
 --- a/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/Trakt/TraktAuthService.swift
-@@ -1179,9 +1179,8 @@ enum RemoteTrackingState {
+@@ -1148,9 +1148,8 @@ enum RemoteTrackingState {
              return ProfileSettings.isActiveStore(store)
                  && SimklRuntimeSession.authenticatedState(store: store) != nil
          case .tmdb:
--            let apiKey = store.string(forKey: SettingsKey.tmdbApiKey)?
+-            let apiKey = ProviderCredentialStore.string(forKey: SettingsKey.tmdbApiKey, in: store)?
 -                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 -            let enabled = (store.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? false
-+            let apiKey = ForkSecrets.tmdbKey(store.string(forKey: SettingsKey.tmdbApiKey))
++            let apiKey = ForkSecrets.tmdbKey(ProviderCredentialStore.string(forKey: SettingsKey.tmdbApiKey, in: store))
 +            let enabled = (store.object(forKey: SettingsKey.tmdbEnabled) as? Bool) ?? !ForkSecrets.tmdbApiKey.isEmpty
              let useMoreLikeThis = (store.object(forKey: SettingsKey.tmdbUseMoreLikeThis) as? Bool) ?? true
              return enabled && !apiKey.isEmpty && useMoreLikeThis

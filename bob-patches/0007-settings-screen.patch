@@ -1,8 +1,8 @@
 diff --git a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-index d48f17b1..4d4615a6 100644
+index 5eb284594..5a6fdbef6 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Settings/SettingsView.swift
-@@ -1611,11 +1611,13 @@ enum SettingsAccent: String, CaseIterable, Identifiable {
+@@ -1683,11 +1683,13 @@ enum SettingsAccent: String, CaseIterable, Identifiable {
      case rose = "Rose"
      case amber = "Amber"
      case violet = "Violet"
@@ -16,7 +16,7 @@ index d48f17b1..4d4615a6 100644
          case .white: return .white
          case .sky: return Color(red: 0.25, green: 0.62, blue: 0.96)
          case .emerald: return Color(red: 0.19, green: 0.78, blue: 0.48)
-@@ -1645,11 +1647,15 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
+@@ -1717,11 +1719,15 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
      case crimson = "Crimson"
      case rust = "Rust"
      case teal = "Teal"
@@ -32,7 +32,7 @@ index d48f17b1..4d4615a6 100644
          case .charcoal: return Color(red: 13.0 / 255.0, green: 13.0 / 255.0, blue: 13.0 / 255.0)
          case .black: return .black
          case .midnight: return Color(red: 0.020, green: 0.030, blue: 0.065)
-@@ -1680,6 +1686,8 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
+@@ -1752,6 +1758,8 @@ enum SettingsBackground: String, CaseIterable, Identifiable {
          case .crimson: return Color(red: 0.64, green: 0.11, blue: 0.14)
          case .rust: return Color(red: 0.56, green: 0.27, blue: 0.09)
          case .teal: return Color(red: 0.07, green: 0.42, blue: 0.39)
@@ -41,7 +41,7 @@ index d48f17b1..4d4615a6 100644
          }
      }
  
-@@ -4560,6 +4568,30 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -4811,6 +4819,30 @@ private struct LayoutDiscoverySettingsView: View {
      @AppStorage(SettingsKey.revealNextEpisodeSpoilers) private var revealNextEpisodeSpoilers = false
      @AppStorage(SettingsKey.homeCalendarToday) private var homeCalendarToday = true
      @AppStorage(SettingsKey.hideUnreleased) private var hideUnreleased = false
@@ -72,7 +72,7 @@ index d48f17b1..4d4615a6 100644
      @AppStorage(SettingsKey.showFullDates) private var showFullDates = true
      @AppStorage(SettingsKey.focusedPosterBackdropEnabled) private var focusedPosterBackdropEnabled = true
      @AppStorage(SettingsKey.focusedPosterBackdropDelay) private var focusedPosterBackdropDelay = 3
-@@ -4575,6 +4607,40 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -4827,6 +4859,40 @@ private struct LayoutDiscoverySettingsView: View {
  
      /// Classic was never a distinct layout (behaved like Modern).
      private let layouts = ["Modern", "Grid View", "Compact"]
@@ -113,7 +113,7 @@ index d48f17b1..4d4615a6 100644
      // Search is the only screen that currently hosts the full Discover surface.
      // Do not offer Home/Library as dead selections that merely hide Discover.
      private let discoverLocations = ["Search", "Off"]
-@@ -4590,6 +4656,16 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -4842,6 +4908,16 @@ private struct LayoutDiscoverySettingsView: View {
                      fallback: "How the home screen presents rows and artwork"
                  )
              ) {
@@ -130,7 +130,7 @@ index d48f17b1..4d4615a6 100644
                  HomeLayoutLivePreview(
                      layout: homeLayout,
                      heroEnabled: heroEnabled,
-@@ -4720,6 +4796,8 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -4972,6 +5048,8 @@ private struct LayoutDiscoverySettingsView: View {
                      optionLabel: { L10n.optionLabel(CardLabelVisibility(rawValue: $0)?.label ?? $0) }
                  )
  
@@ -139,7 +139,7 @@ index d48f17b1..4d4615a6 100644
                  SettingsToggleRow(
                      title: L10n.string("tvos_layout_poster_labels", fallback: "Poster Labels"),
                      subtitle: L10n.string(
-@@ -4729,6 +4807,7 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -4981,6 +5059,7 @@ private struct LayoutDiscoverySettingsView: View {
                      isOn: $posterLabels,
                      accentColor: accentColor
                  )
@@ -147,7 +147,7 @@ index d48f17b1..4d4615a6 100644
  
                  SettingsToggleRow(
                      title: L10n.string(
-@@ -5016,6 +5095,120 @@ private struct LayoutDiscoverySettingsView: View {
+@@ -5268,6 +5347,120 @@ private struct LayoutDiscoverySettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -268,7 +268,7 @@ index d48f17b1..4d4615a6 100644
                  SettingsToggleRow(
                      title: L10n.string(
                          "tvos_layout_full_dates",
-@@ -6857,7 +7050,7 @@ private struct IntegrationSettingsView: View {
+@@ -7139,7 +7332,7 @@ private struct IntegrationSettingsView: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -276,8 +276,8 @@ index d48f17b1..4d4615a6 100644
 +        !ForkSecrets.tmdbKey(tmdbApiKey).isEmpty // Fork: the built-in key counts
      }
  
-     private var mdbListHasApiKey: Bool {
-@@ -8869,7 +9062,7 @@ private struct TmdbOptionsSheet: View {
+     /// A key, or the connected MDBList account: either one can fetch ratings.
+@@ -9155,7 +9348,7 @@ private struct TmdbOptionsSheet: View {
      }
  
      private var tmdbHasApiKey: Bool {
@@ -286,7 +286,7 @@ index d48f17b1..4d4615a6 100644
      }
  
      private var tmdbControlsEnabled: Bool {
-@@ -12564,6 +12757,7 @@ private struct PlaybackSettingsView: View {
+@@ -12907,6 +13100,7 @@ private struct PlaybackSettingsView: View {
      @AppStorage(SettingsKey.autoSkipRecap) private var autoSkipRecap = false
      @AppStorage(SettingsKey.autoSkipOutro) private var autoSkipOutro = false
      @AppStorage(SettingsKey.autoSkipMovieCredits) private var autoSkipMovieCredits = false
@@ -294,7 +294,7 @@ index d48f17b1..4d4615a6 100644
      @AppStorage(SettingsKey.streamAutoPlayPreferBingeGroup) private var streamAutoPlayPreferBingeGroup = true
      @AppStorage(SettingsKey.streamAutoPlayReuseBingeGroup) private var streamAutoPlayReuseBingeGroup = true
      @AppStorage(SettingsKey.seekPreviewEnabled) private var seekPreviewEnabled = true
-@@ -12909,6 +13103,16 @@ private struct PlaybackSettingsView: View {
+@@ -13294,6 +13488,16 @@ private struct PlaybackSettingsView: View {
                      accentColor: accentColor
                  )
  
@@ -311,7 +311,7 @@ index d48f17b1..4d4615a6 100644
                  SettingsToggleRow(
                      title: L10n.string("tvos_settings_post_play_recommendations", fallback: "Post-Play Recommendations"),
                      subtitle: L10n.string(
-@@ -13269,10 +13473,8 @@ private struct PlaybackSettingsView: View {
+@@ -13654,10 +13858,8 @@ private struct PlaybackSettingsView: View {
              ) {
                  SettingsActionRow(
                      title: L10n.string("tvos_playback_preferred_audio", fallback: "Preferred Audio"),
@@ -324,7 +324,7 @@ index d48f17b1..4d4615a6 100644
                      value: audioLanguageSummary,
                      accentColor: accentColor
                  ) {
-@@ -15074,6 +15276,7 @@ private struct AdvancedSettingsView: View {
+@@ -15483,6 +15685,7 @@ private struct AdvancedSettingsView: View {
  
      @AppStorage(PlaybackTimelineRecorder.enabledKey) private var timelineEnabled = false
      @State private var showingPlaybackHistory = false
@@ -332,7 +332,7 @@ index d48f17b1..4d4615a6 100644
      @AppStorage(SettingsKey.fastNavigation) private var fastNavigation = false
      @AppStorage(SettingsKey.playbackDiagnostics) private var playbackDiagnostics = false
      @AppStorage(SettingsKey.playbackDebug) private var playbackDebug = false
-@@ -15132,6 +15335,14 @@ private struct AdvancedSettingsView: View {
+@@ -15541,6 +15744,14 @@ private struct AdvancedSettingsView: View {
                      accentColor: accentColor,
                      action: { showingPlaybackHistory = true }
                  )
@@ -347,7 +347,7 @@ index d48f17b1..4d4615a6 100644
                  #endif
  
                  // Whether the app can hand its rows to the Top Shelf extension: a sideloaded
-@@ -15242,6 +15453,9 @@ private struct AdvancedSettingsView: View {
+@@ -15657,6 +15868,9 @@ private struct AdvancedSettingsView: View {
          .fullScreenCover(isPresented: $showingPlaybackHistory) {
              PlaybackDiagnosticHistoryView(accentColor: accentColor)
          }
@@ -357,7 +357,7 @@ index d48f17b1..4d4615a6 100644
          #endif
      }
  
-@@ -19531,7 +19745,7 @@ private enum HomeCatalogOrderFocus: Hashable {
+@@ -19985,7 +20199,7 @@ private enum HomeCatalogOrderFocus: Hashable {
  @MainActor
  private struct HomeCatalogOrderSection: View {
      let accentColor: Color
@@ -366,13 +366,13 @@ index d48f17b1..4d4615a6 100644
      private let catalogAutoRefreshOptions = ["Disabled", "15 Minutes", "30 Minutes", "1 Hour", "Always"]
      @State private var rows: [TVHomeCatalogOrder.SnapshotRow] = []
      @FocusState private var focusedControl: HomeCatalogOrderFocus?
-@@ -20608,8 +20822,7 @@ private enum StreamingServicesCollectionTemplate {
+@@ -21104,8 +21318,7 @@ private enum StreamingServicesCollectionTemplate {
  
      static func resolveLogoURLs() async -> [Int: String] {
          var resolved = fallbackLogoURLs
--        let key = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
+-        let key = ProviderCredentialStore.string(forKey: SettingsKey.tmdbApiKey, in: ProfileSettings.current)?
 -            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-+        let key = ForkSecrets.tmdbKey(ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey))
++        let key = ForkSecrets.tmdbKey(ProviderCredentialStore.string(forKey: SettingsKey.tmdbApiKey, in: ProfileSettings.current))
          guard !key.isEmpty else { return resolved }
  
          if let providers = await fetchWatchProviders(apiKey: key) {

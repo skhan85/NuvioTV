@@ -1,15 +1,15 @@
 diff --git a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
-index 269d4f72..86f4f931 100644
+index 4920be66b..45087981e 100644
 --- a/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 +++ b/tvosApp/NuvioTV/Sources/Core/TMDB/TmdbDetailsService.swift
 @@ -238,8 +238,8 @@ enum TmdbDetailsService {
      ) async -> T {
          if requestContext != nil { return await operation() }
          let store = defaults ?? ProfileSettings.current
--        let rawKey = store.string(forKey: SettingsKey.tmdbApiKey)?
+-        let rawKey = ProviderCredentialStore.string(forKey: SettingsKey.tmdbApiKey, in: store)?
 -            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 +        // Fork: the snapshot also falls back to the built-in TMDB key.
-+        let rawKey = ForkSecrets.tmdbKey(store.string(forKey: SettingsKey.tmdbApiKey))
++        let rawKey = ForkSecrets.tmdbKey(ProviderCredentialStore.string(forKey: SettingsKey.tmdbApiKey, in: store))
          let keys = [
              SettingsKey.tmdbUseTrailers, SettingsKey.tmdbUseArtwork,
              SettingsKey.tmdbUseBasicInfo, SettingsKey.tmdbUseDetails,
@@ -27,11 +27,11 @@ index 269d4f72..86f4f931 100644
      static var currentApiKey: String? { apiKey }
      private static var apiKey: String? {
          if let requestContext { return requestContext.apiKey }
--        let key = ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey)?
+-        let key = ProviderCredentialStore.string(forKey: SettingsKey.tmdbApiKey, in: ProfileSettings.current)?
 -            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 +        // Fork: falls back to the TMDB key built into this fork (repository secret), so no key
 +        // has to be typed on the remote.
-+        let key = ForkSecrets.tmdbKey(ProfileSettings.current.string(forKey: SettingsKey.tmdbApiKey))
++        let key = ForkSecrets.tmdbKey(ProviderCredentialStore.string(forKey: SettingsKey.tmdbApiKey, in: ProfileSettings.current))
          return key.isEmpty ? nil : key
      }
  
@@ -492,7 +492,7 @@ index 269d4f72..86f4f931 100644
      static func fetchEpisodes(for meta: NuvioMeta) async -> [NuvioVideo]? {
 diff --git a/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
 new file mode 100644
-index 00000000..4e8c1b71
+index 000000000..4e8c1b71c
 --- /dev/null
 +++ b/tvosApp/NuvioTV/Sources/Fork/ForkSecrets.swift
 @@ -0,0 +1,5 @@
