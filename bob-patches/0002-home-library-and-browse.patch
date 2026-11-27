@@ -4191,10 +4191,10 @@ index 80935eada..ce57ca41d 100644
                          container.trailingAnchor.constraint(lessThanOrEqualTo: target.trailingAnchor)
                      ])
 diff --git a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-index f203906da..9f404b51d 100644
+index 0094d3322..bf29fc4a9 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Components/PosterCard.swift
-@@ -239,6 +239,9 @@ struct PosterCard: View {
+@@ -243,6 +243,9 @@ struct PosterCard: View {
      /// until its turn, the card is empty space of its own size.
      var buildsLater: Bool = false
      var isWatched: Bool? = nil
@@ -4203,8 +4203,8 @@ index f203906da..9f404b51d 100644
 +    var forkOnPlay: (() -> Void)? = nil
      let onClick: () -> Void
  
-     private let landscapeTransitionDuration: TimeInterval = 0.3
-@@ -259,6 +262,10 @@ struct PosterCard: View {
+     @Environment(\.cardAppearance) private var cardAppearance
+@@ -262,6 +265,10 @@ struct PosterCard: View {
  
      @AppStorage(SettingsKey.revealNextEpisodeSpoilers) private var revealNextEpisodeSpoilers = false
      @State private var loadedCustomLandscapeArtworkURL: String?
@@ -4215,7 +4215,7 @@ index f203906da..9f404b51d 100644
  
      private var shouldBlurNextUpArtwork: Bool {
          (continueWatchingBlurNextUp
-@@ -277,6 +284,8 @@ struct PosterCard: View {
+@@ -280,6 +287,8 @@ struct PosterCard: View {
      private var trailersEnabled: Bool { cardAppearance.trailersEnabled }
      private var trailerDelay: Int { cardAppearance.trailerDelay }
      @AppStorage(SettingsKey.trailerPreviewSound) private var trailerPreviewSound = false
@@ -4224,7 +4224,7 @@ index f203906da..9f404b51d 100644
      @State private var isTrailerPreviewActive = false
      @State private var isTrailerPreviewReady = false
      @State private var didFinishTrailerPreview = false
-@@ -380,9 +389,32 @@ struct PosterCard: View {
+@@ -383,9 +392,32 @@ struct PosterCard: View {
                      didRequestInitialFocus = false
                  }
              }
@@ -4258,7 +4258,7 @@ index f203906da..9f404b51d 100644
          .titleActionsContextMenu(
              meta: meta,
              onOpenDetails: onOpenDetails ?? onClick,
-@@ -485,7 +517,7 @@ struct PosterCard: View {
+@@ -488,7 +520,7 @@ struct PosterCard: View {
              .overlay {
                  // Prepare during the delay, but keep playback and visibility
                  // gated by isTrailerPreviewActive until the timer completes.
@@ -4267,7 +4267,7 @@ index f203906da..9f404b51d 100644
                      && !isContinueOrUpcomingCard && !didFinishTrailerPreview {
                      TrailerPreviewPlayer(
                          meta: meta,
-@@ -525,6 +557,24 @@ struct PosterCard: View {
+@@ -528,6 +560,24 @@ struct PosterCard: View {
                                  alignment: effectiveLandscape ? .topTrailing : .top
                              )
                      }
@@ -4292,7 +4292,7 @@ index f203906da..9f404b51d 100644
                      if let origin = shownOrigin {
                          CollectionOriginBadge(origin: origin)
                              .padding(.trailing, 22)
-@@ -555,10 +605,10 @@ struct PosterCard: View {
+@@ -558,10 +608,10 @@ struct PosterCard: View {
              .overlay {
                  if focusedBorderWidth > 0 {
                      RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
@@ -4305,7 +4305,7 @@ index f203906da..9f404b51d 100644
  
              if showsPosterTitle {
                  MarqueeText(
-@@ -615,26 +665,83 @@ struct PosterCard: View {
+@@ -618,26 +668,83 @@ struct PosterCard: View {
                          .frame(maxWidth: cardWidth * 0.82, alignment: .leading)
                          .padding(EdgeInsets(top: 22, leading: 22, bottom: 54, trailing: 22))
                  } else if let logoURL = landscapeLogoURL {
@@ -4401,7 +4401,7 @@ index f203906da..9f404b51d 100644
      private var continueLandscapeSummary: some View {
          VStack(alignment: .leading, spacing: 3) {
              if showsContinueWatchingLabels, let continueEpisodeText {
-@@ -737,9 +844,22 @@ struct PosterCard: View {
+@@ -750,9 +857,22 @@ struct PosterCard: View {
          }
      }
  
@@ -4424,7 +4424,7 @@ index f203906da..9f404b51d 100644
          if let continueEpisodeText {
              return "\(continueEpisodeText) • \(continueRemainingText)"
          }
-@@ -780,7 +900,7 @@ struct PosterCard: View {
+@@ -793,7 +913,7 @@ struct PosterCard: View {
                          .frame(width: width, height: 8)
  
                      Capsule()
@@ -4433,7 +4433,7 @@ index f203906da..9f404b51d 100644
                          .frame(width: max(8, width * progress), height: 8)
                  }
                  .padding(.leading, 22)
-@@ -1090,12 +1210,36 @@ struct PosterCard: View {
+@@ -1107,12 +1227,36 @@ struct PosterCard: View {
          effectiveHomeLayout == "Compact" ? 454 : 560
      }
  
@@ -4472,7 +4472,7 @@ index f203906da..9f404b51d 100644
      }
  
      // Only the focused card casts a shadow. A shadow is drawn in a pass of its own for each
-@@ -1114,7 +1258,7 @@ struct PosterCard: View {
+@@ -1131,7 +1275,7 @@ struct PosterCard: View {
      }
  
      private var showsFocusedAppearance: Bool {
@@ -4481,7 +4481,7 @@ index f203906da..9f404b51d 100644
      }
  
      /// The badge's glass comes in once focus rests on the card, as the card's own did.
-@@ -1131,13 +1275,19 @@ struct PosterCard: View {
+@@ -1148,13 +1292,19 @@ struct PosterCard: View {
      }
  
      private var trailerActivationIdentity: String {
@@ -4502,7 +4502,7 @@ index f203906da..9f404b51d 100644
      private func cancelTrailerPreview() {
          isTrailerPreviewActive = false
          isTrailerPreviewReady = false
-@@ -1259,6 +1409,7 @@ extension PosterCard: Equatable {
+@@ -1276,6 +1426,7 @@ extension PosterCard: Equatable {
              && lhs.externalFocusValue == rhs.externalFocusValue
              && lhs.cardIndex == rhs.cardIndex
              && (lhs.onLongPress != nil) == (rhs.onLongPress != nil)
@@ -4510,7 +4510,7 @@ index f203906da..9f404b51d 100644
              && (lhs.onOpenDetails != nil) == (rhs.onOpenDetails != nil)
              && (lhs.onPlayManually != nil) == (rhs.onPlayManually != nil)
              && (lhs.onStartFromBeginning != nil) == (rhs.onStartFromBeginning != nil)
-@@ -4005,6 +4156,9 @@ struct TitleActionsMenuContent: View {
+@@ -4023,6 +4174,9 @@ struct TitleActionsMenuContent: View {
              let isItemWatched = libraryWatchedContext == nil
                  ? WatchedStore.contains(meta: meta)
                  : isLibraryWatched
@@ -4520,7 +4520,7 @@ index f203906da..9f404b51d 100644
  
              Button {
                  scheduleOpenDetails()
-@@ -4014,17 +4168,19 @@ struct TitleActionsMenuContent: View {
+@@ -4032,17 +4186,19 @@ struct TitleActionsMenuContent: View {
  
              animeFindButtons
  
@@ -4550,7 +4550,7 @@ index f203906da..9f404b51d 100644
  
              if let onRefreshCatalog {
                  Button {
-@@ -4042,7 +4198,11 @@ struct TitleActionsMenuContent: View {
+@@ -4060,7 +4216,11 @@ struct TitleActionsMenuContent: View {
                          toggleLibrary(currentlyInLibrary: true)
                      }
                  } label: {
@@ -4563,7 +4563,7 @@ index f203906da..9f404b51d 100644
                  }
              } else {
                  Button {
-@@ -4050,7 +4210,11 @@ struct TitleActionsMenuContent: View {
+@@ -4068,7 +4228,11 @@ struct TitleActionsMenuContent: View {
                          toggleLibrary(currentlyInLibrary: false)
                      }
                  } label: {
@@ -4601,7 +4601,7 @@ index 5243961f9..f98ede4af 100644
  
      @ViewBuilder
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift b/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
-index b31197aa2..bbb0e6f68 100644
+index d40753944..77226309e 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/CollectionFolderBrowseView.swift
 @@ -42,11 +42,16 @@ struct CollectionFolderBrowseView: View {
@@ -4824,7 +4824,7 @@ index b31197aa2..bbb0e6f68 100644
                                  if scrollIndex != index {
                                      let updateScroll = { scrollIndex = index }
                                      if rowSmoothFocus && !rowFastNavigation {
-@@ -1053,6 +1166,65 @@ extension CollectionFolderHomeStyleRow: Equatable {
+@@ -1060,6 +1173,65 @@ extension CollectionFolderHomeStyleRow: Equatable {
      }
  }
  
@@ -4891,10 +4891,10 @@ index b31197aa2..bbb0e6f68 100644
  /// Displays a clear focus outline (theme accent color) when navigated to,
  /// and highlights selected tabs.
 diff --git a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-index dfa66a85d..cfa27eda7 100644
+index cb4a2fbce..72cf9c456 100644
 --- a/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
 +++ b/tvosApp/NuvioTV/Sources/UI/Home/TVCatalogRow.swift
-@@ -568,6 +568,8 @@ struct TVCatalogRow: View {
+@@ -633,6 +633,8 @@ struct TVCatalogRow: View {
      var onRemoveFromContinueWatching: ((ContinueWatchingItem) -> Void)? = nil
      var onRefreshCatalog: (() -> Void)? = nil
      var onMove: ((MoveCommandDirection) -> Void)? = nil
@@ -4903,7 +4903,7 @@ index dfa66a85d..cfa27eda7 100644
  
      @State private var scrollIndex: Int?
      @FocusState private var ownCardFocus: String?
-@@ -880,10 +882,19 @@ struct TVCatalogRow: View {
+@@ -946,10 +948,19 @@ struct TVCatalogRow: View {
                  suppressFocusAnimations: suppressFocusAnimations
              ),
              onMove: onMove,
@@ -4924,7 +4924,7 @@ index dfa66a85d..cfa27eda7 100644
      }
  
      /// The row as a system scroll view. tvOS scrolls it as focus moves (outside the main
-@@ -1041,7 +1052,7 @@ enum TVContinueWatchingCardLabels {
+@@ -1112,7 +1123,7 @@ enum TVContinueWatchingCardLabels {
  
          init(_ item: ContinueWatchingItem) {
              badge = item.upNextBadgeText
@@ -4933,7 +4933,7 @@ index dfa66a85d..cfa27eda7 100644
          }
      }
  
-@@ -1293,7 +1304,7 @@ struct TVHomeCatalogGridSection: View {
+@@ -1364,7 +1375,7 @@ struct TVHomeCatalogGridSection: View {
      var body: some View {
          VStack(alignment: .leading, spacing: 18) {
              HStack(alignment: .center, spacing: 14) {
@@ -4942,7 +4942,7 @@ index dfa66a85d..cfa27eda7 100644
                      .font(.appFont(size: 30, weight: .bold))
                      .foregroundColor(.white)
  
-@@ -1330,7 +1341,7 @@ struct TVHomeCatalogGridSection: View {
+@@ -1401,7 +1412,7 @@ struct TVHomeCatalogGridSection: View {
                              ForEach(previewItems, id: \.homeTitleIdentity) { posterCard(for: $0) }
  
                              TVHomeSeeAllCard(
@@ -4951,7 +4951,7 @@ index dfa66a85d..cfa27eda7 100644
                                  externalFocus: externalFocus,
                                  externalFocusValue: seeAllKey,
                                  retainFocusAppearance: (retainFocusAppearanceForCardKey ?? restrictFocusToCardKey) == seeAllKey,
-@@ -1499,7 +1510,7 @@ struct TVHomeCatalogBrowseView: View {
+@@ -1570,7 +1581,7 @@ struct TVHomeCatalogBrowseView: View {
  
              VStack(alignment: .leading, spacing: 20) {
                  VStack(alignment: .leading, spacing: 6) {
@@ -4960,7 +4960,7 @@ index dfa66a85d..cfa27eda7 100644
                          .font(.system(size: 42, weight: .bold))
                          .foregroundColor(.white)
                          .lineLimit(1)
-@@ -2202,7 +2213,13 @@ struct TVCollectionFolderCard: View {
+@@ -2273,7 +2284,13 @@ struct TVCollectionFolderCard: View {
  
      @ViewBuilder
      private var artTile: some View {
